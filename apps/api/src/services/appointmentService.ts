@@ -128,6 +128,27 @@ async function validateEmployeeBelongsToBarbershop(
   }
 }
 
+/**
+ * Validates that an employee is assigned to perform the specified service
+ * via the EmployeeService junction table.
+ */
+async function validateEmployeeOffersService(
+  employeeId: string,
+  serviceId: string
+): Promise<void> {
+  const link = await prisma.employeeService.findUnique({
+    where: {
+      employeeId_serviceId: { employeeId, serviceId },
+    },
+  });
+
+  if (!link) {
+    throw new BadRequestError(
+      'Employee does not offer this service'
+    );
+  }
+}
+
 // ============================================
 // DOUBLE BOOKING DETECTION
 // ============================================
@@ -174,6 +195,7 @@ export async function createAppointment(
   // 1. Validate tenant integrity: service and employee belong to barbershop
   await validateServiceBelongsToBarbershop(serviceId, barbershopId);
   await validateEmployeeBelongsToBarbershop(employeeId, barbershopId);
+  await validateEmployeeOffersService(employeeId, serviceId);
 
   // 2. Calculate endAt from service duration
   const service = await prisma.service.findUniqueOrThrow({

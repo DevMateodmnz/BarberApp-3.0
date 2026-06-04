@@ -141,7 +141,7 @@ npx vitest run tests/db/models.test.ts
 
 4. **Clerk webhook**: Not implemented yet. Webhook validation (svix-signature) is deferred to Phase 3 API Foundation.
 
-5. **EmployeeService validation at booking**: The service layer validates employee and service belong to the barbershop, but does NOT check that the employee is assigned to perform the specific service (EmployeeService junction). This should be added.
+5. **EmployeeService validation at booking — RESOLVED**: `createAppointment()` now validates the selected employee is assigned to the selected service via the EmployeeService junction table (`@@unique([employeeId, serviceId])`). Returns 400 BadRequestError if not assigned. See `apps/api/src/services/appointmentService.ts:validateEmployeeOffersService()`.
 
 6. **Business hours enforcement**: Not implemented. Appointments can be booked at any time.
 

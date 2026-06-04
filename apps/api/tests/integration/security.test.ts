@@ -609,6 +609,40 @@ describe('Booking Integrity', () => {
     });
     expect(service!.barbershopId).toBe(fixtures.shopA.id);
   });
+
+  it('rejects booking when employee is not assigned to the selected service', async () => {
+    // employeeA2 is NOT linked to serviceA2 in fixtures (lines 124-131)
+    // Both belong to shopA, but no EmployeeService junction exists
+    const res = await request(app)
+      .post('/api/v1/appointments')
+      .set(authHeader(fixtures.clientA.clerkUserId))
+      .send({
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA2.employee.id,
+        serviceId: fixtures.serviceA2.id,
+        startAt: futureDate(2),
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toContain('Employee does not offer this service');
+  });
+
+  it('allows booking when employee is assigned to the selected service', async () => {
+    // employeeA1 is linked to serviceA1 in fixtures
+    const res = await request(app)
+      .post('/api/v1/appointments')
+      .set(authHeader(fixtures.clientA.clerkUserId))
+      .send({
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.employee.id,
+        serviceId: fixtures.serviceA1.id,
+        startAt: futureDate(2),
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.status).toBe('PENDING');
+    expect(res.body.data.employeeId).toBe(fixtures.employeeA1.employee.id);
+    expect(res.body.data.serviceId).toBe(fixtures.serviceA1.id);
+  });
 });
 
 // ============================================
