@@ -8,6 +8,7 @@ process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5433/barber
 process.env.DATABASE_URL_TEST = 'postgresql://postgres:postgres@localhost:5433/barberapp_test';
 process.env.CLERK_SECRET_KEY = 'sk_test_mock';
 process.env.NODE_ENV = 'test';
+process.env.RATE_LIMIT_ENABLED = 'false';
 
 // Global test timeout
 vi.setConfig({

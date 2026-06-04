@@ -135,7 +135,7 @@ npx vitest run tests/db/models.test.ts
 
 1. **Concurrent double-booking race — RESOLVED**: DB-level exclusion constraint prevents concurrent double-booking race for same employee + active statuses (PENDING, CONFIRMED, IN_PROGRESS). Application-layer `hasTimeConflict()` check remains as defense-in-depth. See `apps/api/prisma/migrations/20260604_add_db_double_booking_constraint/migration.sql`.
 
-2. **Rate limiting**: Not yet implemented in routes. The SECURITY_MODEL.md documents the pattern but it's not active.
+2. **Rate limiting — RESOLVED**: In-memory rate limiting is implemented for `/api/v1/appointments` routes (window: 15 min, max: 100 requests). Uses `express-rate-limit` with MemoryStore — acceptable for single-instance MVP. Production horizontal scaling should use a shared store (Redis, etc.). See `apps/api/src/middleware/rateLimit.ts`.
 
 3. **CORS**: Configured with `*` wildcard for development. Must restrict to mobile app origin in production.
 

@@ -4,10 +4,16 @@
 import express from 'express';
 import cors from 'cors';
 import { errorHandler } from './middleware/errorHandler.js';
+import { appointmentRateLimit } from './middleware/rateLimit.js';
 import appointmentRoutes from './routes/appointments.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Trust proxy for correct client IP detection behind reverse proxy (nginx, ALB, etc.)
+// Uncomment and configure when deploying behind a proxy:
+//   app.set('trust proxy', 1);
+//   app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
 
 // Global middleware
 app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*', credentials: true }));
@@ -24,7 +30,7 @@ app.get('/api/v1/ping', (_req, res) => {
 });
 
 // API routes
-app.use('/api/v1/appointments', appointmentRoutes);
+app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
 
 // Global error handler (must be last)
 app.use(errorHandler);

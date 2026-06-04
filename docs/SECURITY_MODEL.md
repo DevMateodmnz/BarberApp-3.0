@@ -315,16 +315,25 @@ END $$;
 
 ### Rate Limiting
 
+Implemented in PR-009. See `apps/api/src/middleware/rateLimit.ts`.
+
 ```typescript
-import rateLimit from 'express-rate-limit';
+// apps/api/src/index.ts
+import { appointmentRateLimit } from './middleware/rateLimit.js';
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window
-  message: { success: false, error: { code: 'RATE_LIMITED' } }
-});
+app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
+```
 
-app.use('/api/v1/auth/webhook', authLimiter);
+**Configuration** (env vars):
+- `RATE_LIMIT_ENABLED` — "true" or "false" (default: true, except in `NODE_ENV=test`)
+- `RATE_LIMIT_WINDOW_MS` — window duration (default: 15 minutes)
+- `RATE_LIMIT_MAX` — max requests per window (default: 100)
+
+**Limitations**: Uses in-memory MemoryStore — acceptable for single-instance MVP. For production horizontal scaling, replace with a shared store (Redis via `rate-limit-redis`, etc.).
+
+**Error response** (HTTP 429):
+```json
+{ "success": false, "error": { "code": "RATE_LIMITED", "message": "Too many requests, please try again later" } }
 ```
 
 ### CORS Configuration
