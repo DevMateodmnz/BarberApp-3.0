@@ -15,6 +15,7 @@ import type { User, UserRole } from '@prisma/client';
 
 // Augment Express Request
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       userId: string;
