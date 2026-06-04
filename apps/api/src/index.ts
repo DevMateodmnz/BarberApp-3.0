@@ -6,6 +6,7 @@ import cors from 'cors';
 import { errorHandler } from './middleware/errorHandler.js';
 import { appointmentRateLimit } from './middleware/rateLimit.js';
 import appointmentRoutes from './routes/appointments.js';
+import webhookRoutes from './routes/webhooks.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,6 +18,12 @@ const PORT = process.env.PORT || 3000;
 
 // Global middleware
 app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*', credentials: true }));
+
+// Webhook route — MUST be before express.json() for raw body capture
+// express.raw() preserves the raw body Buffer for Svix signature verification
+app.use('/api/v1/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
+
+// JSON body parser for all other routes
 app.use(express.json());
 
 // Health check (no auth required)

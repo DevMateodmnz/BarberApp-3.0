@@ -139,7 +139,7 @@ npx vitest run tests/db/models.test.ts
 
 3. **CORS**: Configured with `*` wildcard for development. Must restrict to mobile app origin in production.
 
-4. **Clerk webhook**: Not implemented yet. Webhook validation (svix-signature) is deferred to Phase 3 API Foundation.
+4. **Clerk webhook — RESOLVED**: Webhook endpoint implemented at `POST /api/v1/webhooks/clerk` with Svix signature verification via `standardwebhooks`. Handles `user.created`, `user.updated`, `user.deleted` events. All webhook-created users default to `CLIENT` — OWNER/BARBER role assignment remains manual for MVP. See `apps/api/src/routes/webhooks.ts` and `apps/api/src/services/userSyncService.ts`.
 
 5. **EmployeeService validation at booking — RESOLVED**: `createAppointment()` now validates the selected employee is assigned to the selected service via the EmployeeService junction table (`@@unique([employeeId, serviceId])`). Returns 400 BadRequestError if not assigned. See `apps/api/src/services/appointmentService.ts:validateEmployeeOffersService()`.
 

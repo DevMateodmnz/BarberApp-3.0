@@ -19,18 +19,22 @@ app.use('/api/v1', requireAuth());
 
 ### Webhook Sync
 
-Users are synced to the database via Clerk webhooks:
+Users are synced to the database via Clerk webhooks. Implemented in PR-010.
 
 ```
-POST /api/v1/auth/webhook
-Headers: svix-signature (signed by Clerk)
-Body: Clerk event payload
+POST /api/v1/webhooks/clerk
+Headers: svix-id, svix-timestamp, svix-signature (verified via standardwebhooks)
+Body: Clerk event payload (raw JSON, express.raw)
 ```
 
 Events handled:
-- `user.created` → Create user record
-- `user.updated` → Update user record
-- `user.deleted` → Soft delete or deactivate
+- `user.created` → Create user record (idempotent, role=CLIENT)
+- `user.updated` → Update or upsert user record
+- `user.deleted` → Soft delete (set deletedAt)
+
+**Limitations**: All webhook-created users default to `CLIENT`. OWNER/BARBER role assignment remains a manual MVP operation. Auth middleware does NOT auto-provision users on login — missing DB users receive 401.
+
+See `apps/api/src/routes/webhooks.ts` and `apps/api/src/services/userSyncService.ts`.
 
 ## Authorization
 
@@ -381,7 +385,7 @@ CLOUDINARY_API_SECRET=...
 - [ ] All user input is validated with Zod
 - [ ] All queries include tenant filter
 - [ ] Double-booking prevention tested
-- [ ] Rate limiting on sensitive endpoints
-- [ ] Webhook signature verification
+- [x] Rate limiting on sensitive endpoints
+- [x] Webhook signature verification
 - [ ] No hardcoded IDs in code
 - [ ] No secrets in repository
