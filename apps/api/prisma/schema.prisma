@@ -1,0 +1,228 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  OWNER
+  BARBER
+  CLIENT
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+// ============================================
+// USER
+// ============================================
+
+/// User model - represents all authenticated users (owners, barbers, clients)
+/// Each user is tied to a Clerk user via clerkUserId
+model User {
+  id            String    @id @default(cuid())
+  clerkUserId   String    @unique @map("clerk_user_id")
+  email        String    @unique
+  name         String?
+  role         UserRole  @default(CLIENT)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  // Relations
+  ownedBarbershops  Barbershop[]       @relation("BarbershopOwner")
+  employees        Employee[]
+  clientAppointments Appointment[]     @relation("AppointmentClient")
+  uploadedPhotos    Photo[]            @relation("PhotoUploader")
+  clientPhotos      Photo[]            @relation("PhotoClient")
+
+  @@map("users")
+}
+
+// ============================================
+// BARBERSHOP
+// ============================================
+
+/// Barbershop model - represents a barbershop business
+/// Each barbershop has exactly one owner
+model Barbershop {
+  id        String   @id @default(cuid())
+  ownerId   String   @map("owner_id")
+  name      String
+  address   String?
+  phone     String?
+  timezone  String   @default("America/Argentina/Tucuman")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // Relations
+  owner       User          @relation("BarbershopOwner", fields: [ownerId], references: [id])
+  employees   Employee[]
+  services    Service[]
+  appointments Appointment[]
+
+  // Indexes
+  @@index([ownerId])
+  @@index([ownerId, isActive])
+  @@map("barbershops")
+}
+
+// ============================================
+// EMPLOYEE
+// ============================================
+
+/// Employee model - represents a barber/employee working at a barbershop
+/// Links a User to a Barbershop
+model Employee {
+  id           String   @id @default(cuid())
+  barbershopId String   @map("barbershop_id")
+  userId       String   @map("user_id")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  // Relations
+  barbershop     Barbershop       @relation(fields: [barbershopId], references: [id])
+  user           User              @relation(fields: [userId], references: [id])
+  employeeServices EmployeeService[]
+  appointments   Appointment[]
+
+  // Indexes
+  @@index([barbershopId])
+  @@index([userId])
+  @@index([barbershopId, isActive])
+
+  // Constraint: one employee record per user per barbershop
+  @@unique([barbershopId, userId])
+  @@map("employees")
+}
+
+// ============================================
+// SERVICE
+// ============================================
+
+/// Service model - represents a service offered by a barbershop
+model Service {
+  id              String   @id @default(cuid())
+  barbershopId    String   @map("barbershop_id")
+  name            String
+  description     String?
+  durationMinutes Int      @map("duration_minutes")
+  priceCents      Int      @map("price_cents")
+  currency        String   @default("ARS")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  // Relations
+  barbershop       Barbershop       @relation(fields: [barbershopId], references: [id])
+  employeeServices EmployeeService[]
+  appointments     Appointment[]
+
+  // Indexes
+  @@index([barbershopId])
+  @@index([barbershopId, isActive])
+  @@map("services")
+}
+
+// ============================================
+// EMPLOYEE_SERVICE
+// ============================================
+
+/// EmployeeService model - junction table linking employees to services they can perform
+model EmployeeService {
+  id         String   @id @default(cuid())
+  employeeId String   @map("employee_id")
+  serviceId  String   @map("service_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  employee Employee @relation(fields: [employeeId], references: [id])
+  service  Service  @relation(fields: [serviceId], references: [id])
+
+  // Constraint: unique employee + service pair
+  @@unique([employeeId, serviceId])
+  @@index([employeeId])
+  @@index([serviceId])
+  @@map("employee_services")
+}
+
+// ============================================
+// APPOINTMENT
+// ============================================
+
+/// Appointment model - represents a booked appointment
+model Appointment {
+  id           String             @id @default(cuid())
+  barbershopId String             @map("barbershop_id")
+  employeeId   String             @map("employee_id")
+  clientId     String             @map("client_id")
+  serviceId    String             @map("service_id")
+  startAt      DateTime           @map("start_at")
+  endAt        DateTime           @map("end_at")
+  status       AppointmentStatus  @default(PENDING)
+  notes        String?
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  deletedAt    DateTime?         @map("deleted_at")
+
+  // Relations
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+  client     User       @relation("AppointmentClient", fields: [clientId], references: [id])
+  service    Service    @relation(fields: [serviceId], references: [id])
+
+  // Indexes for common queries
+  @@index([barbershopId])
+  @@index([employeeId])
+  @@index([clientId])
+  @@index([startAt])
+  @@index([barbershopId, employeeId, startAt])
+  @@index([employeeId, startAt, status])
+
+  @@map("appointments")
+}
+
+// ============================================
+// PHOTO
+// ============================================
+
+/// Photo model - represents a photo uploaded by/for a client
+model Photo {
+  id          String   @id @default(cuid())
+  clientId    String   @map("client_id")
+  url         String
+  uploadedById String  @map("uploaded_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  client    User @relation("PhotoClient", fields: [clientId], references: [id])
+  uploadedBy User @relation("PhotoUploader", fields: [uploadedById], references: [id])
+
+  // Indexes
+  @@index([clientId])
+  @@index([uploadedById])
+
+  @@map("photos")
+}

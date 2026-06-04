@@ -1,0 +1,11 @@
+// Test schema - identical to main schema but with test database URL
+// This allows running migrations on the test database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_TEST")
+}
