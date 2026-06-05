@@ -15,17 +15,19 @@ const TEST_SECRET = process.env.CLERK_WEBHOOK_SECRET!;
 
 // Helper: build a Clerk-style webhook payload
 function buildPayload(type: string, overrides: Record<string, unknown> = {}) {
+  const { public_metadata, ...rest } = overrides;
   return {
     type,
     data: {
-      id: overrides.id ?? `user_test_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      first_name: overrides.first_name ?? 'Test',
-      last_name: overrides.last_name ?? 'User',
+      id: rest.id ?? `user_test_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      first_name: rest.first_name ?? 'Test',
+      last_name: rest.last_name ?? 'User',
       email_addresses: [
-        { id: 'idn_primary', email_address: overrides.email ?? `test_${Date.now()}@example.com` },
+        { id: 'idn_primary', email_address: rest.email ?? `test_${Date.now()}@example.com` },
       ],
       primary_email_address_id: 'idn_primary',
-      ...overrides,
+      ...(public_metadata !== undefined ? { public_metadata } : {}),
+      ...rest,
     },
   };
 }
@@ -119,7 +121,67 @@ describe('Clerk Webhook', () => {
   });
 
   // ========================================
-  // user.updated
+  // user.created — role from public_metadata
+  // ========================================
+
+  it('creates user with role OWNER from public_metadata', async () => {
+    const clerkId = `user_test_owner_${Date.now()}`;
+    const payload = buildPayload('user.created', {
+      id: clerkId,
+      public_metadata: { role: 'OWNER' },
+    });
+
+    const res = await signAndPost(payload);
+    expect(res.status).toBe(200);
+
+    const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
+    expect(user!.role).toBe('OWNER');
+  });
+
+  it('creates user with role BARBER from public_metadata', async () => {
+    const clerkId = `user_test_barber_${Date.now()}`;
+    const payload = buildPayload('user.created', {
+      id: clerkId,
+      public_metadata: { role: 'BARBER' },
+    });
+
+    const res = await signAndPost(payload);
+    expect(res.status).toBe(200);
+
+    const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
+    expect(user!.role).toBe('BARBER');
+  });
+
+  it('creates user with role CLIENT when public_metadata.role is missing', async () => {
+    const clerkId = `user_test_nometa_${Date.now()}`;
+    const payload = buildPayload('user.created', {
+      id: clerkId,
+      public_metadata: {}, // no role key
+    });
+
+    const res = await signAndPost(payload);
+    expect(res.status).toBe(200);
+
+    const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
+    expect(user!.role).toBe('CLIENT');
+  });
+
+  it('defaults to CLIENT when public_metadata.role is invalid', async () => {
+    const clerkId = `user_test_badrole_${Date.now()}`;
+    const payload = buildPayload('user.created', {
+      id: clerkId,
+      public_metadata: { role: 'SUPER_ADMIN' },
+    });
+
+    const res = await signAndPost(payload);
+    expect(res.status).toBe(200);
+
+    const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
+    expect(user!.role).toBe('CLIENT');
+  });
+
+  // ========================================
+  // user.updated — role from public_metadata
   // ========================================
   it('updates existing user on user.updated', async () => {
     const clerkId = `user_test_upd_${Date.now()}`;
@@ -160,6 +222,107 @@ describe('Clerk Webhook', () => {
     const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
     expect(user).not.toBeNull();
     expect(user!.role).toBe('CLIENT');
+  });
+
+  it('preserves OWNER role on user.updated with missing metadata', async () => {
+    const clerkId = `user_test_keepowner_${Date.now()}`;
+
+    await prisma.user.create({
+      data: { clerkUserId: clerkId, email: `owner_${Date.now()}@example.com`, role: 'OWNER' },
+    });
+
+    // Update without any public_metadata — should keep OWNER
+    const payload = buildPayload('user.updated', {
+      id: clerkId,
+      email: `owner_new_${Date.now()}@example.com`,
+    });
+
+    const res = await signAndPost(payload);
+    expect(res.status).toBe(200);
+
+    const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
+    expect(user!.role).toBe('OWNER');
+  });
+
+  it('preserves OWNER role on user.updated with CLIENT metadata (no downgrade)', async () => {
+    const clerkId = `user_test_nodown_${Date.now()}`;
+
+    await prisma.user.create({
+      data: { clerkUserId: clerkId, email: `owner2_${Date.now()}@example.com`, role: 'OWNER' },
+    });
+
+    // Attempt to downgrade via metadata — should be ignored
+    const payload = buildPayload('user.updated', {
+      id: clerkId,
+      email: `owner2_new_${Date.now()}@example.com`,
+      public_metadata: { role: 'CLIENT' },
+    });
+
+    const res = await signAndPost(payload);
+    expect(res.status).toBe(200);
+
+    const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
+    expect(user!.role).toBe('OWNER');
+  });
+
+  it('upgrades CLIENT to OWNER on user.updated with OWNER metadata', async () => {
+    const clerkId = `user_test_upgrade_${Date.now()}`;
+
+    await prisma.user.create({
+      data: { clerkUserId: clerkId, email: `client_${Date.now()}@example.com`, role: 'CLIENT' },
+    });
+
+    const payload = buildPayload('user.updated', {
+      id: clerkId,
+      email: `client_new_${Date.now()}@example.com`,
+      public_metadata: { role: 'OWNER' },
+    });
+
+    const res = await signAndPost(payload);
+    expect(res.status).toBe(200);
+
+    const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
+    expect(user!.role).toBe('OWNER');
+  });
+
+  it('preserves BARBER role on user.updated with CLIENT metadata', async () => {
+    const clerkId = `user_test_barberkeep_${Date.now()}`;
+
+    await prisma.user.create({
+      data: { clerkUserId: clerkId, email: `barber_${Date.now()}@example.com`, role: 'BARBER' },
+    });
+
+    const payload = buildPayload('user.updated', {
+      id: clerkId,
+      email: `barber_new_${Date.now()}@example.com`,
+      public_metadata: { role: 'CLIENT' },
+    });
+
+    const res = await signAndPost(payload);
+    expect(res.status).toBe(200);
+
+    const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
+    expect(user!.role).toBe('BARBER');
+  });
+
+  it('upgrades BARBER to OWNER on user.updated with OWNER metadata', async () => {
+    const clerkId = `user_test_barberup_${Date.now()}`;
+
+    await prisma.user.create({
+      data: { clerkUserId: clerkId, email: `barber2_${Date.now()}@example.com`, role: 'BARBER' },
+    });
+
+    const payload = buildPayload('user.updated', {
+      id: clerkId,
+      email: `barber2_new_${Date.now()}@example.com`,
+      public_metadata: { role: 'OWNER' },
+    });
+
+    const res = await signAndPost(payload);
+    expect(res.status).toBe(200);
+
+    const user = await prisma.user.findUnique({ where: { clerkUserId: clerkId } });
+    expect(user!.role).toBe('OWNER');
   });
 
   // ========================================

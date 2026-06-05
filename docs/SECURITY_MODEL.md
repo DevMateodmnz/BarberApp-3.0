@@ -28,11 +28,15 @@ Body: Clerk event payload (raw JSON, express.raw)
 ```
 
 Events handled:
-- `user.created` → Create user record (idempotent, role=CLIENT)
-- `user.updated` → Update or upsert user record
+- `user.created` → Create user record (idempotent, role from `public_metadata.role` or default `CLIENT`)
+- `user.updated` → Update name/email; resolve role preserving privilege (never downgrade OWNER/BARBER)
 - `user.deleted` → Soft delete (set deletedAt)
 
-**Limitations**: All webhook-created users default to `CLIENT`. OWNER/BARBER role assignment remains a manual MVP operation. Auth middleware does NOT auto-provision users on login — missing DB users receive 401.
+**Role source**: `public_metadata.role` on the Clerk user object. Valid values: `OWNER`, `BARBER`, `CLIENT`. Absent/invalid metadata defaults to `CLIENT`. `unsafe_metadata` is intentionally not trusted.
+
+**DB as source of truth**: Auth middleware (`auth.ts:85`) reads `user.role` from the DB on every request. The webhook is only a sync mechanism — the DB `User.role` column is authoritative at runtime.
+
+**Limitations**: OWNER/BARBER role bootstrap currently requires setting `public_metadata` in the Clerk Dashboard. There is no backend endpoint for OWNER-managed employee/role assignment yet (deferred to future PR).
 
 See `apps/api/src/routes/webhooks.ts` and `apps/api/src/services/userSyncService.ts`.
 

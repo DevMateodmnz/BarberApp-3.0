@@ -2,13 +2,22 @@
  * User synchronization service
  *
  * Handles Clerk webhook events: user.created, user.updated, user.deleted.
- * All webhook-created users default to role CLIENT.
- * Idempotent: duplicates return 200 with no side effects.
+ * Reads role from Clerk public_metadata.role when available.
+ * Defaults to CLIENT when no metadata or invalid value.
+ * NEVER downgrades an existing OWNER/BARBER role via webhook update.
+ *
+ * DB User.role remains the runtime source of truth for auth middleware.
+ * public_metadata is trusted only at webhook sync time.
+ * unsafe_metadata is intentionally NOT used.
  */
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError } from '../lib/errors.js';
 import { Prisma } from '@prisma/client';
-import type { User } from '@prisma/client';
+import type { User, UserRole } from '@prisma/client';
+
+// ============================================
+// TYPES
+// ============================================
 
 interface ClerkEmailAddress {
   id: string;
@@ -21,12 +30,17 @@ interface ClerkWebhookData {
   last_name?: string | null;
   email_addresses?: ClerkEmailAddress[];
   primary_email_address_id?: string | null;
+  public_metadata?: Record<string, unknown>;
 }
 
 interface ClerkWebhookEvent {
   type: string;
   data: ClerkWebhookData;
 }
+
+// ============================================
+// HELPERS
+// ============================================
 
 function extractEmail(data: ClerkWebhookData): string {
   const addresses = data.email_addresses;
@@ -53,6 +67,64 @@ function extractName(data: ClerkWebhookData, email: string): string {
   return 'User';
 }
 
+/** Allowed roles from Clerk metadata. Mirrors Prisma UserRole enum. */
+const VALID_ROLES: ReadonlySet<string> = new Set(['OWNER', 'BARBER', 'CLIENT']);
+
+/**
+ * Extracts a validated UserRole from Clerk's public_metadata.role.
+ *
+ * - Returns the metadata role if it is a valid UserRole string.
+ * - Defaults to CLIENT if public_metadata is absent, not an object,
+ *   or contains an unrecognized role value.
+ * - unsafe_metadata is intentionally ignored.
+ */
+function parseClerkRoleFromPublicMetadata(
+  publicMetadata: unknown
+): UserRole {
+  if (
+    publicMetadata &&
+    typeof publicMetadata === 'object' &&
+    !Array.isArray(publicMetadata)
+  ) {
+    const role = (publicMetadata as Record<string, unknown>).role;
+    if (typeof role === 'string' && VALID_ROLES.has(role)) {
+      return role as UserRole;
+    }
+  }
+  return 'CLIENT';
+}
+
+/**
+ * Privilege ordering for role resolution.
+ * Higher number = higher privilege. Used to prevent downgrades.
+ */
+const PRIVILEGE_ORDER: Record<UserRole, number> = {
+  CLIENT: 0,
+  BARBER: 1,
+  OWNER: 2,
+};
+
+/**
+ * Resolves the effective role when updating an existing user.
+ *
+ * Rule: NEVER downgrade. If the existing DB role has higher privilege
+ * than the incoming metadata role, preserve the existing role.
+ * Upgrades (CLIENT → BARBER → OWNER) are always allowed.
+ */
+function resolveRole(
+  existingRole: UserRole | undefined,
+  metadataRole: UserRole
+): UserRole {
+  if (!existingRole) return metadataRole;
+  const existingLevel = PRIVILEGE_ORDER[existingRole] ?? 0;
+  const metadataLevel = PRIVILEGE_ORDER[metadataRole] ?? 0;
+  return metadataLevel > existingLevel ? metadataRole : existingRole;
+}
+
+// ============================================
+// EVENT HANDLERS
+// ============================================
+
 export async function handleUserCreated(
   event: ClerkWebhookEvent
 ): Promise<User> {
@@ -60,6 +132,7 @@ export async function handleUserCreated(
   const clerkUserId = data.id;
   const email = extractEmail(data);
   const name = extractName(data, email);
+  const role = parseClerkRoleFromPublicMetadata(data.public_metadata);
 
   try {
     return await prisma.user.create({
@@ -67,7 +140,7 @@ export async function handleUserCreated(
         clerkUserId,
         email,
         name,
-        role: 'CLIENT',
+        role,
       },
     });
   } catch (err) {
@@ -80,9 +153,11 @@ export async function handleUserCreated(
         where: { clerkUserId },
       });
       if (existing?.deletedAt) {
+        // Restore preserving the higher of existing or metadata role
+        const effectiveRole = resolveRole(existing.role, role);
         return await prisma.user.update({
           where: { clerkUserId },
-          data: { deletedAt: null, name, email },
+          data: { deletedAt: null, name, email, role: effectiveRole },
         });
       }
       return existing!;
@@ -98,15 +173,35 @@ export async function handleUserUpdated(
   const clerkUserId = data.id;
   const email = extractEmail(data);
   const name = extractName(data, email);
+  const metadataRole = parseClerkRoleFromPublicMetadata(data.public_metadata);
 
-  return prisma.user.upsert({
+  // Fetch existing user to prevent role downgrades
+  const existing = await prisma.user.findUnique({
     where: { clerkUserId },
-    update: { email, name, deletedAt: null },
-    create: {
+  });
+
+  if (existing) {
+    // Never downgrade: resolve effective role preserving privilege
+    const effectiveRole = resolveRole(existing.role, metadataRole);
+
+    return prisma.user.update({
+      where: { clerkUserId },
+      data: {
+        email,
+        name,
+        role: effectiveRole,
+        deletedAt: null,
+      },
+    });
+  }
+
+  // User doesn't exist yet — create with metadata role
+  return prisma.user.create({
+    data: {
       clerkUserId,
       email,
       name,
-      role: 'CLIENT',
+      role: metadataRole,
     },
   });
 }

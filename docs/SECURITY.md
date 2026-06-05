@@ -139,7 +139,9 @@ npx vitest run tests/db/models.test.ts
 
 3. **CORS**: Configured with `*` wildcard for development. Must restrict to mobile app origin in production.
 
-4. **Clerk webhook — RESOLVED**: Webhook endpoint implemented at `POST /api/v1/webhooks/clerk` with Svix signature verification via `standardwebhooks`. Handles `user.created`, `user.updated`, `user.deleted` events. All webhook-created users default to `CLIENT` — OWNER/BARBER role assignment remains manual for MVP. See `apps/api/src/routes/webhooks.ts` and `apps/api/src/services/userSyncService.ts`.
+4. **Clerk webhook — RESOLVED**: Webhook endpoint implemented at `POST /api/v1/webhooks/clerk` with Svix signature verification via `standardwebhooks`. Handles `user.created`, `user.updated`, `user.deleted` events. Role is now read from Clerk `public_metadata.role` (valid values: `OWNER`, `BARBER`, `CLIENT`). When metadata is absent or invalid, defaults to `CLIENT`. Webhook NEVER downgrades an existing `OWNER` or `BARBER` role via `user.updated` — privilege preservation is enforced by `resolveRole()` in `userSyncService.ts`. The DB `User.role` remains the runtime source of truth for auth middleware. `unsafe_metadata` is intentionally NOT trusted for role assignment. See `apps/api/src/services/userSyncService.ts`.
+
+   **Remaining limitation**: OWNER/BARBER role bootstrap is done via Clerk Dashboard (`public_metadata: { role: "OWNER" }`). There is no internal backend endpoint for OWNER-managed employee creation or role assignment yet (deferred to future PR).
 
 5. **EmployeeService validation at booking — RESOLVED**: `createAppointment()` now validates the selected employee is assigned to the selected service via the EmployeeService junction table (`@@unique([employeeId, serviceId])`). Returns 400 BadRequestError if not assigned. See `apps/api/src/services/appointmentService.ts:validateEmployeeOffersService()`.
 
