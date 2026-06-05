@@ -159,7 +159,8 @@ npx vitest run tests/db/models.test.ts
    - Target user must already exist in DB (synced via Clerk webhook). No auto-provisioning.
    - Role assignment is separate — use Clerk Dashboard `public_metadata.role` (PR-013).
    - Service assignment for employees — RESOLVED in PR-015. `POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services` assigns a service; `DELETE .../services/:serviceId` unassigns. See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/employeeService.ts`.
-   - No employee listing (`GET /employees`) or deactivation (`DELETE /employees/:id`) yet.
+   - Employee listing — RESOLVED in PR-016. `GET /api/v1/barbershops/:barbershopId/employees` returns all non-deleted employees for a barbershop (OWNER only). Response includes safe user fields only (id, email, name, role) — no clerkUserId or internal fields exposed. Assigned services listing remains deferred.
+   - No employee deactivation (`DELETE /employees/:id`) yet.
    - No invitation flow.
 
 ## PR-011 Verdict: ✅ PASS

@@ -187,3 +187,42 @@ export async function unassignService(
     where: { id: link.id },
   });
 }
+
+// ============================================
+// EMPLOYEE LISTING
+// ============================================
+
+/**
+ * Lists employees for a barbershop.
+ *
+ * Preconditions (enforced by upstream middleware):
+ * - Caller is the OWNER of the barbershop
+ *
+ * Behavior:
+ * - Returns all non-deleted employees (active + inactive)
+ * - Includes safe user fields only: id, email, name, role
+ * - Excludes internal fields: clerkUserId, deletedAt
+ * - Does NOT include assigned services (deferred to separate endpoint)
+ */
+export async function listEmployees(barbershopId: string) {
+  return prisma.employee.findMany({
+    where: { barbershopId, deletedAt: null },
+    select: {
+      id: true,
+      barbershopId: true,
+      userId: true,
+      isActive: true,
+      createdAt: true,
+      updatedAt: true,
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+}

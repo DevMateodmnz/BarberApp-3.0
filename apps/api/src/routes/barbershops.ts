@@ -2,7 +2,8 @@
  * Barbershop routes
  *
  * Role-based access:
- * - POST /api/v1/barbershops/:barbershopId/employees        OWNER (add employee)
+ * - GET  /api/v1/barbershops/:barbershopId/employees                       OWNER (list employees)
+ * - POST /api/v1/barbershops/:barbershopId/employees                        OWNER (add employee)
  * - POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (assign service)
  * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId  OWNER (unassign service)
  */
@@ -41,6 +42,26 @@ const router = Router();
 
 // All barbershop routes require authentication
 router.use(requireAuth);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees
+// List employees of a barbershop (OWNER only)
+// ============================================
+router.get(
+  '/:barbershopId/employees',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const employees = await employeeService.listEmployees(
+        paramBarbershopId(req)
+      );
+      res.json({ success: true, data: employees });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 // ============================================
 // POST /api/v1/barbershops/:barbershopId/employees

@@ -685,3 +685,100 @@ describe('Appointment booking with assigned/unassigned services', () => {
     expect(res.body.error.message).toContain('does not offer this service');
   });
 });
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees
+// ============================================
+
+describe('GET /api/v1/barbershops/:barbershopId/employees', () => {
+  beforeEach(async () => {
+    await prisma.employeeService.deleteMany();
+    await prisma.employee.deleteMany();
+  });
+
+  function listEmployees(shopId: string, asClerkId: string) {
+    return request(app)
+      .get(`/api/v1/barbershops/${shopId}/employees`)
+      .set(authHeader(asClerkId));
+  }
+
+  it('OWNER lists employees successfully — 200', async () => {
+    // Create two employees in Shop A
+    await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
+    await createEmployeeInDb(fixtures.shopA.id, fixtures.clientUser.id);
+
+    const res = await listEmployees(fixtures.shopA.id, fixtures.ownerA.clerkUserId);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveLength(2);
+  });
+
+  it('response includes only safe user fields: id, email, name, role', async () => {
+    await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
+
+    const res = await listEmployees(fixtures.shopA.id, fixtures.ownerA.clerkUserId);
+
+    const emp = res.body.data[0];
+    expect(emp.user).toBeDefined();
+    expect(emp.user.id).toBe(fixtures.barberUser.id);
+    expect(emp.user.email).toBe(fixtures.barberUser.email);
+    expect(emp.user.name).toBe(fixtures.barberUser.name);
+    expect(emp.user.role).toBe('BARBER');
+    // Must NOT expose internal fields
+    expect(emp.user.clerkUserId).toBeUndefined();
+    expect(emp.user.deletedAt).toBeUndefined();
+  });
+
+  it('empty list returns 200 with data: []', async () => {
+    const res = await listEmployees(fixtures.shopA.id, fixtures.ownerA.clerkUserId);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('BARBER cannot list employees — 403', async () => {
+    const res = await listEmployees(fixtures.shopA.id, fixtures.barberUser.clerkUserId);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('CLIENT cannot list employees — 403', async () => {
+    const res = await listEmployees(fixtures.shopA.id, fixtures.clientUser.clerkUserId);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('unauthenticated request — 401', async () => {
+    const res = await request(app).get(
+      `/api/v1/barbershops/${fixtures.shopA.id}/employees`
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it('OWNER cannot list another barbershop employees — 403', async () => {
+    // Owner A tries to list Shop B's employees
+    const res = await listEmployees(fixtures.shopB.id, fixtures.ownerA.clerkUserId);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.message).toContain('do not own');
+  });
+
+  it('soft-deleted employees are excluded', async () => {
+    // Create one active and one soft-deleted employee
+    const active = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
+    const deleted = await createEmployeeInDb(fixtures.shopA.id, fixtures.clientUser.id);
+    await prisma.employee.update({
+      where: { id: deleted.id },
+      data: { deletedAt: new Date() },
+    });
+
+    const res = await listEmployees(fixtures.shopA.id, fixtures.ownerA.clerkUserId);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].id).toBe(active.id);
+  });
+});
