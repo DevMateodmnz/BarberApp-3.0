@@ -153,6 +153,15 @@ npx vitest run tests/db/models.test.ts
 
    **Remaining limitation**: The HTTP route `GET /api/v1/appointments` does not set `employeeId` for BARBER users (no `requireBarbershopAccess` middleware on the listing route). BARBERs currently cannot list their appointments via HTTP — they must use `GET /api/v1/appointments/:id` for single-appointment access. A dedicated BARBER listing endpoint or middleware enhancement is deferred to a future PR.
 
+8. **OWNER-managed employee creation — RESOLVED**: `POST /api/v1/barbershops/:barbershopId/employees` allows an OWNER to add existing users as employees of their barbershop. Tenant isolation is enforced by `requireBarbershopAccess` (cross-tenant blocked with 403). Duplicate employee links return 409 Conflict via the `@@unique([barbershopId, userId])` constraint. The endpoint does NOT modify `User.role`, create Clerk users, or send invitations. See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/employeeService.ts`.
+
+   **Remaining limitations**:
+   - Target user must already exist in DB (synced via Clerk webhook). No auto-provisioning.
+   - Role assignment is separate — use Clerk Dashboard `public_metadata.role` (PR-013).
+   - Service assignment for employees is a separate future endpoint.
+   - No employee listing (`GET /employees`) or deactivation (`DELETE /employees/:id`) yet.
+   - No invitation flow.
+
 ## PR-011 Verdict: ✅ PASS
 
 All 96 tests pass (48 integration + 27 db models + 11 webhook + 5 double-booking + 2 rate limit + 3 unit).
