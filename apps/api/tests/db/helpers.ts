@@ -4,6 +4,7 @@
  */
 
 import { PrismaClient, UserRole, AppointmentStatus } from '@prisma/client';
+import { setupDefaultWorkingHours } from '../../src/services/barbershopService.js';
 
 export const prisma = new PrismaClient();
 
@@ -51,7 +52,9 @@ export async function createTestUser(data: {
 }
 
 /**
- * Create a test barbershop with owner
+ * Create a test barbershop with owner and default WorkingHours.
+ * The barbershop is immediately ready for appointment booking
+ * within the default schedule (Mon-Fri 9-19, Sat 9-14).
  */
 export async function createTestBarbershop(data: {
   name?: string;
@@ -74,6 +77,9 @@ export async function createTestBarbershop(data: {
       isActive: true,
     },
   });
+
+  // Automatically set up default working hours
+  await setupDefaultWorkingHours(barbershop.id);
 
   return { barbershop, owner: { user: owner, role: UserRole.OWNER } };
 }

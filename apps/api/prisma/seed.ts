@@ -4,6 +4,7 @@
  */
 
 import { PrismaClient, UserRole, AppointmentStatus } from '@prisma/client';
+import { createBarbershop } from '../src/services/barbershopService.js';
 
 const prisma = new PrismaClient();
 
@@ -30,16 +31,13 @@ async function main() {
   });
   console.log('Created owner:', owner.email);
 
-  // Create Barbershop
-  const barbershop = await prisma.barbershop.create({
-    data: {
-      ownerId: owner.id,
-      name: 'Barbería Classic',
-      address: 'Av. Santa Fe 1234, Buenos Aires',
-      phone: '+54 11 5555-1234',
-      timezone: 'America/Argentina/Buenos_Aires',
-      isActive: true,
-    },
+  // Create Barbershop (includes default WorkingHours setup)
+  const barbershop = await createBarbershop({
+    ownerId: owner.id,
+    name: 'Barbería Classic',
+    address: 'Av. Santa Fe 1234, Buenos Aires',
+    phone: '+54 11 5555-1234',
+    timezone: 'America/Argentina/Buenos_Aires',
   });
   console.log('Created barbershop:', barbershop.name);
 
