@@ -74,10 +74,11 @@ model Barbershop {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  owner       User          @relation("BarbershopOwner", fields: [ownerId], references: [id])
-  employees   Employee[]
-  services    Service[]
+  owner        User          @relation("BarbershopOwner", fields: [ownerId], references: [id])
+  employees    Employee[]
+  services     Service[]
   appointments Appointment[]
+  workingHours WorkingHours[]
 
   // Indexes
   @@index([ownerId])
@@ -201,6 +202,33 @@ model Appointment {
   @@index([employeeId, startAt, status])
 
   @@map("appointments")
+}
+
+// ============================================
+// WORKING HOURS
+// ============================================
+
+/// WorkingHours model — per-barbershop per-day-of-week schedule
+/// dayOfWeek: 0=Sunday, 1=Monday, ..., 6=Saturday
+/// openTime/closeTime in "HH:mm" 24h format in the barbershop's local timezone
+/// Absence of a row for a given dayOfWeek means the shop is closed that day
+model WorkingHours {
+  id            String   @id @default(cuid())
+  barbershopId  String   @map("barbershop_id")
+  dayOfWeek     Int      @map("day_of_week")
+  openTime      String   @map("open_time")
+  closeTime     String   @map("close_time")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
+
+  // Constraint: one schedule per barbershop per day
+  @@unique([barbershopId, dayOfWeek])
+  @@index([barbershopId])
+  @@map("working_hours")
 }
 
 // ============================================

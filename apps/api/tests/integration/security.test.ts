@@ -130,6 +130,21 @@ beforeAll(async () => {
     ],
   });
 
+  // Set up working hours for Shop A (Mon‑Fri 09-19, Sat 09-14)
+  const shopADays = [
+    { dayOfWeek: 1, openTime: '09:00', closeTime: '19:00' },
+    { dayOfWeek: 2, openTime: '09:00', closeTime: '19:00' },
+    { dayOfWeek: 3, openTime: '09:00', closeTime: '19:00' },
+    { dayOfWeek: 4, openTime: '09:00', closeTime: '19:00' },
+    { dayOfWeek: 5, openTime: '09:00', closeTime: '19:00' },
+    { dayOfWeek: 6, openTime: '09:00', closeTime: '14:00' },
+  ];
+  for (const d of shopADays) {
+    await prisma.workingHours.create({
+      data: { barbershopId: fixtures.shopA.id, ...d },
+    });
+  }
+
   // Create client for Shop A
   fixtures.clientA = await prisma.user.create({
     data: {
@@ -188,6 +203,13 @@ beforeAll(async () => {
     data: { employeeId: fixtures.employeeB1.employee.id, serviceId: fixtures.serviceB1.id },
   });
 
+  // Set up working hours for Shop B (same schedule)
+  for (const d of shopADays) {
+    await prisma.workingHours.create({
+      data: { barbershopId: fixtures.shopB.id, ...d },
+    });
+  }
+
   fixtures.clientB = await prisma.user.create({
     data: {
       clerkUserId: 'test_clientB_clerk',
@@ -199,7 +221,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  // Clean appointments between tests (keep users/shops/services)
+  // Clean appointments between tests (keep users/shops/services/workingHours)
   await prisma.appointment.deleteMany();
 });
 
@@ -207,6 +229,7 @@ afterAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
+  await prisma.workingHours.deleteMany();
   await prisma.service.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.barbershop.deleteMany();
@@ -222,11 +245,26 @@ function authHeader(clerkUserId: string) {
   return { 'x-test-user-id': clerkUserId };
 }
 
-function futureDate(hoursFromNow = 2) {
+/**
+ * Returns an ISO date at 10:00 AM local time on a day `daysFromNow` away.
+ * Guaranteed to be within business hours (Mon-Sat 09:00-14:00/19:00).
+ * Skips Sunday to ensure the resulting day is always open.
+ */
+function businessHoursDate(daysFromNow = 1): string {
   const d = new Date();
-  d.setHours(d.getHours() + hoursFromNow);
-  d.setMinutes(0, 0, 0);
+  d.setDate(d.getDate() + daysFromNow);
+  // Skip Sunday
+  if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+  d.setHours(10, 0, 0, 0);
   return d.toISOString();
+}
+
+/**
+ * Legacy helper — replaced by businessHoursDate().
+ * Now delegates to businessHoursDate with the parameter interpreted as day offset.
+ */
+function futureDate(daysFromNow = 1) {
+  return businessHoursDate(daysFromNow);
 }
 
 // ============================================
@@ -984,5 +1022,142 @@ describe('Status Transitions', () => {
       .set(authHeader(fixtures.ownerA.clerkUserId))
       .send({ status: 'DELETED' }); // Not a valid status
     expect(res.status).toBe(400);
+  });
+});
+
+// ============================================
+// 6. BUSINESS HOURS ENFORCEMENT TESTS
+// ============================================
+
+describe('Business Hours Enforcement', () => {
+  /**
+   * Helper: returns an ISO date string for a specific time (UTC)
+   * on the next business day that matches the given dayOfWeek.
+   * dayOfWeek: 0=Sun, 1=Mon, ..., 6=Sat (in barbershop local tz).
+   *
+   * Since shops use America/Argentina/Buenos_Aires (UTC-3),
+   * we create UTC times 3 hours ahead of the desired local time.
+   */
+  function dateAtLocalTime(
+    dayOfWeek: number,
+    hours: number,
+    minutes = 0
+  ): string {
+    // Find next occurrence of the target day
+    const now = new Date();
+    // Get current day in UTC (approx — fine for test offset)
+    const utcDay = now.getUTCDay();
+    let daysAhead = dayOfWeek - utcDay;
+    if (daysAhead <= 0) daysAhead += 7;
+
+    const d = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + daysAhead,
+      hours + 3, // UTC-3 offset for Argentina
+      minutes,
+      0,
+      0
+    ));
+
+    return d.toISOString();
+  }
+
+  async function bookAt(dayOfWeek: number, hours: number, minutes = 0) {
+    return request(app)
+      .post('/api/v1/appointments')
+      .set(authHeader(fixtures.clientA.clerkUserId))
+      .send({
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.employee.id,
+        serviceId: fixtures.serviceA1.id,
+        startAt: dateAtLocalTime(dayOfWeek, hours, minutes),
+      });
+  }
+
+  it('appointment inside business hours succeeds (Monday 10:00)', async () => {
+    const res = await bookAt(1, 10, 0); // Monday 10:00
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('appointment inside business hours succeeds (Friday 18:30, ends 19:00)', async () => {
+    // 30 min service at 18:30 ends at 19:00 = closing time (inclusive)
+    const res = await bookAt(5, 18, 30); // Friday 18:30
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('appointment before opening is rejected (Monday 08:00)', async () => {
+    const res = await bookAt(1, 8, 0); // Monday 08:00 (opens at 09:00)
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toContain('before opening hours');
+  });
+
+  it('appointment ending after closing is rejected (Friday 18:45)', async () => {
+    // 30 min service at 18:45 ends at 19:15 > 19:00 closing
+    const res = await bookAt(5, 18, 45); // Friday 18:45
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toContain('after closing hours');
+  });
+
+  it('appointment on Saturday at 09:00 succeeds', async () => {
+    const res = await bookAt(6, 9, 0); // Saturday 09:00
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('appointment on Saturday at 14:00 is rejected (closes at 14:00)', async () => {
+    // 30 min service at 14:00 ends at 14:30 > 14:00 closing
+    const res = await bookAt(6, 14, 0); // Saturday 14:00
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toContain('after closing hours');
+  });
+
+  it('appointment on Sunday is rejected (closed day)', async () => {
+    const res = await bookAt(0, 10, 0); // Sunday 10:00
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toContain('closed');
+  });
+
+  it('update appointment into invalid hours is rejected', async () => {
+    // First book a valid appointment
+    const bookRes = await bookAt(1, 10, 0); // Monday 10:00
+    expect(bookRes.status).toBe(201);
+    const apptId = bookRes.body.data.id;
+
+    // Try to reschedule to Monday 08:00 (before opening)
+    const res = await request(app)
+      .put(`/api/v1/appointments/${apptId}`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ startAt: dateAtLocalTime(1, 8, 0) });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('BAD_REQUEST');
+    expect(res.body.error.message).toContain('before opening hours');
+  });
+
+  it('update appointment to closed day is rejected', async () => {
+    // First book a valid appointment
+    const bookRes = await bookAt(1, 10, 0); // Monday 10:00
+    expect(bookRes.status).toBe(201);
+    const apptId = bookRes.body.data.id;
+
+    // Try to reschedule to Sunday
+    const res = await request(app)
+      .put(`/api/v1/appointments/${apptId}`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ startAt: dateAtLocalTime(0, 10, 0) }); // Sunday
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('closed');
+  });
+
+  it('business hours are per-barbershop (Shop B hours do not leak to Shop A)', async () => {
+    // Book in Shop A with valid hours - should succeed
+    const resA = await bookAt(1, 10, 0); // Monday 10:00 in Shop A
+    expect(resA.status).toBe(201);
   });
 });

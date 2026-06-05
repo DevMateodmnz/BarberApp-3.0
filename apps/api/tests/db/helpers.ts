@@ -158,12 +158,52 @@ export async function createTestAppointment(data: {
 }
 
 /**
+ * Create default working hours for a barbershop (Monday-Saturday 9-19, Sat 9-14).
+ * Returns the created WorkingHours records.
+ */
+export async function createTestWorkingHours(data: {
+  barbershopId: string;
+}): Promise<void> {
+  const days = [
+    { dayOfWeek: 1, openTime: '09:00', closeTime: '19:00' }, // Monday
+    { dayOfWeek: 2, openTime: '09:00', closeTime: '19:00' }, // Tuesday
+    { dayOfWeek: 3, openTime: '09:00', closeTime: '19:00' }, // Wednesday
+    { dayOfWeek: 4, openTime: '09:00', closeTime: '19:00' }, // Thursday
+    { dayOfWeek: 5, openTime: '09:00', closeTime: '19:00' }, // Friday
+    { dayOfWeek: 6, openTime: '09:00', closeTime: '14:00' }, // Saturday
+    // Sunday (0) = closed (no row)
+  ];
+
+  for (const day of days) {
+    await prisma.workingHours.upsert({
+      where: {
+        barbershopId_dayOfWeek: {
+          barbershopId: data.barbershopId,
+          dayOfWeek: day.dayOfWeek,
+        },
+      },
+      create: {
+        barbershopId: data.barbershopId,
+        dayOfWeek: day.dayOfWeek,
+        openTime: day.openTime,
+        closeTime: day.closeTime,
+      },
+      update: {
+        openTime: day.openTime,
+        closeTime: day.closeTime,
+      },
+    });
+  }
+}
+
+/**
  * Clean up all test data
  */
 export async function cleanupTestData(): Promise<void> {
   await prisma.photo.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
+  await prisma.workingHours.deleteMany();
   await prisma.service.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.barbershop.deleteMany();

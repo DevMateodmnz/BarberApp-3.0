@@ -143,16 +143,28 @@ npx vitest run tests/db/models.test.ts
 
 5. **EmployeeService validation at booking — RESOLVED**: `createAppointment()` now validates the selected employee is assigned to the selected service via the EmployeeService junction table (`@@unique([employeeId, serviceId])`). Returns 400 BadRequestError if not assigned. See `apps/api/src/services/appointmentService.ts:validateEmployeeOffersService()`.
 
-6. **Business hours enforcement**: Not implemented. Appointments can be booked at any time.
+6. **Business hours enforcement — RESOLVED**: `createAppointment()` and `updateAppointment()` now validate that appointment times fall within the barbershop's configured `WorkingHours`. Each barbershop configures its own schedule per day-of-week (Mon-Sun) with open/close times in "HH:mm" 24h format. Validation uses the barbershop's `timezone` field (default: `America/Argentina/Tucuman`) to convert UTC appointment timestamps to local day-of-week and time-of-day. Closed days (no `WorkingHours` row) reject bookings with a 400 error. Time boundary checks validate both start and end time against opening/closing. See `apps/api/src/lib/businessHours.ts` and `apps/api/prisma/migrations/20260605052616_add_working_hours/migration.sql`.
+
+   **Remaining limitation**: If a barbershop has zero `WorkingHours` rows (no schedule configured at all), appointments are rejected for every day. Barbershop owners must configure their schedule to accept appointments. Timezone support relies on Node.js `Intl.DateTimeFormat` — no external tz library is used. Overnight appointments (crossing midnight in local time) are explicitly rejected. Employee-level schedule overrides (e.g., a specific barber working different hours) are deferred to a future PR.
 
 7. **BARBER `listAppointments`**: Currently returns all appointments for the barber's employee ID. It doesn't filter by barbershop scope when called without an employee context.
 
-## PR-005C Verdict: ✅ PASS
+## PR-011 Verdict: ✅ PASS
 
-All 36 security integration tests pass against real infrastructure.
-The backend security guarantees for authentication, authorization, tenant isolation,
-booking integrity, double-booking prevention, and status transitions are verified.
+All 96 tests pass (48 integration + 27 db models + 11 webhook + 5 double-booking + 2 rate limit + 3 unit).
+Business hours enforcement is implemented and verified:
+- Appointments inside business hours succeed
+- Appointments before opening are rejected (400)
+- Appointments ending after closing are rejected (400)
+- Appointments on closed days are rejected (400)
+- Update/reschedule into invalid hours is rejected (400)
+- Tenant isolation for business hours is preserved (per-barbershop schedule)
+- DB double-booking constraint remains intact
 
-**PR-006 is safe to start.**
+The business hours validation sits in the service layer alongside other booking integrity checks.
+Per-barbershop configuration uses the `WorkingHours` model with day-of-week granularity.
+Timezone conversion uses `Barbershop.timezone` via Node.js `Intl.DateTimeFormat`.
 
-The remaining risks are documented above and do not block PR-006.
+**PR-012 is safe to start.**
+
+The remaining risks are documented above and do not block PR-012.

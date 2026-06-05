@@ -12,6 +12,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from '../lib/errors.js';
+import { validateBusinessHours } from '../lib/businessHours.js';
 import type { AppointmentStatus, UserRole } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import type { CreateAppointmentInput } from '../schemas/appointment.js';
@@ -184,7 +185,7 @@ export async function hasTimeConflict(
 
 /**
  * Creates a new appointment (CLIENT booking).
- * Enforces: tenant integrity, double-booking prevention.
+ * Enforces: tenant integrity, business hours, double-booking prevention.
  */
 export async function createAppointment(
   input: CreateAppointmentInput,
@@ -205,13 +206,16 @@ export async function createAppointment(
   const startAt = new Date(startAtStr);
   const endAt = new Date(startAt.getTime() + service.durationMinutes * 60_000);
 
-  // 3. Check double-booking
+  // 3. Validate business hours
+  await validateBusinessHours({ barbershopId, startAt, endAt });
+
+  // 4. Check double-booking
   const conflict = await hasTimeConflict(employeeId, startAt, endAt);
   if (conflict) {
     throw new ConflictError('This time slot is already booked');
   }
 
-  // 4. Create appointment
+  // 5. Create appointment
   try {
     const appointment = await prisma.appointment.create({
       data: {
@@ -332,7 +336,7 @@ export async function getAppointment(
 
 /**
  * Updates an appointment (reschedule).
- * Enforces: tenant isolation, double-booking prevention.
+ * Enforces: tenant isolation, business hours, double-booking prevention.
  */
 export async function updateAppointment(
   appointmentId: string,
@@ -364,6 +368,13 @@ export async function updateAppointment(
     const newEndAt = new Date(
       newStartAt.getTime() + service.durationMinutes * 60_000
     );
+
+    // Validate business hours for the new time slot
+    await validateBusinessHours({
+      barbershopId: appointment.barbershopId,
+      startAt: newStartAt,
+      endAt: newEndAt,
+    });
 
     // Check for time conflicts (excluding this appointment)
     const conflict = await hasTimeConflict(
