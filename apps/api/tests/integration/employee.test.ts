@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { app } from '../../src/index.js';
-import type { User, Barbershop } from '@prisma/client';
+import type { User, Barbershop, Employee, Service } from '@prisma/client';
 
 // ============================================
 // TEST FIXTURES
@@ -22,6 +22,10 @@ interface TestFixtures {
   externalUser: User;
   ownerB: User;
   shopB: Barbershop;
+  // Services for Shop A and Shop B
+  serviceA1: Service;
+  serviceA2: Service;
+  serviceB1: Service;
 }
 
 const fixtures: TestFixtures = {} as TestFixtures;
@@ -109,22 +113,34 @@ beforeAll(async () => {
       timezone: 'America/Argentina/Buenos_Aires',
     },
   });
-});
 
-beforeEach(async () => {
-  await prisma.employee.deleteMany();
-});
+  // Services for Shop A
+  fixtures.serviceA1 = await prisma.service.create({
+    data: {
+      barbershopId: fixtures.shopA.id,
+      name: 'Corte Clásico',
+      durationMinutes: 30,
+      priceCents: 2500,
+    },
+  });
+  fixtures.serviceA2 = await prisma.service.create({
+    data: {
+      barbershopId: fixtures.shopA.id,
+      name: 'Corte + Barba',
+      durationMinutes: 45,
+      priceCents: 4000,
+    },
+  });
 
-afterAll(async () => {
-  await prisma.photo.deleteMany();
-  await prisma.appointment.deleteMany();
-  await prisma.employeeService.deleteMany();
-  await prisma.workingHours.deleteMany();
-  await prisma.service.deleteMany();
-  await prisma.employee.deleteMany();
-  await prisma.barbershop.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.$disconnect();
+  // Service for Shop B
+  fixtures.serviceB1 = await prisma.service.create({
+    data: {
+      barbershopId: fixtures.shopB.id,
+      name: 'Service B1',
+      durationMinutes: 30,
+      priceCents: 3000,
+    },
+  });
 });
 
 // ============================================
@@ -147,6 +163,9 @@ function addEmployee(shopId: string, userId: string, asClerkId: string) {
 // ============================================
 
 describe('POST /api/v1/barbershops/:barbershopId/employees', () => {
+  beforeEach(async () => {
+    await prisma.employee.deleteMany();
+  });
   it('OWNER adds employee successfully — 201', async () => {
     const res = await addEmployee(
       fixtures.shopA.id,
@@ -303,5 +322,366 @@ describe('POST /api/v1/barbershops/:barbershopId/employees', () => {
       where: { barbershopId: fixtures.shopB.id, userId: fixtures.barberUser.id },
     });
     expect(shopBEmployee).toBeNull();
+  });
+});
+
+// ============================================
+// EMPLOYEE-SERVICE ASSIGNMENT HELPERS
+// ============================================
+
+/**
+ * Creates an employee record directly in DB for the given barbershop+user.
+ * Returns the created Employee.
+ */
+async function createEmployeeInDb(
+  barbershopId: string,
+  userId: string
+): Promise<Employee> {
+  return prisma.employee.create({
+    data: { barbershopId, userId, isActive: true },
+  });
+}
+
+function assignService(
+  shopId: string,
+  empId: string,
+  serviceId: string,
+  asClerkId: string
+) {
+  return request(app)
+    .post(`/api/v1/barbershops/${shopId}/employees/${empId}/services`)
+    .set(authHeader(asClerkId))
+    .send({ serviceId });
+}
+
+function unassignService(
+  shopId: string,
+  empId: string,
+  serviceId: string,
+  asClerkId: string
+) {
+  return request(app)
+    .delete(`/api/v1/barbershops/${shopId}/employees/${empId}/services/${serviceId}`)
+    .set(authHeader(asClerkId));
+}
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services
+// ============================================
+
+describe('POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services', () => {
+  let employeeA: Employee;
+
+  beforeEach(async () => {
+    await prisma.employeeService.deleteMany();
+    await prisma.employee.deleteMany();
+    employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
+  });
+
+  it('OWNER assigns service successfully — 201 and row exists in DB', async () => {
+    const res = await assignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.employeeId).toBe(employeeA.id);
+    expect(res.body.data.serviceId).toBe(fixtures.serviceA1.id);
+
+    // Verify DB row
+    const link = await prisma.employeeService.findUnique({
+      where: {
+        employeeId_serviceId: {
+          employeeId: employeeA.id,
+          serviceId: fixtures.serviceA1.id,
+        },
+      },
+    });
+    expect(link).not.toBeNull();
+  });
+
+  it('duplicate assignment — 409 Conflict', async () => {
+    await assignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    const res = await assignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+    expect(res.body.error.message).toContain('already assigned');
+  });
+
+  it('cross-tenant employee is blocked — 400', async () => {
+    // Create employee in Shop B, try to assign Shop A service via Shop A URL
+    const empB = await createEmployeeInDb(fixtures.shopB.id, fixtures.externalUser.id);
+
+    const res = await assignService(
+      fixtures.shopA.id,
+      empB.id,
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('does not belong');
+  });
+
+  it('cross-tenant service is blocked — 400', async () => {
+    const res = await assignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceB1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('does not belong');
+  });
+
+  it('non-existent employee — 404', async () => {
+    const res = await assignService(
+      fixtures.shopA.id,
+      'nonexistent-employee-id',
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('non-existent service — 404', async () => {
+    const res = await assignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      'nonexistent-service-id',
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('missing serviceId body — 400 validation error', async () => {
+    const res = await request(app)
+      .post(
+        `/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`
+      )
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('BARBER cannot assign — 403', async () => {
+    const res = await assignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.barberUser.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('CLIENT cannot assign — 403', async () => {
+    const res = await assignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.clientUser.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('unauthenticated cannot assign — 401', async () => {
+    const res = await request(app)
+      .post(
+        `/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`
+      )
+      .send({ serviceId: fixtures.serviceA1.id });
+
+    expect(res.status).toBe(401);
+  });
+});
+
+// ============================================
+// DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId
+// ============================================
+
+describe('DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId', () => {
+  let employeeA: Employee;
+
+  beforeEach(async () => {
+    await prisma.employeeService.deleteMany();
+    await prisma.employee.deleteMany();
+    employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
+  });
+
+  it('OWNER unassigns service successfully — 200 and row deleted', async () => {
+    // First assign a service
+    await prisma.employeeService.create({
+      data: {
+        employeeId: employeeA.id,
+        serviceId: fixtures.serviceA1.id,
+      },
+    });
+
+    const res = await unassignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.message).toBe('Service unassigned');
+
+    // Verify DB row deleted
+    const link = await prisma.employeeService.findUnique({
+      where: {
+        employeeId_serviceId: {
+          employeeId: employeeA.id,
+          serviceId: fixtures.serviceA1.id,
+        },
+      },
+    });
+    expect(link).toBeNull();
+  });
+
+  it('deleting non-existent link — 404', async () => {
+    const res = await unassignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('BARBER cannot unassign — 403', async () => {
+    const res = await unassignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.barberUser.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('CLIENT cannot unassign — 403', async () => {
+    const res = await unassignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.clientUser.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('cross-tenant unassign attempt is blocked — 400', async () => {
+    // Create employee in Shop B, try to unassign via Shop A URL
+    const empB = await createEmployeeInDb(fixtures.shopB.id, fixtures.externalUser.id);
+
+    const res = await unassignService(
+      fixtures.shopA.id,
+      empB.id,
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('does not belong');
+  });
+});
+
+// ============================================
+// REGRESSION: Appointment booking integration
+// ============================================
+
+describe('Appointment booking with assigned/unassigned services', () => {
+  let employeeA: Employee;
+
+  beforeEach(async () => {
+    await prisma.photo.deleteMany();
+    await prisma.appointment.deleteMany();
+    await prisma.employeeService.deleteMany();
+    await prisma.employee.deleteMany();
+    employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
+    // Set up working hours so appointments can be booked (idempotent)
+    await prisma.workingHours.createMany({
+      data: [
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 1, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 2, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 3, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 4, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 5, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 6, openTime: '09:00', closeTime: '14:00' },
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  it('appointment booking with assigned service succeeds', async () => {
+    // Assign service to employee
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+
+    const nextMonday = new Date();
+    nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
+    nextMonday.setHours(13, 0, 0, 0); // 10 AM local (UTC-3 → 13 UTC)
+
+    const res = await request(app)
+      .post('/api/v1/appointments')
+      .set(authHeader(fixtures.clientUser.clerkUserId))
+      .send({
+        barbershopId: fixtures.shopA.id,
+        employeeId: employeeA.id,
+        serviceId: fixtures.serviceA1.id,
+        startAt: nextMonday.toISOString(),
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('appointment booking fails after service is unassigned', async () => {
+    // No service assigned — booking should fail
+    const nextMonday = new Date();
+    nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
+    nextMonday.setHours(13, 0, 0, 0);
+
+    const res = await request(app)
+      .post('/api/v1/appointments')
+      .set(authHeader(fixtures.clientUser.clerkUserId))
+      .send({
+        barbershopId: fixtures.shopA.id,
+        employeeId: employeeA.id,
+        serviceId: fixtures.serviceA1.id,
+        startAt: nextMonday.toISOString(),
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('does not offer this service');
   });
 });

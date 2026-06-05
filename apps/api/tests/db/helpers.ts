@@ -203,6 +203,21 @@ export async function createTestWorkingHours(data: {
 }
 
 /**
+ * Create a test employee-service link.
+ */
+export async function createTestEmployeeService(data: {
+  employeeId: string;
+  serviceId: string;
+}): Promise<Awaited<ReturnType<typeof prisma.employeeService.create>>> {
+  return prisma.employeeService.create({
+    data: {
+      employeeId: data.employeeId,
+      serviceId: data.serviceId,
+    },
+  });
+}
+
+/**
  * Clean up all test data
  */
 export async function cleanupTestData(): Promise<void> {

@@ -2,7 +2,9 @@
  * Barbershop routes
  *
  * Role-based access:
- * - POST /api/v1/barbershops/:barbershopId/employees  OWNER (add employee)
+ * - POST /api/v1/barbershops/:barbershopId/employees        OWNER (add employee)
+ * - POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (assign service)
+ * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId  OWNER (unassign service)
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth.js';
@@ -10,6 +12,7 @@ import { requireRole } from '../middleware/role.js';
 import { requireBarbershopAccess } from '../middleware/tenant.js';
 import { validateBody } from '../middleware/validate.js';
 import { CreateEmployeeSchema } from '../schemas/employee.js';
+import { AssignServiceSchema } from '../schemas/employeeService.js';
 import * as employeeService from '../services/employeeService.js';
 import { BadRequestError } from '../lib/errors.js';
 
@@ -17,6 +20,20 @@ import { BadRequestError } from '../lib/errors.js';
 function paramBarbershopId(req: Request): string {
   const id = req.params.barbershopId;
   if (!id) throw new BadRequestError('Barbershop ID is required');
+  return id;
+}
+
+/** Extracts employeeId route param with validation */
+function paramEmployeeId(req: Request): string {
+  const id = req.params.employeeId;
+  if (!id) throw new BadRequestError('Employee ID is required');
+  return id;
+}
+
+/** Extracts serviceId route param with validation */
+function paramServiceId(req: Request): string {
+  const id = req.params.serviceId;
+  if (!id) throw new BadRequestError('Service ID is required');
   return id;
 }
 
@@ -41,6 +58,51 @@ router.post(
         req.body.userId
       );
       res.status(201).json({ success: true, data: employee });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services
+// Assign a service to an employee (OWNER only)
+// ============================================
+router.post(
+  '/:barbershopId/employees/:employeeId/services',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(AssignServiceSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const link = await employeeService.assignService(
+        paramBarbershopId(req),
+        paramEmployeeId(req),
+        req.body.serviceId
+      );
+      res.status(201).json({ success: true, data: link });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId
+// Unassign a service from an employee (OWNER only)
+// ============================================
+router.delete(
+  '/:barbershopId/employees/:employeeId/services/:serviceId',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await employeeService.unassignService(
+        paramBarbershopId(req),
+        paramEmployeeId(req),
+        paramServiceId(req)
+      );
+      res.json({ success: true, data: { message: 'Service unassigned' } });
     } catch (error) {
       next(error);
     }
