@@ -7,6 +7,7 @@
  * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId             OWNER (deactivate employee)
  * - POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (assign service)
  * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId  OWNER (unassign service)
+ * - POST /api/v1/barbershops/:barbershopId/services                         OWNER (create service)
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth.js';
@@ -15,7 +16,9 @@ import { requireBarbershopAccess } from '../middleware/tenant.js';
 import { validateBody } from '../middleware/validate.js';
 import { CreateEmployeeSchema } from '../schemas/employee.js';
 import { AssignServiceSchema } from '../schemas/employeeService.js';
+import { CreateServiceSchema } from '../schemas/service.js';
 import * as employeeService from '../services/employeeService.js';
+import * as serviceService from '../services/serviceService.js';
 import { BadRequestError } from '../lib/errors.js';
 
 /** Extracts barbershopId route param with validation */
@@ -146,6 +149,28 @@ router.delete(
         paramEmployeeId(req)
       );
       res.json({ success: true, data: { message: 'Employee deactivated' } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/services
+// Create a service for a barbershop (OWNER only)
+// ============================================
+router.post(
+  '/:barbershopId/services',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(CreateServiceSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const service = await serviceService.createService(
+        paramBarbershopId(req),
+        req.body
+      );
+      res.status(201).json({ success: true, data: service });
     } catch (error) {
       next(error);
     }
