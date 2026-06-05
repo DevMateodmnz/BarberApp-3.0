@@ -782,3 +782,238 @@ describe('GET /api/v1/barbershops/:barbershopId/employees', () => {
     expect(res.body.data[0].id).toBe(active.id);
   });
 });
+
+// ============================================
+// DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId
+// ============================================
+
+describe('DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId', () => {
+  let employeeA: Employee;
+
+  beforeEach(async () => {
+    await prisma.photo.deleteMany();
+    await prisma.appointment.deleteMany();
+    await prisma.employeeService.deleteMany();
+    await prisma.employee.deleteMany();
+    employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
+    // Set up working hours for booking tests
+    await prisma.workingHours.createMany({
+      data: [
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 1, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 2, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 3, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 4, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 5, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 6, openTime: '09:00', closeTime: '14:00' },
+      ],
+      skipDuplicates: true,
+    });
+  });
+
+  function deactivateEmployee(shopId: string, empId: string, asClerkId: string) {
+    return request(app)
+      .delete(`/api/v1/barbershops/${shopId}/employees/${empId}`)
+      .set(authHeader(asClerkId));
+  }
+
+  function bookAppointment(shopId: string, empId: string, svcId: string) {
+    const nextMonday = new Date();
+    nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
+    nextMonday.setHours(13, 0, 0, 0);
+    return request(app)
+      .post('/api/v1/appointments')
+      .set(authHeader(fixtures.clientUser.clerkUserId))
+      .send({
+        barbershopId: shopId,
+        employeeId: empId,
+        serviceId: svcId,
+        startAt: nextMonday.toISOString(),
+      });
+  }
+
+  it('OWNER deactivates employee successfully — 200', async () => {
+    const res = await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.message).toBe('Employee deactivated');
+  });
+
+  it('DB row has isActive=false and deletedAt set', async () => {
+    await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    const emp = await prisma.employee.findUnique({ where: { id: employeeA.id } });
+    expect(emp!.isActive).toBe(false);
+    expect(emp!.deletedAt).not.toBeNull();
+  });
+
+  it('deactivated employee does not appear in GET employees list', async () => {
+    await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(0);
+  });
+
+  it('deactivated employee cannot be booked for a new appointment — 400', async () => {
+    // Assign service first
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+
+    // Deactivate
+    await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    const res = await bookAppointment(fixtures.shopA.id, employeeA.id, fixtures.serviceA1.id);
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('not active');
+  });
+
+  it('deactivated employee cannot be assigned a service — 404', async () => {
+    await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    const res = await assignService(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it('double deactivation returns 404', async () => {
+    await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    const res = await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it('cross-tenant deactivation is blocked — 403', async () => {
+    const empB = await createEmployeeInDb(fixtures.shopB.id, fixtures.externalUser.id);
+
+    const res = await deactivateEmployee(
+      fixtures.shopB.id,
+      empB.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.message).toContain('do not own');
+  });
+
+  it('BARBER cannot deactivate — 403', async () => {
+    const res = await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.barberUser.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('CLIENT cannot deactivate — 403', async () => {
+    const res = await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.clientUser.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('unauthenticated request — 401', async () => {
+    const res = await request(app).delete(
+      `/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}`
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it('OWNER can deactivate themselves as employee — 200', async () => {
+    const ownerEmp = await createEmployeeInDb(fixtures.shopA.id, fixtures.ownerA.id);
+
+    const res = await deactivateEmployee(
+      fixtures.shopA.id,
+      ownerEmp.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it('EmployeeService links are preserved after deactivation', async () => {
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+
+    await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    const link = await prisma.employeeService.findUnique({
+      where: {
+        employeeId_serviceId: {
+          employeeId: employeeA.id,
+          serviceId: fixtures.serviceA1.id,
+        },
+      },
+    });
+    expect(link).not.toBeNull();
+  });
+
+  it('existing appointments are preserved after deactivation', async () => {
+    // Assign service and book appointment
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+    const bookRes = await bookAppointment(fixtures.shopA.id, employeeA.id, fixtures.serviceA1.id);
+    expect(bookRes.status).toBe(201);
+    const apptId = bookRes.body.data.id;
+
+    // Deactivate
+    await deactivateEmployee(
+      fixtures.shopA.id,
+      employeeA.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    // Appointment still exists
+    const appt = await prisma.appointment.findUnique({ where: { id: apptId } });
+    expect(appt).not.toBeNull();
+  });
+});

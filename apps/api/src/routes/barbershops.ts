@@ -4,6 +4,7 @@
  * Role-based access:
  * - GET  /api/v1/barbershops/:barbershopId/employees                       OWNER (list employees)
  * - POST /api/v1/barbershops/:barbershopId/employees                        OWNER (add employee)
+ * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId             OWNER (deactivate employee)
  * - POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (assign service)
  * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId  OWNER (unassign service)
  */
@@ -124,6 +125,27 @@ router.delete(
         paramServiceId(req)
       );
       res.json({ success: true, data: { message: 'Service unassigned' } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId
+// Deactivate an employee (OWNER only, soft-delete)
+// ============================================
+router.delete(
+  '/:barbershopId/employees/:employeeId',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await employeeService.deactivateEmployee(
+        paramBarbershopId(req),
+        paramEmployeeId(req)
+      );
+      res.json({ success: true, data: { message: 'Employee deactivated' } });
     } catch (error) {
       next(error);
     }

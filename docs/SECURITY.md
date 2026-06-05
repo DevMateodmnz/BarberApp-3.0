@@ -160,7 +160,8 @@ npx vitest run tests/db/models.test.ts
    - Role assignment is separate — use Clerk Dashboard `public_metadata.role` (PR-013).
    - Service assignment for employees — RESOLVED in PR-015. `POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services` assigns a service; `DELETE .../services/:serviceId` unassigns. See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/employeeService.ts`.
    - Employee listing — RESOLVED in PR-016. `GET /api/v1/barbershops/:barbershopId/employees` returns all non-deleted employees for a barbershop (OWNER only). Response includes safe user fields only (id, email, name, role) — no clerkUserId or internal fields exposed. Assigned services listing remains deferred.
-   - No employee deactivation (`DELETE /employees/:id`) yet.
+   - Employee deactivation — RESOLVED in PR-017. `DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId` soft-deletes an employee (isActive=false, deletedAt=now). Does not modify User, User.role, appointments, or EmployeeService links. Existing validations reject deactivated employees for booking (400) and service assignment (404).
+   - No employee reactivation endpoint yet.
    - No invitation flow.
 
 ## PR-011 Verdict: ✅ PASS

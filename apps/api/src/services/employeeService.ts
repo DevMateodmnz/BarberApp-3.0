@@ -226,3 +226,36 @@ export async function listEmployees(barbershopId: string) {
     orderBy: { createdAt: 'asc' },
   });
 }
+
+// ============================================
+// EMPLOYEE DEACTIVATION
+// ============================================
+
+/**
+ * Soft-deactivates an employee in a barbershop.
+ *
+ * Preconditions (enforced by upstream middleware):
+ * - Caller is the OWNER of the barbershop
+ *
+ * Behavior:
+ * - Sets isActive = false and deletedAt = now (soft-delete)
+ * - Does NOT hard-delete the Employee record
+ * - Does NOT delete or modify User, User.role, appointments, or EmployeeService links
+ * - Already-deactivated employees return 404 (via validateEmployeeInBarbershop)
+ * - Existing appointments remain as historical records
+ * - Future bookings for this employee are rejected by existing appointmentService validation
+ */
+export async function deactivateEmployee(
+  barbershopId: string,
+  employeeId: string
+): Promise<void> {
+  await validateEmployeeInBarbershop(employeeId, barbershopId);
+
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: {
+      isActive: false,
+      deletedAt: new Date(),
+    },
+  });
+}
