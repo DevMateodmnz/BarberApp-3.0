@@ -149,7 +149,9 @@ npx vitest run tests/db/models.test.ts
 
    **Remaining limitation**: If a barbershop has zero `WorkingHours` rows (no schedule configured at all), appointments are rejected for every day. Barbershop owners must configure their schedule to accept appointments. Timezone support relies on Node.js `Intl.DateTimeFormat` — no external tz library is used. Overnight appointments (crossing midnight in local time) are explicitly rejected. Employee-level schedule overrides (e.g., a specific barber working different hours) are deferred to a future PR.
 
-7. **BARBER `listAppointments`**: Currently returns all appointments for the barber's employee ID. It doesn't filter by barbershop scope when called without an employee context.
+7. **BARBER `listAppointments` — RESOLVED**: `listAppointments()` now fails closed (403 ForbiddenError) when called with `role=BARBER` and no `employeeId`. This prevents the broad data leak where an unfiltered query (`WHERE {}`) could return all appointments across all tenants. BARBER listing with a valid `employeeId` still works correctly — scoped to only that barber's appointments. The fix is defense-in-depth in the service layer, independent of middleware ordering. See `apps/api/src/services/appointmentService.ts:listAppointments()`.
+
+   **Remaining limitation**: The HTTP route `GET /api/v1/appointments` does not set `employeeId` for BARBER users (no `requireBarbershopAccess` middleware on the listing route). BARBERs currently cannot list their appointments via HTTP — they must use `GET /api/v1/appointments/:id` for single-appointment access. A dedicated BARBER listing endpoint or middleware enhancement is deferred to a future PR.
 
 ## PR-011 Verdict: ✅ PASS
 

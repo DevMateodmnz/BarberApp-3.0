@@ -251,7 +251,9 @@ export async function createAppointment(
 /**
  * Lists appointments filtered by role and tenant.
  * - OWNER: sees all appointments for their barbershop
- * - BARBER: sees appointments assigned to them (scope: their employee record)
+ * - BARBER: sees appointments assigned to them (scope: their employee record).
+ *           Requires employeeId to be set by upstream middleware.
+ *           Fails closed if employeeId is missing (no broad data leak).
  * - CLIENT: sees only their own appointments
  */
 export async function listAppointments(
@@ -259,13 +261,20 @@ export async function listAppointments(
   role: UserRole,
   employeeId?: string
 ) {
+  // BARBER without employee context: fail closed — prevent broad data leak
+  if (role === 'BARBER' && !employeeId) {
+    throw new ForbiddenError(
+      'Employee context required for barber appointment listing'
+    );
+  }
+
   const where: Record<string, unknown> = {};
 
   if (role === 'OWNER') {
     // Owner sees all appointments for shops they own
     where.barbershop = { ownerId: userId };
-  } else if (role === 'BARBER' && employeeId) {
-    // Barber sees only their appointments
+  } else if (role === 'BARBER') {
+    // Barber sees only their appointments (employeeId guaranteed by check above)
     where.employeeId = employeeId;
   } else if (role === 'CLIENT') {
     // Client sees only their own appointments
