@@ -628,6 +628,176 @@ describe('GET /api/v1/barbershops/:barbershopId/service-records', () => {
 
     expect(res.status).toBe(403);
   });
+
+  // ==========================================
+  // Timezone-aware date filtering (PR-024)
+  // Shop A timezone: America/Argentina/Buenos_Aires (UTC-3)
+  // ==========================================
+
+  it('record at 01:00 UTC on June 7 is included for local date June 6', async () => {
+    // June 7 01:00 UTC = June 6 22:00 ARG → belongs to local June 6
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-07T01:00:00.000Z'),
+      },
+    });
+
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
+  });
+
+  it('record at 01:00 UTC on June 7 is excluded for local date June 7', async () => {
+    // June 7 01:00 UTC = June 6 22:00 ARG → NOT local June 7
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-07T01:00:00.000Z'),
+      },
+    });
+
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-06-07'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(0);
+  });
+
+  it('record at local midnight (03:00 UTC) is included for that local day', async () => {
+    // June 6 03:00 UTC = June 6 00:00 ARG → local June 6
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-06T03:00:00.000Z'),
+      },
+    });
+
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
+  });
+
+  it('record just before local midnight (02:59:59.999 UTC) is excluded', async () => {
+    // June 6 02:59:59.999 UTC = June 5 23:59:59 ARG → NOT local June 6
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-06T02:59:59.999Z'),
+      },
+    });
+
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(0);
+  });
+
+  it('record just before next local midnight (June 7 02:59:59 UTC) belongs to local June 6', async () => {
+    // June 7 02:59:59.999 UTC = June 6 23:59:59 ARG → local June 6
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-07T02:59:59.999Z'),
+      },
+    });
+
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
+  });
+
+  it('record exactly at next local midnight (June 7 03:00 UTC) belongs to local June 7', async () => {
+    // June 7 03:00:00 UTC = June 7 00:00 ARG → local June 7, NOT June 6
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-07T03:00:00.000Z'),
+      },
+    });
+
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(0);
+  });
+
+  it('employeeId + date combined filter works correctly', async () => {
+    // Create record for employeeA1 on local June 6
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-06T15:00:00.000Z'), // June 6 12:00 ARG
+      },
+    });
+    // Create record for employeeA2 on local June 6
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA2.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 3000,
+        performedAt: new Date('2026-06-06T18:00:00.000Z'), // June 6 15:00 ARG
+      },
+    });
+
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      `employeeId=${fixtures.employeeA1.id}&date=2026-06-06`
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
+    expect(res.body.data[0].employeeId).toBe(fixtures.employeeA1.id);
+  });
 });
 
 // ============================================
@@ -697,5 +867,35 @@ describe('GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-re
     );
 
     expect(res.status).toBe(403);
+  });
+
+  it('BARBER list filters by local date — 200', async () => {
+    // Record in local June 6 Argentina (June 6 15:00 UTC = June 6 12:00 ARG)
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-06T15:00:00.000Z'),
+      },
+    });
+    // Record in local June 7 Argentina (June 7 04:00 UTC = June 7 01:00 ARG)
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA2.id,
+        priceCents: 4000,
+        performedAt: new Date('2026-06-07T04:00:00.000Z'),
+      },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${fixtures.employeeA1.id}/service-records?date=2026-06-06`)
+      .set(authHeader(fixtures.barberUser.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
   });
 });

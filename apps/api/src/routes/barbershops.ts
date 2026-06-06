@@ -420,6 +420,7 @@ router.get(
 // ============================================
 // GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records
 // List service records for an employee (OWNER, BARBER self only)
+// Supports optional query param: date
 // ============================================
 router.get(
   '/:barbershopId/employees/:employeeId/service-records',
@@ -427,11 +428,13 @@ router.get(
   requireRole('OWNER', 'BARBER'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const date = typeof req.query.date === 'string' ? req.query.date : undefined;
       const records = await serviceRecordService.listEmployeeRecords(
         paramBarbershopId(req),
         paramEmployeeId(req),
         req.userId,
-        req.userRole
+        req.userRole,
+        date
       );
       res.json({ success: true, data: records });
     } catch (error) {

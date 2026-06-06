@@ -7,6 +7,7 @@
  */
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
+import { getUtcRangeForLocalDate } from '../lib/dateUtils.js';
 import type { CreateServiceRecordInput } from '../schemas/serviceRecord.js';
 import type { UserRole } from '@prisma/client';
 
@@ -116,6 +117,7 @@ export async function listBarbershopRecords(
   // Validate barbershop ownership (defense-in-depth)
   const barbershop = await prisma.barbershop.findUnique({
     where: { id: barbershopId },
+    select: { ownerId: true, timezone: true },
   });
 
   if (!barbershop || barbershop.ownerId !== userId) {
@@ -133,11 +135,11 @@ export async function listBarbershopRecords(
 
   if (filters?.date) {
     const dateStr = filters.date;
-    const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
-    const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
+    const timezone = barbershop.timezone;
+    const { startUtc, endUtc } = getUtcRangeForLocalDate(dateStr, timezone);
     where.performedAt = {
-      gte: startOfDay,
-      lte: endOfDay,
+      gte: startUtc,
+      lt: endUtc,
     };
   }
 
@@ -157,12 +159,14 @@ export async function listBarbershopRecords(
  *
  * BARBERs can only view their own records.
  * CLIENTs are denied.
+ * Supports optional date filter using barbershop local day.
  */
 export async function listEmployeeRecords(
   barbershopId: string,
   employeeId: string,
   userId: string,
-  userRole: UserRole
+  userRole: UserRole,
+  date?: string
 ) {
   // Validate employee exists, is active, belongs to barbershop, not deleted
   const employee = await prisma.employee.findUnique({
@@ -191,12 +195,28 @@ export async function listEmployeeRecords(
     throw new ForbiddenError('Clients cannot access service records');
   }
 
+  const where: Record<string, unknown> = {
+    barbershopId,
+    employeeId,
+    deletedAt: null,
+  };
+
+  if (date) {
+    // Fetch barbershop timezone for local-day filtering
+    const barbershop = await prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { timezone: true },
+    });
+    const timezone = barbershop?.timezone ?? 'America/Argentina/Tucuman';
+    const { startUtc, endUtc } = getUtcRangeForLocalDate(date, timezone);
+    where.performedAt = {
+      gte: startUtc,
+      lt: endUtc,
+    };
+  }
+
   return prisma.serviceRecord.findMany({
-    where: {
-      barbershopId,
-      employeeId,
-      deletedAt: null,
-    },
+    where,
     include: {
       service: { select: { id: true, name: true } },
     },
