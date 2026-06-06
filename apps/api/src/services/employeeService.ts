@@ -69,7 +69,7 @@ export async function addEmployee(
 /**
  * Validates that an employee exists, is active, and belongs to the barbershop.
  */
-async function validateEmployeeInBarbershop(
+export async function validateEmployeeInBarbershop(
   employeeId: string,
   barbershopId: string
 ): Promise<void> {

@@ -13,6 +13,7 @@ import {
   NotFoundError,
 } from '../lib/errors.js';
 import { validateBusinessHours } from '../lib/businessHours.js';
+import { validateEmployeeInBarbershop } from './employeeService.js';
 import type { AppointmentStatus, UserRole } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import type { CreateAppointmentInput } from '../schemas/appointment.js';
@@ -283,6 +284,57 @@ export async function listAppointments(
 
   return prisma.appointment.findMany({
     where,
+    include: {
+      barbershop: true,
+      employee: true,
+      client: true,
+      service: true,
+    },
+    orderBy: { startAt: 'desc' },
+    take: 100,
+  });
+}
+
+/**
+ * Lists appointments for a specific employee within a barbershop.
+ * Scoped endpoint — requires explicit barbershop + employee context.
+ *
+ * - OWNER: can list appointments for any active employee in their barbershop
+ * - BARBER: can list only their own appointments (employee.userId must match)
+ * - CLIENT: blocked (403)
+ *
+ * Validates that the employee exists, is active, and belongs to the barbershop
+ * via validateEmployeeInBarbershop (reused from employeeService).
+ */
+export async function listEmployeeAppointments(
+  barbershopId: string,
+  employeeId: string,
+  userId: string,
+  userRole: UserRole
+) {
+  // Validate employee exists, is active, and belongs to barbershop
+  await validateEmployeeInBarbershop(employeeId, barbershopId);
+
+  // BARBER: must own this employee record (their own)
+  if (userRole === 'BARBER') {
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+    });
+    if (!employee || employee.userId !== userId) {
+      throw new ForbiddenError('You can only view your own appointments');
+    }
+  }
+
+  // CLIENT: not allowed
+  if (userRole === 'CLIENT') {
+    throw new ForbiddenError('Clients cannot access employee appointments');
+  }
+
+  return prisma.appointment.findMany({
+    where: {
+      barbershopId,
+      employeeId,
+    },
     include: {
       barbershop: true,
       employee: true,

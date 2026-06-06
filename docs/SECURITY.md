@@ -153,6 +153,8 @@ npx vitest run tests/db/models.test.ts
 
    **Remaining limitation**: The HTTP route `GET /api/v1/appointments` does not set `employeeId` for BARBER users (no `requireBarbershopAccess` middleware on the listing route). BARBERs currently cannot list their appointments via HTTP — they must use `GET /api/v1/appointments/:id` for single-appointment access. A dedicated BARBER listing endpoint or middleware enhancement is deferred to a future PR.
 
+   **Update**: BARBER scoped appointment listing — RESOLVED in PR-020. `GET /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments` provides a barbershop-scoped endpoint. BARBERs can list only their own appointments (employee.userId must match authenticated user). OWNERs can list appointments for any active employee in their barbershop. CLIENTs are blocked (403). The global `GET /api/v1/appointments` BARBER fail-closed behavior is preserved.
+
 8. **OWNER-managed employee creation — RESOLVED**: `POST /api/v1/barbershops/:barbershopId/employees` allows an OWNER to add existing users as employees of their barbershop. Tenant isolation is enforced by `requireBarbershopAccess` (cross-tenant blocked with 403). Duplicate employee links return 409 Conflict via the `@@unique([barbershopId, userId])` constraint. The endpoint does NOT modify `User.role`, create Clerk users, or send invitations. See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/employeeService.ts`.
 
    **Remaining limitations**:

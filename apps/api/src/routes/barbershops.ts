@@ -9,6 +9,7 @@
  * - POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (assign service)
  * - GET  /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (list employee services)
  * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId  OWNER (unassign service)
+ * - GET  /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments     OWNER, BARBER (list employee appointments)
  * - POST /api/v1/barbershops/:barbershopId/services                         OWNER (create service)
  */
 import { Router, Request, Response, NextFunction } from 'express';
@@ -21,6 +22,7 @@ import { AssignServiceSchema } from '../schemas/employeeService.js';
 import { CreateServiceSchema } from '../schemas/service.js';
 import * as employeeService from '../services/employeeService.js';
 import * as serviceService from '../services/serviceService.js';
+import * as appointmentService from '../services/appointmentService.js';
 import { BadRequestError } from '../lib/errors.js';
 
 /** Extracts barbershopId route param with validation */
@@ -172,6 +174,29 @@ router.delete(
         paramEmployeeId(req)
       );
       res.json({ success: true, data: { message: 'Employee deactivated' } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments
+// List appointments for an employee (OWNER, BARBER scoped)
+// ============================================
+router.get(
+  '/:barbershopId/employees/:employeeId/appointments',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const appointments = await appointmentService.listEmployeeAppointments(
+        paramBarbershopId(req),
+        paramEmployeeId(req),
+        req.userId,
+        req.userRole
+      );
+      res.json({ success: true, data: appointments });
     } catch (error) {
       next(error);
     }
