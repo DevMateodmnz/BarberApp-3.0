@@ -212,10 +212,9 @@ function listBarbershopRecords(shopId: string, asClerkId: string, query?: string
   return request(app).get(url).set(authHeader(asClerkId));
 }
 
-function listEmployeeRecords(shopId: string, empId: string, asClerkId: string) {
-  return request(app)
-    .get(`/api/v1/barbershops/${shopId}/employees/${empId}/service-records`)
-    .set(authHeader(asClerkId));
+function listEmployeeRecords(shopId: string, empId: string, asClerkId: string, query?: string) {
+  const url = `/api/v1/barbershops/${shopId}/employees/${empId}/service-records${query ? '?' + query : ''}`;
+  return request(app).get(url).set(authHeader(asClerkId));
 }
 
 // ============================================
@@ -798,6 +797,75 @@ describe('GET /api/v1/barbershops/:barbershopId/service-records', () => {
     expect(res.body.data.length).toBe(1);
     expect(res.body.data[0].employeeId).toBe(fixtures.employeeA1.id);
   });
+
+  // ==========================================
+  // Date query validation (PR-025)
+  // ==========================================
+
+  it('rejects date=2026-6-6 (non-zero-padded) — 400', async () => {
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-6-6'
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('date');
+  });
+
+  it('rejects date=not-a-date — 400', async () => {
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=not-a-date'
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('date');
+  });
+
+  it('rejects date=2026-13-01 (invalid month) — 400', async () => {
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-13-01'
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('date');
+  });
+
+  it('rejects date=2026-02-30 (impossible date) — 400', async () => {
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-02-30'
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('date');
+  });
+
+  it('valid date=2026-06-06 still filters correctly', async () => {
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-06T15:00:00.000Z'),
+      },
+    });
+
+    const res = await listBarbershopRecords(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
+  });
 });
 
 // ============================================
@@ -897,5 +965,17 @@ describe('GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-re
 
     expect(res.status).toBe(200);
     expect(res.body.data.length).toBe(1);
+  });
+
+  it('BARBER rejects invalid date — 400', async () => {
+    const res = await listEmployeeRecords(
+      fixtures.shopA.id,
+      fixtures.employeeA1.id,
+      fixtures.barberUser.clerkUserId,
+      'date=not-a-date'
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('date');
   });
 });

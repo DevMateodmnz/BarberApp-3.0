@@ -33,9 +33,10 @@ import * as serviceService from '../services/serviceService.js';
 import * as appointmentService from '../services/appointmentService.js';
 import * as workingHoursService from '../services/workingHoursService.js';
 import * as serviceRecordService from '../services/serviceRecordService.js';
-import { CreateServiceRecordSchema } from '../schemas/serviceRecord.js';
+import { CreateServiceRecordSchema, ServiceRecordDateSchema } from '../schemas/serviceRecord.js';
 import { UpdateWorkingHoursSchema } from '../schemas/workingHours.js';
 import { BadRequestError } from '../lib/errors.js';
+import { ValidationError } from '../lib/errors.js';
 
 /** Extracts barbershopId route param with validation */
 function paramBarbershopId(req: Request): string {
@@ -403,7 +404,15 @@ router.get(
     try {
       const filters: { employeeId?: string; date?: string } = {};
       if (typeof req.query.employeeId === 'string') filters.employeeId = req.query.employeeId;
-      if (typeof req.query.date === 'string') filters.date = req.query.date;
+      if (typeof req.query.date === 'string') {
+        const parsed = ServiceRecordDateSchema.safeParse(req.query.date);
+        if (!parsed.success) {
+          throw new ValidationError(
+            'Invalid date query parameter: Date must be in YYYY-MM-DD format (e.g. 2026-06-06)'
+          );
+        }
+        filters.date = parsed.data;
+      }
 
       const records = await serviceRecordService.listBarbershopRecords(
         paramBarbershopId(req),
@@ -428,7 +437,16 @@ router.get(
   requireRole('OWNER', 'BARBER'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const date = typeof req.query.date === 'string' ? req.query.date : undefined;
+      let date: string | undefined;
+      if (typeof req.query.date === 'string') {
+        const parsed = ServiceRecordDateSchema.safeParse(req.query.date);
+        if (!parsed.success) {
+          throw new ValidationError(
+            'Invalid date query parameter: Date must be in YYYY-MM-DD format (e.g. 2026-06-06)'
+          );
+        }
+        date = parsed.data;
+      }
       const records = await serviceRecordService.listEmployeeRecords(
         paramBarbershopId(req),
         paramEmployeeId(req),
