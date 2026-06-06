@@ -1017,3 +1017,256 @@ describe('DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId', () =>
     expect(appt).not.toBeNull();
   });
 });
+
+// ============================================
+// EMPLOYEE REACTIVATION HELPERS
+// ============================================
+
+/**
+ * Creates a deactivated employee directly in DB.
+ * Used for testing reactivation.
+ */
+async function createDeactivatedEmployee(
+  barbershopId: string,
+  userId: string
+): Promise<Employee> {
+  return prisma.employee.create({
+    data: { barbershopId, userId, isActive: false, deletedAt: new Date() },
+  });
+}
+
+function reactivateEmployee(
+  shopId: string,
+  empId: string,
+  asClerkId: string
+) {
+  return request(app)
+    .patch(`/api/v1/barbershops/${shopId}/employees/${empId}/reactivate`)
+    .set(authHeader(asClerkId));
+}
+
+// ============================================
+// PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactivate
+// ============================================
+
+describe('PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactivate', () => {
+  beforeEach(async () => {
+    await prisma.photo.deleteMany();
+    await prisma.appointment.deleteMany();
+    await prisma.employeeService.deleteMany();
+    await prisma.employee.deleteMany();
+  });
+
+  it('OWNER reactivates deactivated employee successfully — 200', async () => {
+    const deactivated = await createDeactivatedEmployee(
+      fixtures.shopA.id,
+      fixtures.barberUser.id
+    );
+
+    const res = await reactivateEmployee(
+      fixtures.shopA.id,
+      deactivated.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.isActive).toBe(true);
+    expect(res.body.data.deletedAt).toBeNull();
+  });
+
+  it('reactivated employee appears in GET employees list', async () => {
+    const deactivated = await createDeactivatedEmployee(
+      fixtures.shopA.id,
+      fixtures.barberUser.id
+    );
+
+    // Reactivate
+    await reactivateEmployee(
+      fixtures.shopA.id,
+      deactivated.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    // Check GET list
+    const listRes = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.data.length).toBeGreaterThanOrEqual(1);
+    const reactivated = listRes.body.data.find(
+      (e: { id: string }) => e.id === deactivated.id
+    );
+    expect(reactivated).toBeDefined();
+  });
+
+  it('reactivated employee can be assigned a service', async () => {
+    const deactivated = await createDeactivatedEmployee(
+      fixtures.shopA.id,
+      fixtures.barberUser.id
+    );
+
+    // Reactivate
+    await reactivateEmployee(
+      fixtures.shopA.id,
+      deactivated.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    // Assign service
+    const res = await assignService(
+      fixtures.shopA.id,
+      deactivated.id,
+      fixtures.serviceA1.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(201);
+  });
+
+  it('reactivated employee with preserved EmployeeService links can receive bookings', async () => {
+    // Create active employee
+    const emp = await createEmployeeInDb(
+      fixtures.shopA.id,
+      fixtures.barberUser.id
+    );
+
+    // Assign service
+    await prisma.employeeService.create({
+      data: { employeeId: emp.id, serviceId: fixtures.serviceA1.id },
+    });
+
+    // Deactivate
+    await prisma.employee.update({
+      where: { id: emp.id },
+      data: { isActive: false, deletedAt: new Date() },
+    });
+
+    // Set up working hours
+    await prisma.workingHours.createMany({
+      data: [
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 1, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 2, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 3, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 4, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 5, openTime: '09:00', closeTime: '19:00' },
+        { barbershopId: fixtures.shopA.id, dayOfWeek: 6, openTime: '09:00', closeTime: '14:00' },
+      ],
+      skipDuplicates: true,
+    });
+
+    // Reactivate
+    await reactivateEmployee(
+      fixtures.shopA.id,
+      emp.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    // Book appointment
+    const nextMonday = new Date();
+    nextMonday.setDate(
+      nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7)
+    );
+    nextMonday.setHours(13, 0, 0, 0);
+
+    const res = await request(app)
+      .post('/api/v1/appointments')
+      .set(authHeader(fixtures.clientUser.clerkUserId))
+      .send({
+        barbershopId: fixtures.shopA.id,
+        employeeId: emp.id,
+        serviceId: fixtures.serviceA1.id,
+        startAt: nextMonday.toISOString(),
+      });
+
+    expect(res.status).toBe(201);
+  });
+
+  it('reactivating already-active employee returns 409 Conflict', async () => {
+    // Create active employee
+    const emp = await createEmployeeInDb(
+      fixtures.shopA.id,
+      fixtures.barberUser.id
+    );
+
+    const res = await reactivateEmployee(
+      fixtures.shopA.id,
+      emp.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CONFLICT');
+  });
+
+  it('cross-tenant OWNER cannot reactivate — 404', async () => {
+    // Create deactivated employee in Shop B
+    const deactivatedInB = await createDeactivatedEmployee(
+      fixtures.shopB.id,
+      fixtures.externalUser.id
+    );
+
+    // Owner A tries to reactivate via Shop A URL
+    const res = await reactivateEmployee(
+      fixtures.shopA.id,
+      deactivatedInB.id,
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it('BARBER cannot reactivate — 403', async () => {
+    const deactivated = await createDeactivatedEmployee(
+      fixtures.shopA.id,
+      fixtures.barberUser.id
+    );
+
+    const res = await reactivateEmployee(
+      fixtures.shopA.id,
+      deactivated.id,
+      fixtures.barberUser.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('CLIENT cannot reactivate — 403', async () => {
+    const deactivated = await createDeactivatedEmployee(
+      fixtures.shopA.id,
+      fixtures.barberUser.id
+    );
+
+    const res = await reactivateEmployee(
+      fixtures.shopA.id,
+      deactivated.id,
+      fixtures.clientUser.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('unauthenticated request — 401', async () => {
+    const deactivated = await createDeactivatedEmployee(
+      fixtures.shopA.id,
+      fixtures.barberUser.id
+    );
+
+    const res = await request(app).patch(
+      `/api/v1/barbershops/${fixtures.shopA.id}/employees/${deactivated.id}/reactivate`
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it('nonexistent employee — 404', async () => {
+    const res = await reactivateEmployee(
+      fixtures.shopA.id,
+      '00000000-0000-0000-0000-000000000000',
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(404);
+  });
+});

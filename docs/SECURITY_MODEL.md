@@ -61,6 +61,12 @@ OWNER > BARBER > CLIENT
 | Cancel appointment (own) | - | - | D |
 | Mark appointment status | U | U (assigned) | - |
 
+### Employee Lifecycle
+
+- **Employee management**: OWNER can add, list, deactivate, and reactivate employees. See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/employeeService.ts`.
+- **Reactivation**: OWNER can reactivate deactivated employees via `PATCH .../employees/:employeeId/reactivate`. Restores isActive=true and deletedAt=null. Preserves EmployeeService links and does not modify User.role.
+- **Deactivation**: OWNER can soft-deactivate employees via `DELETE .../employees/:employeeId`. Sets isActive=false and deletedAt=now without removing historical data.
+
 ### Implementation Pattern
 
 ```typescript

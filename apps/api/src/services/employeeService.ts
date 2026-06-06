@@ -259,3 +259,71 @@ export async function deactivateEmployee(
     },
   });
 }
+
+// ============================================
+// EMPLOYEE REACTIVATION
+// ============================================
+
+/**
+ * Reactivates a previously deactivated employee in a barbershop.
+ *
+ * Preconditions (enforced by upstream middleware):
+ * - Caller is the OWNER of the barbershop
+ *
+ * Behavior:
+ * - Finds the employee WITHOUT filtering by deletedAt (so deactivated employees are found)
+ * - If employee doesn't exist → NotFoundError
+ * - If employee.barbershopId doesn't match → NotFoundError (don't leak cross-tenant existence)
+ * - If employee is already active → ConflictError
+ * - Otherwise: sets isActive = true, deletedAt = null
+ * - Returns the updated employee with safe user fields (id, email, name, role)
+ * - Does NOT modify User.role
+ * - Does NOT recreate EmployeeService links
+ */
+export async function reactivateEmployee(
+  barbershopId: string,
+  employeeId: string
+) {
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+  });
+
+  if (!employee) {
+    throw new NotFoundError('Employee');
+  }
+
+  if (employee.barbershopId !== barbershopId) {
+    throw new NotFoundError('Employee');
+  }
+
+  if (employee.isActive && !employee.deletedAt) {
+    throw new ConflictError('Employee is already active');
+  }
+
+  const updated = await prisma.employee.update({
+    where: { id: employeeId },
+    data: {
+      isActive: true,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      barbershopId: true,
+      userId: true,
+      isActive: true,
+      deletedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+        },
+      },
+    },
+  });
+
+  return updated;
+}

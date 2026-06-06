@@ -162,7 +162,7 @@ npx vitest run tests/db/models.test.ts
    - Employee listing — RESOLVED in PR-016. `GET /api/v1/barbershops/:barbershopId/employees` returns all non-deleted employees for a barbershop (OWNER only). Response includes safe user fields only (id, email, name, role) — no clerkUserId or internal fields exposed. Assigned services listing remains deferred.
    - Employee deactivation — RESOLVED in PR-017. `DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId` soft-deletes an employee (isActive=false, deletedAt=now). Does not modify User, User.role, appointments, or EmployeeService links. Existing validations reject deactivated employees for booking (400) and service assignment (404).
    - Service creation — RESOLVED in PR-018. `POST /api/v1/barbershops/:barbershopId/services` allows OWNER to create services for their barbershop. `barbershopId` is derived from route params (trusted via middleware), not from request body (rejected by strict Zod schema). See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/serviceService.ts`.
-   - No employee reactivation endpoint yet.
+   - Employee reactivation — RESOLVED in PR-018. `PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactivate` allows OWNER to reactivate a previously deactivated employee. Sets isActive=true, deletedAt=null. Does not modify User.role or EmployeeService links. Cross-tenant reactivation returns 404. Already-active employees return 409.
    - No invitation flow.
 
 ## PR-011 Verdict: ✅ PASS
