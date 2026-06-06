@@ -462,6 +462,42 @@ router.get(
 );
 
 // ============================================
+// GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records/summary
+// Daily summary for employee: total records, revenue, by-payment-method
+// OWNER can view any employee; BARBER self only
+// ============================================
+router.get(
+  '/:barbershopId/employees/:employeeId/service-records/summary',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (typeof req.query.date !== 'string') {
+        throw new BadRequestError('Date query parameter is required (YYYY-MM-DD)');
+      }
+
+      const parsed = ServiceRecordDateSchema.safeParse(req.query.date);
+      if (!parsed.success) {
+        throw new ValidationError(
+          'Invalid date query parameter: Date must be in YYYY-MM-DD format (e.g. 2026-06-06)'
+        );
+      }
+
+      const summary = await serviceRecordService.getDailyEmployeeServiceRecordSummary(
+        paramBarbershopId(req),
+        paramEmployeeId(req),
+        req.userId,
+        req.userRole,
+        parsed.data
+      );
+      res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
 // GET /api/v1/barbershops/:barbershopId/service-records/summary
 // Daily summary for OWNER: total records, revenue, by-employee, by-payment-method
 // ============================================

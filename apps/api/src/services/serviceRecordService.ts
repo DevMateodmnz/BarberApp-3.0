@@ -361,3 +361,125 @@ export async function getDailyServiceRecordSummary(
     byPaymentMethod,
   };
 }
+
+// ============================================
+// EMPLOYEE DAILY SUMMARY
+// ============================================
+
+interface EmployeeDailySummary {
+  date: string;
+  employeeId: string;
+  employeeName: string | null;
+  totalRecords: number;
+  totalRevenueCents: number;
+  byPaymentMethod: PaymentMethodSummary[];
+}
+
+/**
+ * Returns an aggregated daily summary of service records for a single employee.
+ *
+ * OWNER can view any active employee in their barbershop.
+ * BARBER can only view their own summary.
+ * CLIENTs are denied.
+ * Uses barbershop local-day filtering.
+ */
+export async function getDailyEmployeeServiceRecordSummary(
+  barbershopId: string,
+  employeeId: string,
+  userId: string,
+  userRole: UserRole,
+  date: string
+): Promise<EmployeeDailySummary> {
+  // Validate employee exists, is active, belongs to barbershop, not deleted
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    include: { user: { select: { name: true } } },
+  });
+
+  if (!employee || employee.deletedAt) {
+    throw new NotFoundError('Employee');
+  }
+  if (employee.barbershopId !== barbershopId) {
+    throw new NotFoundError('Employee');
+  }
+  if (!employee.isActive) {
+    throw new BadRequestError('Employee is not active');
+  }
+
+  const employeeName = employee.user.name;
+
+  // BARBER check: can only view own summary
+  if (userRole === 'BARBER') {
+    if (employee.userId !== userId) {
+      throw new ForbiddenError('You can only view your own records');
+    }
+  }
+
+  // CLIENT check: denied
+  if (userRole === 'CLIENT') {
+    throw new ForbiddenError('Clients cannot access service records');
+  }
+
+  // Get barbershop timezone for local-day filtering
+  const barbershop = await prisma.barbershop.findUnique({
+    where: { id: barbershopId },
+    select: { timezone: true },
+  });
+  const timezone = barbershop?.timezone ?? 'America/Argentina/Tucuman';
+  const { startUtc, endUtc } = getUtcRangeForLocalDate(date, timezone);
+
+  // Query this employee's records for the local day
+  const records = await prisma.serviceRecord.findMany({
+    where: {
+      barbershopId,
+      employeeId,
+      deletedAt: null,
+      performedAt: {
+        gte: startUtc,
+        lt: endUtc,
+      },
+    },
+    select: {
+      priceCents: true,
+      paymentMethod: true,
+    },
+  });
+
+  // Aggregate
+  const totalRecords = records.length;
+  const totalRevenueCents = records.reduce((sum, r) => sum + r.priceCents, 0);
+
+  // byPaymentMethod
+  const paymentMap = new Map<string | null, { count: number; revenue: number }>();
+  for (const r of records) {
+    const key = r.paymentMethod ?? null;
+    const existing = paymentMap.get(key);
+    if (existing) {
+      existing.count++;
+      existing.revenue += r.priceCents;
+    } else {
+      paymentMap.set(key, { count: 1, revenue: r.priceCents });
+    }
+  }
+
+  const byPaymentMethod: PaymentMethodSummary[] = Array.from(paymentMap.entries())
+    .map(([paymentMethod, v]) => ({
+      paymentMethod,
+      recordsCount: v.count,
+      revenueCents: v.revenue,
+    }))
+    .sort((a, b) =>
+      b.revenueCents !== a.revenueCents
+        ? b.revenueCents - a.revenueCents
+        : b.recordsCount - a.recordsCount
+    );
+
+  return {
+    date,
+    employeeId,
+    employeeName,
+    totalRecords,
+    totalRevenueCents,
+    byPaymentMethod,
+  };
+}

@@ -222,6 +222,11 @@ function getSummary(shopId: string, asClerkId: string, query?: string) {
   return request(app).get(url).set(authHeader(asClerkId));
 }
 
+function getEmployeeSummary(shopId: string, empId: string, asClerkId: string, query?: string) {
+  const url = `/api/v1/barbershops/${shopId}/employees/${empId}/service-records/summary${query ? '?' + query : ''}`;
+  return request(app).get(url).set(authHeader(asClerkId));
+}
+
 // ============================================
 // POST /api/v1/barbershops/:barbershopId/service-records
 // ============================================
@@ -1204,6 +1209,183 @@ describe('GET /api/v1/barbershops/:barbershopId/service-records/summary', () => 
     });
 
     const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.totalRecords).toBe(1);
+    expect(res.body.data.totalRevenueCents).toBe(2500);
+  });
+});
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records/summary
+// ============================================
+
+describe('GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records/summary', () => {
+  it('OWNER gets employee summary with totals and payment breakdown', async () => {
+    await prisma.serviceRecord.createMany({
+      data: [
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.id,
+          serviceId: fixtures.serviceA1.id,
+          priceCents: 2500,
+          paymentMethod: 'CASH',
+          performedAt: new Date('2026-06-06T15:00:00.000Z'),
+        },
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.id,
+          serviceId: fixtures.serviceA2.id,
+          priceCents: 4000,
+          paymentMethod: 'CARD',
+          performedAt: new Date('2026-06-06T16:00:00.000Z'),
+        },
+      ],
+    });
+
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA1.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.date).toBe('2026-06-06');
+    expect(res.body.data.employeeId).toBe(fixtures.employeeA1.id);
+    expect(res.body.data.employeeName).toBe('Barber One');
+    expect(res.body.data.totalRecords).toBe(2);
+    expect(res.body.data.totalRevenueCents).toBe(6500);
+    expect(res.body.data.byPaymentMethod).toHaveLength(2);
+    // CASH: 2500, CARD: 4000 → CARD first (higher revenue)
+    expect(res.body.data.byPaymentMethod[0].paymentMethod).toBe('CARD');
+    expect(res.body.data.byPaymentMethod[0].revenueCents).toBe(4000);
+    expect(res.body.data.byPaymentMethod[1].paymentMethod).toBe('CASH');
+    expect(res.body.data.byPaymentMethod[1].revenueCents).toBe(2500);
+    // No unsafe fields
+    expect(res.body.data.clerkUserId).toBeUndefined();
+    expect(res.body.data.user).toBeUndefined();
+  });
+
+  it('BARBER views own employee summary', async () => {
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        paymentMethod: 'TRANSFER',
+        performedAt: new Date('2026-06-06T15:00:00.000Z'),
+      },
+    });
+
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA1.id, fixtures.barberUser.clerkUserId, 'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.totalRecords).toBe(1);
+    expect(res.body.data.totalRevenueCents).toBe(2500);
+    expect(res.body.data.employeeId).toBe(fixtures.employeeA1.id);
+  });
+
+  it('BARBER cannot view another employee summary — 403', async () => {
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA2.id, fixtures.barberUser.clerkUserId, 'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('CLIENT is forbidden — 403', async () => {
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA1.id, fixtures.clientUser.clerkUserId, 'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('unauthenticated — 401', async () => {
+    const res = await request(app).get(
+      `/api/v1/barbershops/${fixtures.shopA.id}/employees/${fixtures.employeeA1.id}/service-records/summary?date=2026-06-06`
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it('cross-tenant OWNER blocked — 403', async () => {
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA1.id, fixtures.ownerB.clerkUserId, 'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('deactivated employee returns 404', async () => {
+    // Deactivate employeeA1 temporarily
+    await prisma.employee.update({
+      where: { id: fixtures.employeeA1.id },
+      data: { isActive: false, deletedAt: new Date() },
+    });
+
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA1.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06'
+    );
+
+    // Restore
+    await prisma.employee.update({
+      where: { id: fixtures.employeeA1.id },
+      data: { isActive: true, deletedAt: null },
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('missing date returns 400', async () => {
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA1.id, fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/date/i);
+  });
+
+  it('invalid date returns 400', async () => {
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA1.id, fixtures.ownerA.clerkUserId, 'date=not-a-date'
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('date');
+  });
+
+  it('empty day returns zero totals and empty arrays', async () => {
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA1.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.date).toBe('2026-06-06');
+    expect(res.body.data.totalRecords).toBe(0);
+    expect(res.body.data.totalRevenueCents).toBe(0);
+    expect(res.body.data.byPaymentMethod).toEqual([]);
+  });
+
+  it('timezone boundary uses local barbershop day', async () => {
+    // Shop A = America/Argentina/Buenos_Aires (UTC-3)
+    // June 7 01:00 UTC = June 6 22:00 ARG → local June 6
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        paymentMethod: 'CASH',
+        performedAt: new Date('2026-06-07T01:00:00.000Z'),
+      },
+    });
+
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id, fixtures.employeeA1.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06'
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.data.totalRecords).toBe(1);
