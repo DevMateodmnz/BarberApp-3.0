@@ -2,7 +2,8 @@
  * Formatting helpers for BarberApp mobile
  *
  * All money formatting uses integer cents — no floating point.
- * Dates use UTC to ensure deterministic behavior in tests.
+ * Date formatting uses LOCAL calendar fields so that "today"
+ * matches the device's local day, not UTC.
  */
 
 /**
@@ -50,21 +51,27 @@ export function formatCents(cents: number): string {
 /**
  * Returns a date string in YYYY-MM-DD format.
  *
- * Uses UTC to ensure deterministic behavior regardless of timezone.
- * If no Date is provided, returns the current UTC date.
+ * Uses LOCAL calendar fields (getFullYear, getMonth, getDate)
+ * so that "today" means the device's local day, not UTC.
+ * This is critical for barbershops in Argentina (UTC-3) where
+ * a service recorded at 11pm local on Jan 15 is still Jan 15
+ * in local time, even though it's Jan 16 in UTC.
+ *
+ * If no Date is provided, returns the current local date.
  *
  * @param date - Optional Date object. Defaults to current date.
- * @returns String in YYYY-MM-DD format
+ * @returns String in YYYY-MM-DD format (local date)
  *
  * @example
- * getTodayDateString()                                  // "2026-06-06" (today)
- * getTodayDateString(new Date("2026-01-15T12:00:00Z")) // "2026-01-15"
- * getTodayDateString(new Date("2024-02-29T12:00:00Z")) // "2024-02-29"
+ * getTodayDateString()                                  // "2026-06-06" (today, local)
+ * getTodayDateString(new Date(2026, 0, 15))            // "2026-01-15" (local Jan 15)
+ * getTodayDateString(new Date(2026, 0, 15, 23, 30))   // "2026-01-15" (still local Jan 15)
+ * getTodayDateString(new Date(2024, 1, 29))            // "2024-02-29" (leap year)
  */
 export function getTodayDateString(date?: Date): string {
   const d = date ?? new Date();
-  const year = d.getUTCFullYear();
-  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }

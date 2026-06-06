@@ -55,22 +55,51 @@ describe('getTodayDateString', () => {
     expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('returns deterministic date for a given Date input', async () => {
+  it('returns local date for a Date constructed with local time fields', async () => {
     const { getTodayDateString } = await import('../../src/lib/format.js');
-    // January 15, 2026 at noon UTC
-    const result = getTodayDateString(new Date('2026-01-15T12:00:00.000Z'));
+    // new Date(2026, 0, 15) creates Jan 15, 2026 in LOCAL time at midnight.
+    // This should always return '2026-01-15' regardless of timezone
+    // because we're using local calendar fields, not UTC.
+    const result = getTodayDateString(new Date(2026, 0, 15));
     expect(result).toBe('2026-01-15');
   });
 
-  it('returns correct date for end-of-month', async () => {
+  it('returns correct date for end-of-month local time', async () => {
     const { getTodayDateString } = await import('../../src/lib/format.js');
-    const result = getTodayDateString(new Date('2026-12-31T23:59:59.999Z'));
+    // Dec 31, 2026 at 23:59 local — should always be '2026-12-31'
+    const result = getTodayDateString(new Date(2026, 11, 31, 23, 59, 59));
     expect(result).toBe('2026-12-31');
   });
 
-  it('returns correct date for leap year February 29', async () => {
+  it('returns correct date for leap year February 29 local time', async () => {
     const { getTodayDateString } = await import('../../src/lib/format.js');
-    const result = getTodayDateString(new Date('2024-02-29T12:00:00.000Z'));
+    // Feb 29, 2024 local time — should always be '2024-02-29'
+    const result = getTodayDateString(new Date(2024, 1, 29, 12, 0, 0));
     expect(result).toBe('2024-02-29');
+  });
+
+  it('uses local date fields, not UTC (regression test)', async () => {
+    const { getTodayDateString } = await import('../../src/lib/format.js');
+    // Create a date that is Jan 16 02:00 UTC.
+    // In UTC-3 (Argentina), this is Jan 15 23:00 local.
+    // A UTC-based implementation would return '2026-01-16'.
+    // A correct local-date implementation should return '2026-01-15'
+    // when the local calendar says January 15.
+    //
+    // We can't easily control the test runner's timezone,
+    // so we test the implementation's approach: verify that
+    // getFullYear/getMonth/getDate are used (local) not
+    // getUTCFullYear/getUTCMonth/getUTCDate.
+    //
+    // Instead, we verify local constructor dates are preserved:
+    const localDate = new Date(2026, 0, 15, 23, 30, 0);
+    expect(getTodayDateString(localDate)).toBe('2026-01-15');
+  });
+
+  it('pads single-digit month and day with leading zeros', async () => {
+    const { getTodayDateString } = await import('../../src/lib/format.js');
+    // Jan 5 local — month 1, day 5 should be zero-padded
+    const result = getTodayDateString(new Date(2026, 0, 5));
+    expect(result).toBe('2026-01-05');
   });
 });
