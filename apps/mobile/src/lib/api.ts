@@ -2,13 +2,9 @@
  * API client for BarberApp backend
  *
  * Uses Axios with configurable base URL from environment.
- * Token injection will be added when Clerk auth hooks are
- * connected in the sign-in flow (PR-028B+).
- *
- * TODO: Replace local ApiResponse type with import from @barberapp/shared
- *       once the shared package is built and published.
+ * Supports Clerk token injection via createAuthInterceptor().
  */
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
 
 /**
  * API response envelope — mirrors @barberapp/shared ApiResponse<T>
@@ -35,9 +31,8 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/a
  *     '/barbershops/123/service-records/summary?date=2026-06-06'
  *   );
  *
- * Token injection will be added in a later PR when Clerk auth
- * hooks are connected. For now, the test middleware (x-test-user-id)
- * handles auth in development.
+ * Token injection is added by calling createAuthInterceptor(getToken)
+ * and registering the returned interceptor on this instance.
  */
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -46,3 +41,35 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+/**
+ * Token provider function type — matches Clerk's getToken().
+ * Returns a JWT string or null if the user is not authenticated.
+ */
+export type GetToken = () => Promise<string | null>;
+
+/**
+ * Creates a request interceptor that injects the Clerk JWT
+ * as a Bearer token into Authorization headers.
+ *
+ * @param getToken - Clerk's getToken function (or any async function
+ *   returning a JWT string or null).
+ * @returns The interceptor function — register it with
+ *   `api.interceptors.request.use(interceptor)` in your app init.
+ *
+ * @example
+ *   import { useAuth } from '@clerk/clerk-expo';
+ *   // Inside a React component or hook:
+ *   const { getToken } = useAuth();
+ *   const interceptor = createAuthInterceptor(getToken);
+ *   api.interceptors.request.use(interceptor);
+ */
+export function createAuthInterceptor(getToken: GetToken) {
+  return async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
+    const token = await getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  };
+}
