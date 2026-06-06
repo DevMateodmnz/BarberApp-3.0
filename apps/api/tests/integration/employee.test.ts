@@ -1270,3 +1270,181 @@ describe('PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactiva
     expect(res.status).toBe(404);
   });
 });
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees/:employeeId/services
+// ============================================
+
+describe('GET /api/v1/barbershops/:barbershopId/employees/:employeeId/services', () => {
+  let employeeA: Employee;
+
+  beforeEach(async () => {
+    await prisma.employeeService.deleteMany();
+    await prisma.employee.deleteMany();
+    employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
+  });
+
+  it('OWNER lists assigned services — 200, correct services returned', async () => {
+    // Assign 2 services to employeeA
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA2.id },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveLength(2);
+    const ids = res.body.data.map((s: Service) => s.id);
+    expect(ids).toContain(fixtures.serviceA1.id);
+    expect(ids).toContain(fixtures.serviceA2.id);
+  });
+
+  it('empty list when no services assigned — 200, data: []', async () => {
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('only assigned services are returned (not all barbershop services)', async () => {
+    // Assign only serviceA1 (not serviceA2)
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].id).toBe(fixtures.serviceA1.id);
+  });
+
+  it('cross-tenant access blocked — 400', async () => {
+    // Create employee in Shop B
+    const empB = await createEmployeeInDb(fixtures.shopB.id, fixtures.externalUser.id);
+
+    // Try to list services via Shop A URL
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${empB.id}/services`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('does not belong');
+  });
+
+  it('deactivated employee — 404', async () => {
+    // Deactivate employeeA
+    await prisma.employee.update({
+      where: { id: employeeA.id },
+      data: { isActive: false, deletedAt: new Date() },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(404);
+  });
+
+  it('BARBER cannot list — 403', async () => {
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`)
+      .set(authHeader(fixtures.barberUser.clerkUserId));
+
+    expect(res.status).toBe(403);
+  });
+
+  it('CLIENT cannot list — 403', async () => {
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`)
+      .set(authHeader(fixtures.clientUser.clerkUserId));
+
+    expect(res.status).toBe(403);
+  });
+
+  it('unauthenticated — 401', async () => {
+    const res = await request(app).get(
+      `/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it('nonexistent employee — 404', async () => {
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/nonexistent-employee-id/services`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(404);
+  });
+
+  it('inactive services are excluded from listings', async () => {
+    // Assign serviceA1 (active) and serviceA2 (active)
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA2.id },
+    });
+
+    // Deactivate serviceA2
+    await prisma.service.update({
+      where: { id: fixtures.serviceA2.id },
+      data: { isActive: false },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].id).toBe(fixtures.serviceA1.id);
+
+    // Restore serviceA2 for other tests
+    await prisma.service.update({
+      where: { id: fixtures.serviceA2.id },
+      data: { isActive: true },
+    });
+  });
+
+  it('soft-deleted services are excluded from listings', async () => {
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA2.id },
+    });
+
+    // Soft-delete serviceA2
+    await prisma.service.update({
+      where: { id: fixtures.serviceA2.id },
+      data: { deletedAt: new Date() },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${employeeA.id}/services`)
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].id).toBe(fixtures.serviceA1.id);
+
+    // Restore serviceA2 for other tests
+    await prisma.service.update({
+      where: { id: fixtures.serviceA2.id },
+      data: { deletedAt: null },
+    });
+  });
+});

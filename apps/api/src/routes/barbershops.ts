@@ -7,6 +7,7 @@
  * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId             OWNER (deactivate employee)
  * - PATCH  /api/v1/barbershops/:barbershopId/employees/:employeeId/reactivate     OWNER (reactivate employee)
  * - POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (assign service)
+ * - GET  /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (list employee services)
  * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId  OWNER (unassign service)
  * - POST /api/v1/barbershops/:barbershopId/services                         OWNER (create service)
  */
@@ -129,6 +130,27 @@ router.delete(
         paramServiceId(req)
       );
       res.json({ success: true, data: { message: 'Service unassigned' } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees/:employeeId/services
+// List services assigned to an employee (OWNER only)
+// ============================================
+router.get(
+  '/:barbershopId/employees/:employeeId/services',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const services = await employeeService.listEmployeeServices(
+        paramBarbershopId(req),
+        paramEmployeeId(req)
+      );
+      res.json({ success: true, data: services });
     } catch (error) {
       next(error);
     }

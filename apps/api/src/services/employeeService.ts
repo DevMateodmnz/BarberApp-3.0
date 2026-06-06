@@ -8,7 +8,7 @@
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { Prisma } from '@prisma/client';
-import type { Employee, EmployeeService } from '@prisma/client';
+import type { Employee, EmployeeService, Service } from '@prisma/client';
 
 /**
  * Adds an existing user as an employee of a barbershop.
@@ -225,6 +225,43 @@ export async function listEmployees(barbershopId: string) {
     },
     orderBy: { createdAt: 'asc' },
   });
+}
+
+// ============================================
+// EMPLOYEE SERVICE LISTING
+// ============================================
+
+/**
+ * Lists services assigned to an employee within a barbershop.
+ *
+ * Preconditions (enforced by upstream middleware):
+ * - Caller is the OWNER of the barbershop
+ *
+ * Behavior:
+ * - Validates employee belongs to barbershop and is active
+ * - Returns only active, non-deleted services assigned to the employee
+ * - Returns the service objects (not junction table rows)
+ */
+export async function listEmployeeServices(
+  barbershopId: string,
+  employeeId: string
+): Promise<Service[]> {
+  await validateEmployeeInBarbershop(employeeId, barbershopId);
+
+  const assignments = await prisma.employeeService.findMany({
+    where: {
+      employeeId,
+      service: {
+        isActive: true,
+        deletedAt: null,
+      },
+    },
+    include: {
+      service: true,
+    },
+  });
+
+  return assignments.map((a) => a.service);
 }
 
 // ============================================

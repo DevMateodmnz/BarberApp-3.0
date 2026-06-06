@@ -64,6 +64,7 @@ OWNER > BARBER > CLIENT
 ### Employee Lifecycle
 
 - **Employee management**: OWNER can add, list, deactivate, and reactivate employees. See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/employeeService.ts`.
+- **Service listing**: OWNER can list services assigned to an employee via `GET .../employees/:employeeId/services`. Returns active, non-deleted services only.
 - **Reactivation**: OWNER can reactivate deactivated employees via `PATCH .../employees/:employeeId/reactivate`. Restores isActive=true and deletedAt=null. Preserves EmployeeService links and does not modify User.role.
 - **Deactivation**: OWNER can soft-deactivate employees via `DELETE .../employees/:employeeId`. Sets isActive=false and deletedAt=now without removing historical data.
 
