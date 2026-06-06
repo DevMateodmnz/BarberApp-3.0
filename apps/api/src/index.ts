@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { appointmentRateLimit } from './middleware/rateLimit.js';
 import appointmentRoutes from './routes/appointments.js';
 import barbershopRoutes from './routes/barbershops.js';
+import meRoutes from './routes/me.js';
 import webhookRoutes from './routes/webhooks.js';
 
 const app = express();
@@ -40,6 +41,7 @@ app.get('/api/v1/ping', (_req, res) => {
 // API routes
 app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
 app.use('/api/v1/barbershops', barbershopRoutes);
+app.use('/api/v1/me', meRoutes);
 
 // Global error handler (must be last)
 app.use(errorHandler);
