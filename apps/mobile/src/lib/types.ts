@@ -2,8 +2,6 @@
  * BarberApp Mobile — Type definitions
  *
  * Mirrors backend types until @barberapp/shared is built and linked.
- * UserRole and CurrentUserContext correspond to the backend's
- * GET /api/v1/me/context response payload.
  */
 
 /**
@@ -17,7 +15,7 @@ export type UserRole = 'OWNER' | 'BARBER' | 'CLIENT';
 /**
  * Current user context — returned by GET /api/v1/me/context.
  *
- * ownerId/barbershopId/employeeId are all nullable because:
+ * barbershopId/employeeId are nullable because:
  * - OWNER may not have a barbershop yet (just signed up).
  * - BARBER may not have an employee record yet.
  * - CLIENT has no barbershop or employee context.
@@ -30,3 +28,55 @@ export interface CurrentUserContext {
   employeeId: string | null;
   employeeName: string | null;
 }
+
+// ============================================
+// Daily summary types — mirror backend response shapes
+// ============================================
+
+/**
+ * Payment method breakdown — shared by OWNER and BARBER summaries.
+ * paymentMethod is nullable because records can have no payment method set.
+ */
+export interface PaymentMethodSummary {
+  paymentMethod: string | null;
+  recordsCount: number;
+  revenueCents: number;
+}
+
+/**
+ * Employee breakdown — appears in OWNER's barbershop daily summary.
+ */
+export interface EmployeeSummary {
+  employeeId: string;
+  employeeName: string | null;
+  recordsCount: number;
+  revenueCents: number;
+}
+
+/**
+ * OWNER barbershop daily summary — returned by
+ * GET /api/v1/barbershops/:barbershopId/service-records/summary?date=
+ */
+export interface BarbershopDailySummary {
+  date: string;
+  totalRecords: number;
+  totalRevenueCents: number;
+  byEmployee: EmployeeSummary[];
+  byPaymentMethod: PaymentMethodSummary[];
+}
+
+/**
+ * BARBER/employee daily summary — returned by
+ * GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records/summary?date=
+ */
+export interface EmployeeDailySummary {
+  date: string;
+  employeeId: string;
+  employeeName: string | null;
+  totalRecords: number;
+  totalRevenueCents: number;
+  byPaymentMethod: PaymentMethodSummary[];
+}
+
+/** Union type — the store holds either OWNER or BARBER summary. */
+export type DailySummary = BarbershopDailySummary | EmployeeDailySummary;

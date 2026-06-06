@@ -6,6 +6,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import type { CurrentUserContext } from '../../src/lib/types.js';
+
 // Mock the context fetcher before importing store
 vi.mock('../../src/lib/context.js', () => ({
   fetchCurrentUserContext: vi.fn(),
@@ -82,7 +84,7 @@ describe('useContextStore', () => {
 
     let resolvePromise!: (value: unknown) => void;
     const pending = new Promise((resolve) => { resolvePromise = resolve; });
-    vi.mocked(fetchCurrentUserContext).mockReturnValueOnce(pending as any);
+    vi.mocked(fetchCurrentUserContext).mockReturnValueOnce(pending as Promise<CurrentUserContext>);
 
     const getToken = vi.fn().mockResolvedValue('token');
     const loadPromise = useContextStore.getState().loadContext(getToken);
