@@ -16,6 +16,9 @@
  * - POST /api/v1/barbershops/:barbershopId/services                         OWNER (create service)
  * - PATCH  /api/v1/barbershops/:barbershopId/services/:serviceId              OWNER (update service)
  * - DELETE /api/v1/barbershops/:barbershopId/services/:serviceId              OWNER (deactivate service)
+ * - POST   /api/v1/barbershops/:barbershopId/service-records                   OWNER, BARBER (create walk-in record)
+ * - GET    /api/v1/barbershops/:barbershopId/service-records                   OWNER (list barbershop records)
+ * - GET    /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records  OWNER, BARBER (list employee records)
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth.js';
@@ -29,6 +32,8 @@ import * as employeeService from '../services/employeeService.js';
 import * as serviceService from '../services/serviceService.js';
 import * as appointmentService from '../services/appointmentService.js';
 import * as workingHoursService from '../services/workingHoursService.js';
+import * as serviceRecordService from '../services/serviceRecordService.js';
+import { CreateServiceRecordSchema } from '../schemas/serviceRecord.js';
 import { UpdateWorkingHoursSchema } from '../schemas/workingHours.js';
 import { BadRequestError } from '../lib/errors.js';
 
@@ -355,6 +360,80 @@ router.delete(
         paramServiceId(req)
       );
       res.json({ success: true, data: { message: 'Service deactivated' } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/service-records
+// Create a service record (OWNER, BARBER — BARBER self only)
+// ============================================
+router.post(
+  '/:barbershopId/service-records',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  validateBody(CreateServiceRecordSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const record = await serviceRecordService.createServiceRecord(
+        paramBarbershopId(req),
+        req.body,
+        req.userId,
+        req.userRole
+      );
+      res.status(201).json({ success: true, data: record });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/service-records
+// List service records for a barbershop (OWNER only)
+// Supports optional query params: employeeId, date
+// ============================================
+router.get(
+  '/:barbershopId/service-records',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const filters: { employeeId?: string; date?: string } = {};
+      if (typeof req.query.employeeId === 'string') filters.employeeId = req.query.employeeId;
+      if (typeof req.query.date === 'string') filters.date = req.query.date;
+
+      const records = await serviceRecordService.listBarbershopRecords(
+        paramBarbershopId(req),
+        req.userId,
+        filters
+      );
+      res.json({ success: true, data: records });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records
+// List service records for an employee (OWNER, BARBER self only)
+// ============================================
+router.get(
+  '/:barbershopId/employees/:employeeId/service-records',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const records = await serviceRecordService.listEmployeeRecords(
+        paramBarbershopId(req),
+        paramEmployeeId(req),
+        req.userId,
+        req.userRole
+      );
+      res.json({ success: true, data: records });
     } catch (error) {
       next(error);
     }

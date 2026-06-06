@@ -61,6 +61,7 @@ OWNER > BARBER > CLIENT
 | Create appointment | - | - | C |
 | Cancel appointment (own) | - | - | D |
 | Mark appointment status | U | U (assigned) | - |
+| Service Records | CR (own) | C (self) | - |
 
 ### Employee Lifecycle
 
@@ -71,6 +72,7 @@ OWNER > BARBER > CLIENT
 - **Appointment listing**: BARBERs can list their own appointments via the scoped `GET .../employees/:employeeId/appointments` endpoint. OWNERs can list any employee's appointments. Global BARBER listing remains fail-closed for safety.
 - **Working hours**: OWNER can view and update barbershop working hours via `GET/PUT /api/v1/barbershops/:barbershopId/working-hours`. Updates are idempotent. Closed days set `isActive: false`. Appointment booking validates against current working hours.
 - **Service catalog**: OWNER can manage the full service catalog (CRUD). Services are custom per barbershop — names like "Combo Deluxe", "Corte + barba", and "Servicio VIP" are accepted. Soft-deletion preserves historical appointments.
+- **Service records**: Walk-in service logs for completed cuts/services. No appointment required. BARBER creates records for their own work. OWNER views all records. Prices are explicit per record. Foundation for future daily production/revenue tracking.
 
 ### Implementation Pattern
 
