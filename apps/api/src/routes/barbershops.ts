@@ -12,7 +12,10 @@
  * - GET  /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments     OWNER, BARBER (list employee appointments)
  * - GET  /api/v1/barbershops/:barbershopId/working-hours                      OWNER (view working hours)
  * - PUT  /api/v1/barbershops/:barbershopId/working-hours                      OWNER (update working hours)
+ * - GET  /api/v1/barbershops/:barbershopId/services                         OWNER (list services)
  * - POST /api/v1/barbershops/:barbershopId/services                         OWNER (create service)
+ * - PATCH  /api/v1/barbershops/:barbershopId/services/:serviceId              OWNER (update service)
+ * - DELETE /api/v1/barbershops/:barbershopId/services/:serviceId              OWNER (deactivate service)
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAuth } from '../middleware/auth.js';
@@ -21,7 +24,7 @@ import { requireBarbershopAccess } from '../middleware/tenant.js';
 import { validateBody } from '../middleware/validate.js';
 import { CreateEmployeeSchema } from '../schemas/employee.js';
 import { AssignServiceSchema } from '../schemas/employeeService.js';
-import { CreateServiceSchema } from '../schemas/service.js';
+import { CreateServiceSchema, UpdateServiceSchema } from '../schemas/service.js';
 import * as employeeService from '../services/employeeService.js';
 import * as serviceService from '../services/serviceService.js';
 import * as appointmentService from '../services/appointmentService.js';
@@ -288,6 +291,70 @@ router.post(
         req.body
       );
       res.status(201).json({ success: true, data: service });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/services
+// List services for a barbershop (OWNER only)
+// ============================================
+router.get(
+  '/:barbershopId/services',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const services = await serviceService.listServices(
+        paramBarbershopId(req)
+      );
+      res.json({ success: true, data: services });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// PATCH /api/v1/barbershops/:barbershopId/services/:serviceId
+// Update a service (OWNER only)
+// ============================================
+router.patch(
+  '/:barbershopId/services/:serviceId',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(UpdateServiceSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const service = await serviceService.updateService(
+        paramBarbershopId(req),
+        paramServiceId(req),
+        req.body
+      );
+      res.json({ success: true, data: service });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// DELETE /api/v1/barbershops/:barbershopId/services/:serviceId
+// Soft-deactivate a service (OWNER only)
+// ============================================
+router.delete(
+  '/:barbershopId/services/:serviceId',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await serviceService.deleteService(
+        paramBarbershopId(req),
+        paramServiceId(req)
+      );
+      res.json({ success: true, data: { message: 'Service deactivated' } });
     } catch (error) {
       next(error);
     }

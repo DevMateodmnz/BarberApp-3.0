@@ -70,6 +70,7 @@ OWNER > BARBER > CLIENT
 - **Deactivation**: OWNER can soft-deactivate employees via `DELETE .../employees/:employeeId`. Sets isActive=false and deletedAt=now without removing historical data.
 - **Appointment listing**: BARBERs can list their own appointments via the scoped `GET .../employees/:employeeId/appointments` endpoint. OWNERs can list any employee's appointments. Global BARBER listing remains fail-closed for safety.
 - **Working hours**: OWNER can view and update barbershop working hours via `GET/PUT /api/v1/barbershops/:barbershopId/working-hours`. Updates are idempotent. Closed days set `isActive: false`. Appointment booking validates against current working hours.
+- **Service catalog**: OWNER can manage the full service catalog (CRUD). Services are custom per barbershop — names like "Combo Deluxe", "Corte + barba", and "Servicio VIP" are accepted. Soft-deletion preserves historical appointments.
 
 ### Implementation Pattern
 

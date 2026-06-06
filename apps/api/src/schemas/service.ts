@@ -13,3 +13,14 @@ export const CreateServiceSchema = z
   .strict();
 
 export type CreateServiceInput = z.infer<typeof CreateServiceSchema>;
+
+export const UpdateServiceSchema = z
+  .object({
+    name: z.string().min(1, 'Service name is required').optional(),
+    durationMinutes: z.number().int().positive('Duration must be a positive integer').optional(),
+    priceCents: z.number().int().min(0, 'Price must be a non-negative integer').optional(),
+    description: z.string().optional(),
+  })
+  .strict();
+
+export type UpdateServiceInput = z.infer<typeof UpdateServiceSchema>;

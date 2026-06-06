@@ -102,6 +102,10 @@ async function validateServiceBelongsToBarbershop(
       'Service does not belong to the specified barbershop'
     );
   }
+
+  if (!service.isActive || service.deletedAt) {
+    throw new BadRequestError('Service is not available');
+  }
 }
 
 /**
