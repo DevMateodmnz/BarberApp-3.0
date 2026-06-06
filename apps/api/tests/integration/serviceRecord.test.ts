@@ -217,6 +217,11 @@ function listEmployeeRecords(shopId: string, empId: string, asClerkId: string, q
   return request(app).get(url).set(authHeader(asClerkId));
 }
 
+function getSummary(shopId: string, asClerkId: string, query?: string) {
+  const url = `/api/v1/barbershops/${shopId}/service-records/summary${query ? '?' + query : ''}`;
+  return request(app).get(url).set(authHeader(asClerkId));
+}
+
 // ============================================
 // POST /api/v1/barbershops/:barbershopId/service-records
 // ============================================
@@ -977,5 +982,231 @@ describe('GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-re
 
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain('date');
+  });
+});
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/service-records/summary
+// ============================================
+
+describe('GET /api/v1/barbershops/:barbershopId/service-records/summary', () => {
+  it('OWNER daily summary aggregates totals and revenue', async () => {
+    await prisma.serviceRecord.createMany({
+      data: [
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.id,
+          serviceId: fixtures.serviceA1.id,
+          priceCents: 2500,
+          paymentMethod: 'CASH',
+          performedAt: new Date('2026-06-06T15:00:00.000Z'),
+        },
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.id,
+          serviceId: fixtures.serviceA2.id,
+          priceCents: 4000,
+          paymentMethod: 'CARD',
+          performedAt: new Date('2026-06-06T16:00:00.000Z'),
+        },
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA2.id,
+          serviceId: fixtures.serviceA1.id,
+          priceCents: 2500,
+          paymentMethod: 'TRANSFER',
+          performedAt: new Date('2026-06-06T17:00:00.000Z'),
+        },
+      ],
+    });
+
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.date).toBe('2026-06-06');
+    expect(res.body.data.totalRecords).toBe(3);
+    expect(res.body.data.totalRevenueCents).toBe(9000);
+    expect(res.body.data.byEmployee).toHaveLength(2);
+    expect(res.body.data.byPaymentMethod).toHaveLength(3);
+  });
+
+  it('OWNER summary groups by employee with correct ordering', async () => {
+    await prisma.serviceRecord.createMany({
+      data: [
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA2.id,
+          serviceId: fixtures.serviceA1.id,
+          priceCents: 5000,
+          performedAt: new Date('2026-06-06T15:00:00.000Z'),
+        },
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.id,
+          serviceId: fixtures.serviceA1.id,
+          priceCents: 2500,
+          performedAt: new Date('2026-06-06T16:00:00.000Z'),
+        },
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.id,
+          serviceId: fixtures.serviceA2.id,
+          priceCents: 4000,
+          performedAt: new Date('2026-06-06T17:00:00.000Z'),
+        },
+      ],
+    });
+
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(200);
+    const byEmployee = res.body.data.byEmployee;
+    expect(byEmployee).toHaveLength(2);
+    // employeeA1: 2500 + 4000 = 6500 → first
+    // employeeA2: 5000 → second
+    expect(byEmployee[0].employeeId).toBe(fixtures.employeeA1.id);
+    expect(byEmployee[0].revenueCents).toBe(6500);
+    expect(byEmployee[0].recordsCount).toBe(2);
+    expect(byEmployee[0].employeeName).toBe('Barber One');
+    expect(byEmployee[1].employeeId).toBe(fixtures.employeeA2.id);
+    expect(byEmployee[1].revenueCents).toBe(5000);
+    expect(byEmployee[1].recordsCount).toBe(1);
+    expect(byEmployee[1].employeeName).toBe('Barber Two');
+  });
+
+  it('OWNER summary groups by payment method', async () => {
+    await prisma.serviceRecord.createMany({
+      data: [
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.id,
+          serviceId: fixtures.serviceA1.id,
+          priceCents: 2500,
+          paymentMethod: 'CASH',
+          performedAt: new Date('2026-06-06T15:00:00.000Z'),
+        },
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.id,
+          serviceId: fixtures.serviceA2.id,
+          priceCents: 4000,
+          paymentMethod: 'CASH',
+          performedAt: new Date('2026-06-06T16:00:00.000Z'),
+        },
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA2.id,
+          serviceId: fixtures.serviceA1.id,
+          priceCents: 2500,
+          paymentMethod: 'CARD',
+          performedAt: new Date('2026-06-06T17:00:00.000Z'),
+        },
+      ],
+    });
+
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(200);
+    const byPaymentMethod = res.body.data.byPaymentMethod;
+    expect(byPaymentMethod).toHaveLength(2);
+    // CASH: 6500 → first, CARD: 2500 → second
+    expect(byPaymentMethod[0].paymentMethod).toBe('CASH');
+    expect(byPaymentMethod[0].revenueCents).toBe(6500);
+    expect(byPaymentMethod[0].recordsCount).toBe(2);
+    expect(byPaymentMethod[1].paymentMethod).toBe('CARD');
+    expect(byPaymentMethod[1].revenueCents).toBe(2500);
+    expect(byPaymentMethod[1].recordsCount).toBe(1);
+  });
+
+  it('payment method null is grouped correctly', async () => {
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        paymentMethod: null,
+        performedAt: new Date('2026-06-06T15:00:00.000Z'),
+      },
+    });
+
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.byPaymentMethod).toHaveLength(1);
+    expect(res.body.data.byPaymentMethod[0].paymentMethod).toBeNull();
+    expect(res.body.data.byPaymentMethod[0].revenueCents).toBe(2500);
+  });
+
+  it('empty day returns zero totals and empty arrays', async () => {
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.date).toBe('2026-06-06');
+    expect(res.body.data.totalRecords).toBe(0);
+    expect(res.body.data.totalRevenueCents).toBe(0);
+    expect(res.body.data.byEmployee).toEqual([]);
+    expect(res.body.data.byPaymentMethod).toEqual([]);
+  });
+
+  it('invalid date returns 400', async () => {
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, 'date=not-a-date');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('date');
+  });
+
+  it('missing date returns 400', async () => {
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/date/i);
+  });
+
+  it('BARBER is forbidden — 403', async () => {
+    const res = await getSummary(fixtures.shopA.id, fixtures.barberUser.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(403);
+  });
+
+  it('CLIENT is forbidden — 403', async () => {
+    const res = await getSummary(fixtures.shopA.id, fixtures.clientUser.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(403);
+  });
+
+  it('unauthenticated — 401', async () => {
+    const res = await request(app).get(
+      `/api/v1/barbershops/${fixtures.shopA.id}/service-records/summary?date=2026-06-06`
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it('cross-tenant OWNER blocked — 403', async () => {
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerB.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(403);
+  });
+
+  it('timezone boundary: record at 01:00 UTC June 7 belongs to local June 6', async () => {
+    // Shop A is America/Argentina/Buenos_Aires (UTC-3)
+    // June 7 01:00 UTC = June 6 22:00 ARG → local June 6
+    await prisma.serviceRecord.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.id,
+        serviceId: fixtures.serviceA1.id,
+        priceCents: 2500,
+        performedAt: new Date('2026-06-07T01:00:00.000Z'),
+      },
+    });
+
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, 'date=2026-06-06');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.totalRecords).toBe(1);
+    expect(res.body.data.totalRevenueCents).toBe(2500);
   });
 });

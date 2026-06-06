@@ -461,4 +461,37 @@ router.get(
   }
 );
 
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/service-records/summary
+// Daily summary for OWNER: total records, revenue, by-employee, by-payment-method
+// ============================================
+router.get(
+  '/:barbershopId/service-records/summary',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (typeof req.query.date !== 'string') {
+        throw new BadRequestError('Date query parameter is required (YYYY-MM-DD)');
+      }
+
+      const parsed = ServiceRecordDateSchema.safeParse(req.query.date);
+      if (!parsed.success) {
+        throw new ValidationError(
+          'Invalid date query parameter: Date must be in YYYY-MM-DD format (e.g. 2026-06-06)'
+        );
+      }
+
+      const summary = await serviceRecordService.getDailyServiceRecordSummary(
+        paramBarbershopId(req),
+        req.userId,
+        parsed.data
+      );
+      res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 export default router;
