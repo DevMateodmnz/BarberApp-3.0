@@ -38,6 +38,7 @@
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "@testing-library/react-native": "12.4.0",
+    "@types/node": "^20.19.41",
     "@types/react": "^18.3.0",
     "@vitest/coverage-v8": "^1.4.0",
     "typescript": "^5.4.0",
