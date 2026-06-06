@@ -21,7 +21,7 @@ import { BadRequestError } from './errors.js';
 /**
  * Converts "HH:mm" string to minutes since midnight for comparison.
  */
-function timeToMinutes(time: string): number {
+export function timeToMinutes(time: string): number {
   const [hours, minutes] = time.split(':').map(Number) as [number, number];
   return hours! * 60 + minutes!;
 }

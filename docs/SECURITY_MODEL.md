@@ -56,6 +56,7 @@ OWNER > BARBER > CLIENT
 | Barbershop (own) | CRUD | R | - |
 | Employees (shop) | CRUD | R | - |
 | Services (shop) | CRUD | R | - |
+| Working Hours (shop) | RU | - | - |
 | Appointments (own shop) | CRUD | R (assigned) | R (own) |
 | Create appointment | - | - | C |
 | Cancel appointment (own) | - | - | D |
@@ -68,6 +69,7 @@ OWNER > BARBER > CLIENT
 - **Reactivation**: OWNER can reactivate deactivated employees via `PATCH .../employees/:employeeId/reactivate`. Restores isActive=true and deletedAt=null. Preserves EmployeeService links and does not modify User.role.
 - **Deactivation**: OWNER can soft-deactivate employees via `DELETE .../employees/:employeeId`. Sets isActive=false and deletedAt=now without removing historical data.
 - **Appointment listing**: BARBERs can list their own appointments via the scoped `GET .../employees/:employeeId/appointments` endpoint. OWNERs can list any employee's appointments. Global BARBER listing remains fail-closed for safety.
+- **Working hours**: OWNER can view and update barbershop working hours via `GET/PUT /api/v1/barbershops/:barbershopId/working-hours`. Updates are idempotent. Closed days set `isActive: false`. Appointment booking validates against current working hours.
 
 ### Implementation Pattern
 

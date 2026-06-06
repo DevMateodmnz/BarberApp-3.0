@@ -166,6 +166,7 @@ npx vitest run tests/db/models.test.ts
    - Service creation — RESOLVED in PR-018. `POST /api/v1/barbershops/:barbershopId/services` allows OWNER to create services for their barbershop. `barbershopId` is derived from route params (trusted via middleware), not from request body (rejected by strict Zod schema). See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/serviceService.ts`.
    - Employee reactivation — RESOLVED in PR-018. `PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactivate` allows OWNER to reactivate a previously deactivated employee. Sets isActive=true, deletedAt=null. Does not modify User.role or EmployeeService links. Cross-tenant reactivation returns 404. Already-active employees return 409.
    - Employee service listing — RESOLVED in PR-019. `GET /api/v1/barbershops/:barbershopId/employees/:employeeId/services` allows OWNER to list services assigned to an active employee. Returns only active, non-deleted services. Deactivated/inactive employees return 404.
+   - Working hours management — RESOLVED in PR-021. `GET /api/v1/barbershops/:barbershopId/working-hours` lists the current schedule. `PUT /api/v1/barbershops/:barbershopId/working-hours` replaces the weekly schedule. OWNER-only. Uses upsert per day on the `@@unique([barbershopId, dayOfWeek])` constraint — idempotent, no duplicate rows. Closed days set `isActive: false`. Time format: "HH:mm". Overnight hours rejected. See `apps/api/src/services/workingHoursService.ts`.
    - No invitation flow.
 
 ## PR-011 Verdict: ✅ PASS

@@ -10,6 +10,8 @@
  * - GET  /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (list employee services)
  * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId  OWNER (unassign service)
  * - GET  /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments     OWNER, BARBER (list employee appointments)
+ * - GET  /api/v1/barbershops/:barbershopId/working-hours                      OWNER (view working hours)
+ * - PUT  /api/v1/barbershops/:barbershopId/working-hours                      OWNER (update working hours)
  * - POST /api/v1/barbershops/:barbershopId/services                         OWNER (create service)
  */
 import { Router, Request, Response, NextFunction } from 'express';
@@ -23,6 +25,8 @@ import { CreateServiceSchema } from '../schemas/service.js';
 import * as employeeService from '../services/employeeService.js';
 import * as serviceService from '../services/serviceService.js';
 import * as appointmentService from '../services/appointmentService.js';
+import * as workingHoursService from '../services/workingHoursService.js';
+import { UpdateWorkingHoursSchema } from '../schemas/workingHours.js';
 import { BadRequestError } from '../lib/errors.js';
 
 /** Extracts barbershopId route param with validation */
@@ -218,6 +222,50 @@ router.patch(
         paramEmployeeId(req)
       );
       res.json({ success: true, data: employee });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/working-hours
+// List working hours for a barbershop (OWNER only)
+// ============================================
+router.get(
+  '/:barbershopId/working-hours',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const workingHours = await workingHoursService.getWorkingHours(
+        paramBarbershopId(req),
+        req.userId
+      );
+      res.json({ success: true, data: workingHours });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// PUT /api/v1/barbershops/:barbershopId/working-hours
+// Update working hours for a barbershop (OWNER only)
+// ============================================
+router.put(
+  '/:barbershopId/working-hours',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(UpdateWorkingHoursSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const workingHours = await workingHoursService.updateWorkingHours(
+        paramBarbershopId(req),
+        req.userId,
+        req.body.workingHours
+      );
+      res.json({ success: true, data: workingHours });
     } catch (error) {
       next(error);
     }
