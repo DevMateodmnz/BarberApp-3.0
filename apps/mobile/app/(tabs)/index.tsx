@@ -7,8 +7,8 @@
  * BARBER: sees their own employee summary (totals).
  * CLIENT: sees a "coming soon" message.
  */
-import { useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useContextStore } from '@/lib/store.js';
 import { useSummaryStore } from '@/lib/summaryStore.js';
@@ -37,12 +37,37 @@ export default function HomeScreen() {
     loadTodaySummary(getToken, context);
   }, [context, getToken, loadTodaySummary]);
 
+  // Pull-to-refresh: reload context then summary
+  const handleRefresh = useCallback(async () => {
+    if (!getToken) return;
+    await loadContext(getToken);
+    // After context reloads, the useEffect above will trigger summary reload.
+    // But if context didn't change (same reference), useEffect won't re-fire,
+    // so we explicitly reload here too.
+    const { context: freshContext } = useContextStore.getState();
+    if (freshContext) {
+      await loadTodaySummary(getToken, freshContext);
+    }
+  }, [getToken, loadContext, loadTodaySummary]);
+
+  const isRefreshing = isContextLoading || isSummaryLoading;
+
   if (!isLoaded || !isSignedIn) {
     return null;
   }
 
   return (
-    <ScrollView style={styles.scrollView} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          testID="home-refresh"
+        />
+      }
+    >
       <Text style={styles.appName}>BarberApp</Text>
 
       {/* Context loading */}
