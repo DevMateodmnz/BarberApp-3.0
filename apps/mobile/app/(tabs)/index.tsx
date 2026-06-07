@@ -10,11 +10,10 @@
 import { useEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
+import { DailySummarySection } from '@/components/DailySummarySection.js';
 import { useContextStore } from '@/lib/store.js';
 import { useSummaryStore } from '@/lib/summaryStore.js';
 import {
-  formatCents,
-  formatPaymentMethodLabel,
   getTodayDateString,
   addDaysToDateString,
   isTodayDateString,
@@ -194,9 +193,12 @@ export default function HomeScreen() {
           {/* OWNER summary */}
           {context.role === 'OWNER' && summary && !isSummaryLoading && !summaryError && (
             <View style={styles.summaryCard} testID="home-owner-summary">
-              <OwnerSummary
-                summary={summary as BarbershopDailySummary}
+              <DailySummarySection
+                byEmployee={(summary as BarbershopDailySummary).byEmployee}
+                byPaymentMethod={(summary as BarbershopDailySummary).byPaymentMethod}
                 selectedDate={selectedDate}
+                totalRecords={(summary as BarbershopDailySummary).totalRecords}
+                totalRevenueCents={(summary as BarbershopDailySummary).totalRevenueCents}
               />
             </View>
           )}
@@ -204,9 +206,11 @@ export default function HomeScreen() {
           {/* BARBER summary */}
           {context.role === 'BARBER' && summary && !isSummaryLoading && !summaryError && (
             <View style={styles.summaryCard} testID="home-barber-summary">
-              <BarberSummary
-                summary={summary as EmployeeDailySummary}
+              <DailySummarySection
+                byPaymentMethod={(summary as EmployeeDailySummary).byPaymentMethod}
                 selectedDate={selectedDate}
+                totalRecords={(summary as EmployeeDailySummary).totalRecords}
+                totalRevenueCents={(summary as EmployeeDailySummary).totalRevenueCents}
               />
             </View>
           )}
@@ -225,124 +229,6 @@ export default function HomeScreen() {
         </>
       )}
     </ScrollView>
-  );
-}
-
-/** OWNER summary: totals + employee breakdown + payment methods */
-function OwnerSummary({
-  summary,
-  selectedDate,
-}: {
-  summary: BarbershopDailySummary;
-  selectedDate: string;
-}) {
-  const dateLabel = isTodayDateString(selectedDate) ? 'Today' : selectedDate;
-  const hasRecords = summary.totalRecords > 0;
-
-  return (
-    <>
-      <Text style={styles.summaryTitle} testID="summary-title">
-        Daily Summary — {dateLabel}
-      </Text>
-      <View style={styles.totalsRow}>
-        <View style={styles.totalItem}>
-          <Text style={styles.totalValue}>{summary.totalRecords}</Text>
-          <Text style={styles.totalLabel}>Records</Text>
-        </View>
-        <View style={styles.totalItem}>
-          <Text style={styles.totalValue}>{formatCents(summary.totalRevenueCents)}</Text>
-          <Text style={styles.totalLabel}>Revenue</Text>
-        </View>
-      </View>
-
-      {!hasRecords && (
-        <Text style={styles.emptySummaryText}>
-          No services recorded for this date.
-        </Text>
-      )}
-
-      {hasRecords && summary.byEmployee.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>By Employee</Text>
-          {summary.byEmployee.map((emp) => (
-            <View key={emp.employeeId} style={styles.breakdownRow}>
-              <Text style={styles.breakdownName}>{emp.employeeName ?? 'Unknown'}</Text>
-              <Text style={styles.breakdownDetail}>
-                {emp.recordsCount} · {formatCents(emp.revenueCents)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {hasRecords && summary.byPaymentMethod.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>By Payment Method</Text>
-          {summary.byPaymentMethod.map((pm, i) => (
-            <View key={pm.paymentMethod ?? `null-${i}`} style={styles.breakdownRow}>
-              <Text style={styles.breakdownName}>
-                {formatPaymentMethodLabel(pm.paymentMethod)}
-              </Text>
-              <Text style={styles.breakdownDetail}>
-                {pm.recordsCount} · {formatCents(pm.revenueCents)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </>
-  );
-}
-
-/** BARBER summary: totals + payment methods */
-function BarberSummary({
-  summary,
-  selectedDate,
-}: {
-  summary: EmployeeDailySummary;
-  selectedDate: string;
-}) {
-  const dateLabel = isTodayDateString(selectedDate) ? 'Today' : selectedDate;
-  const hasRecords = summary.totalRecords > 0;
-
-  return (
-    <>
-      <Text style={styles.summaryTitle} testID="summary-title">
-        Daily Summary — {dateLabel}
-      </Text>
-      <View style={styles.totalsRow}>
-        <View style={styles.totalItem}>
-          <Text style={styles.totalValue}>{summary.totalRecords}</Text>
-          <Text style={styles.totalLabel}>Records</Text>
-        </View>
-        <View style={styles.totalItem}>
-          <Text style={styles.totalValue}>{formatCents(summary.totalRevenueCents)}</Text>
-          <Text style={styles.totalLabel}>Revenue</Text>
-        </View>
-      </View>
-
-      {!hasRecords && (
-        <Text style={styles.emptySummaryText}>
-          No services recorded for this date.
-        </Text>
-      )}
-
-      {hasRecords && summary.byPaymentMethod.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>By Payment Method</Text>
-          {summary.byPaymentMethod.map((pm, i) => (
-            <View key={pm.paymentMethod ?? `null-${i}`} style={styles.breakdownRow}>
-              <Text style={styles.breakdownName}>
-                {formatPaymentMethodLabel(pm.paymentMethod)}
-              </Text>
-              <Text style={styles.breakdownDetail}>
-                {pm.recordsCount} · {formatCents(pm.revenueCents)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </>
   );
 }
 
@@ -427,47 +313,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#333',
     marginBottom: 12,
-  },
-  totalsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 16,
-  },
-  totalItem: {
-    alignItems: 'center',
-  },
-  totalValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#007AFF',
-  },
-  totalLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  section: {
-    marginTop: 12,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 6,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  breakdownName: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
-  breakdownDetail: {
-    fontSize: 14,
-    color: '#666',
   },
   // Date navigation controls
   dateControls: {
