@@ -103,3 +103,81 @@ describe('getTodayDateString', () => {
     expect(result).toBe('2026-01-05');
   });
 });
+
+// ============================================================================
+// addDaysToDateString — MS-001
+// Tests for the new date arithmetic helper.
+// These functions do NOT exist yet — RED phase.
+// ============================================================================
+
+describe('addDaysToDateString', () => {
+  // S1: Previous day within same month
+  it('subtracts one day within same month (S1)', async () => {
+    const { addDaysToDateString } = await import('../../src/lib/format.js');
+    expect(addDaysToDateString('2026-01-15', -1)).toBe('2026-01-14');
+  });
+
+  // S2: Next day crossing month boundary
+  it('adds one day crossing month boundary (S2)', async () => {
+    const { addDaysToDateString } = await import('../../src/lib/format.js');
+    expect(addDaysToDateString('2026-01-31', 1)).toBe('2026-02-01');
+  });
+
+  // S3: Previous day crossing month boundary (non-leap year)
+  it('subtracts one day crossing month boundary in non-leap year (S3)', async () => {
+    const { addDaysToDateString } = await import('../../src/lib/format.js');
+    expect(addDaysToDateString('2026-03-01', -1)).toBe('2026-02-28');
+  });
+
+  // S4: Previous day crossing month boundary in leap year
+  it('subtracts one day crossing month boundary in leap year (S4)', async () => {
+    const { addDaysToDateString } = await import('../../src/lib/format.js');
+    expect(addDaysToDateString('2028-03-01', -1)).toBe('2028-02-29');
+  });
+
+  // S5: Zero-day offset (identity)
+  it('returns same date for zero offset (S5)', async () => {
+    const { addDaysToDateString } = await import('../../src/lib/format.js');
+    expect(addDaysToDateString('2026-01-01', 0)).toBe('2026-01-01');
+  });
+
+  // S6: Next day crossing year boundary
+  it('adds one day crossing year boundary (S6)', async () => {
+    const { addDaysToDateString } = await import('../../src/lib/format.js');
+    expect(addDaysToDateString('2026-12-31', 1)).toBe('2027-01-01');
+  });
+
+  // Edge: multi-day offset forward
+  it('adds multiple days forward', async () => {
+    const { addDaysToDateString } = await import('../../src/lib/format.js');
+    expect(addDaysToDateString('2026-06-01', 7)).toBe('2026-06-08');
+  });
+
+  // Edge: multi-day offset backward
+  it('subtracts multiple days backward across months', async () => {
+    const { addDaysToDateString } = await import('../../src/lib/format.js');
+    expect(addDaysToDateString('2026-03-10', -15)).toBe('2026-02-23');
+  });
+});
+
+// ============================================================================
+// isTodayDateString — MS-002
+// ============================================================================
+
+describe('isTodayDateString', () => {
+  it('returns true for today\'s date', async () => {
+    const { getTodayDateString, isTodayDateString } = await import('../../src/lib/format.js');
+    const today = getTodayDateString();
+    expect(isTodayDateString(today)).toBe(true);
+  });
+
+  it('returns false for a past date', async () => {
+    const { isTodayDateString } = await import('../../src/lib/format.js');
+    expect(isTodayDateString('2020-01-01')).toBe(false);
+  });
+
+  it('returns false for a future date', async () => {
+    const { isTodayDateString } = await import('../../src/lib/format.js');
+    expect(isTodayDateString('2030-12-31')).toBe(false);
+  });
+});

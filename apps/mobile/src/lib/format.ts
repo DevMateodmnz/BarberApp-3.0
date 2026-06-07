@@ -75,3 +75,43 @@ export function getTodayDateString(date?: Date): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * Adds or subtracts days from a YYYY-MM-DD date string using
+ * local calendar arithmetic via Date.setDate().
+ *
+ * Parses the string manually (split on '-', parseInt) to avoid
+ * UTC off-by-one issues with `new Date(dateString)`.
+ *
+ * @param date - Date string in YYYY-MM-DD format
+ * @param amount - Number of days to add (negative to subtract)
+ * @returns New date string in YYYY-MM-DD format
+ *
+ * @example
+ * addDaysToDateString('2026-01-15', -1)  // '2026-01-14'
+ * addDaysToDateString('2026-01-31', 1)   // '2026-02-01'
+ * addDaysToDateString('2028-03-01', -1)  // '2028-02-29' (leap year)
+ */
+export function addDaysToDateString(date: string, amount: number): string {
+  const parts = date.split('-');
+  // YYYY-MM-DD always splits into 3 parts
+  const y = parseInt(parts[0]!, 10);
+  const m = parseInt(parts[1]!, 10);
+  const d = parseInt(parts[2]!, 10);
+  const base = new Date(y, m - 1, d);
+  base.setDate(base.getDate() + amount);
+  const year = base.getFullYear();
+  const month = String(base.getMonth() + 1).padStart(2, '0');
+  const day = String(base.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Checks whether a YYYY-MM-DD date string matches today's local date.
+ *
+ * @param date - Date string in YYYY-MM-DD format
+ * @returns true if the date is today, false otherwise
+ */
+export function isTodayDateString(date: string): boolean {
+  return date === getTodayDateString();
+}
