@@ -156,6 +156,94 @@ describe('buildServiceRecordPayload', () => {
     expect(payload).not.toHaveProperty('paymentMethod');
   });
 
+  it('includes trimmed clientName when non-empty', async () => {
+    const { buildServiceRecordPayload } = await importPayloadHelper();
+
+    expect(
+      buildServiceRecordPayload({
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCents: 2500,
+        clientName: '  Jane Doe  ',
+      })
+    ).toEqual({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 2500,
+      clientName: 'Jane Doe',
+    });
+  });
+
+  it('omits clientName when empty', async () => {
+    const { buildServiceRecordPayload } = await importPayloadHelper();
+
+    const payload = buildServiceRecordPayload({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 1500,
+      clientName: '',
+    });
+
+    expect(payload).not.toHaveProperty('clientName');
+  });
+
+  it('omits clientName when whitespace-only', async () => {
+    const { buildServiceRecordPayload } = await importPayloadHelper();
+
+    const payload = buildServiceRecordPayload({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 1500,
+      clientName: '   ',
+    });
+
+    expect(payload).not.toHaveProperty('clientName');
+  });
+
+  it('includes trimmed notes when non-empty', async () => {
+    const { buildServiceRecordPayload } = await importPayloadHelper();
+
+    expect(
+      buildServiceRecordPayload({
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCents: 2500,
+        notes: '  VIP client  ',
+      })
+    ).toEqual({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 2500,
+      notes: 'VIP client',
+    });
+  });
+
+  it('omits notes when empty', async () => {
+    const { buildServiceRecordPayload } = await importPayloadHelper();
+
+    const payload = buildServiceRecordPayload({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 1500,
+      notes: '',
+    });
+
+    expect(payload).not.toHaveProperty('notes');
+  });
+
+  it('omits notes when whitespace-only', async () => {
+    const { buildServiceRecordPayload } = await importPayloadHelper();
+
+    const payload = buildServiceRecordPayload({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 1500,
+      notes: '   ',
+    });
+
+    expect(payload).not.toHaveProperty('notes');
+  });
+
   it('supports all typed payment methods safely', async () => {
     const { buildServiceRecordPayload } = await importPayloadHelper();
 
@@ -206,14 +294,23 @@ describe('buildBarberServiceRecordPayload', () => {
       serviceId: 'svc-1',
       priceCents: 1500,
       paymentMethod: null,
+      clientName: '  Jane Doe  ',
+      notes: '  VIP client  ',
     });
 
+    expect(payload).toEqual({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 1500,
+      clientName: 'Jane Doe',
+      notes: 'VIP client',
+    });
     expect(payload).not.toHaveProperty('performedAt');
   });
 });
 
 describe('validateServiceRecordDraft', () => {
-  it('passes valid integer priceCents input', async () => {
+  it('passes valid integer priceCents input with valid optional clientName and notes', async () => {
     const { validateServiceRecordDraft } = await importPayloadHelper();
 
     expect(
@@ -222,12 +319,16 @@ describe('validateServiceRecordDraft', () => {
         employeeId: 'emp-1',
         serviceId: 'svc-1',
         priceCentsInput: '2500',
+        clientNameInput: '  Jane Doe  ',
+        notesInput: '  VIP client  ',
       })
     ).toEqual({
       ok: true,
       employeeId: 'emp-1',
       serviceId: 'svc-1',
       priceCents: 2500,
+      clientName: 'Jane Doe',
+      notes: 'VIP client',
     });
   });
 
@@ -307,5 +408,33 @@ describe('validateServiceRecordDraft', () => {
         priceCentsInput: '-1',
       })
     ).toEqual({ ok: false, error: 'Enter a valid non-negative integer price in cents.' });
+  });
+
+  it('fails when clientName exceeds 200 characters', async () => {
+    const { validateServiceRecordDraft } = await importPayloadHelper();
+
+    expect(
+      validateServiceRecordDraft({
+        mode: 'OWNER',
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCentsInput: '2500',
+        clientNameInput: 'a'.repeat(201),
+      })
+    ).toEqual({ ok: false, error: 'Client name must be 200 characters or fewer.' });
+  });
+
+  it('fails when notes exceed 1000 characters', async () => {
+    const { validateServiceRecordDraft } = await importPayloadHelper();
+
+    expect(
+      validateServiceRecordDraft({
+        mode: 'OWNER',
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCentsInput: '2500',
+        notesInput: 'a'.repeat(1001),
+      })
+    ).toEqual({ ok: false, error: 'Notes must be 1000 characters or fewer.' });
   });
 });

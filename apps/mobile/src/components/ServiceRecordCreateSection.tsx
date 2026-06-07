@@ -49,6 +49,8 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
   );
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [clientNameInput, setClientNameInput] = useState('');
+  const [notesInput, setNotesInput] = useState('');
   const [priceCentsInput, setPriceCentsInput] = useState('');
   const [isEmployeesLoading, setIsEmployeesLoading] = useState(false);
   const [isServicesLoading, setIsServicesLoading] = useState(false);
@@ -74,6 +76,8 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
       setFormSuccess(null);
       setSelectedServiceId(null);
       setSelectedPaymentMethod(null);
+      setClientNameInput('');
+      setNotesInput('');
       setPriceCentsInput('');
       setServices([]);
 
@@ -184,6 +188,8 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
       employeeId: effectiveEmployeeId,
       serviceId: selectedServiceId,
       priceCentsInput,
+      clientNameInput,
+      notesInput,
     });
 
     if (!validation.ok) {
@@ -199,12 +205,16 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         serviceId: validation.serviceId,
         priceCents: validation.priceCents,
         paymentMethod: selectedPaymentMethod,
+        clientName: validation.clientName,
+        notes: validation.notes,
       });
 
       await createServiceRecord(getToken, barbershopId, payload);
 
       setSelectedServiceId(null);
       setSelectedPaymentMethod(null);
+      setClientNameInput('');
+      setNotesInput('');
       setPriceCentsInput('');
       setFormSuccess('Service record created successfully.');
 
@@ -370,6 +380,35 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         ))}
       </View>
 
+      <Text style={styles.sectionLabel}>Client Name (optional)</Text>
+      <TextInput
+        value={clientNameInput}
+        onChangeText={(value) => {
+          setClientNameInput(value);
+          setFormError(null);
+          setFormSuccess(null);
+        }}
+        placeholder="e.g. Jane Doe"
+        style={styles.input}
+        autoCapitalize="words"
+        testID="service-record-client-name"
+      />
+
+      <Text style={styles.sectionLabel}>Notes (optional)</Text>
+      <TextInput
+        value={notesInput}
+        onChangeText={(value) => {
+          setNotesInput(value);
+          setFormError(null);
+          setFormSuccess(null);
+        }}
+        placeholder="Add any useful details"
+        style={[styles.input, styles.notesInput]}
+        multiline
+        textAlignVertical="top"
+        testID="service-record-notes"
+      />
+
       {formError && (
         <Text style={styles.errorText} testID="service-record-error">
           {formError}
@@ -476,6 +515,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     color: '#333',
+  },
+  notesInput: {
+    minHeight: 88,
   },
   errorText: {
     fontSize: 13,
