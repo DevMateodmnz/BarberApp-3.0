@@ -119,8 +119,68 @@ describe('createServiceRecord', () => {
   });
 });
 
+describe('buildServiceRecordPayload', () => {
+  it('includes paymentMethod when selected', async () => {
+    const { buildServiceRecordPayload } = await importPayloadHelper();
+
+    expect(
+      buildServiceRecordPayload({
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCents: 2500,
+        paymentMethod: 'CARD',
+      })
+    ).toEqual({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 2500,
+      paymentMethod: 'CARD',
+    });
+  });
+
+  it('omits paymentMethod when unspecified', async () => {
+    const { buildServiceRecordPayload } = await importPayloadHelper();
+
+    const payload = buildServiceRecordPayload({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 1500,
+      paymentMethod: null,
+    });
+
+    expect(payload).toEqual({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 1500,
+    });
+    expect(payload).not.toHaveProperty('paymentMethod');
+  });
+
+  it('supports all typed payment methods safely', async () => {
+    const { buildServiceRecordPayload } = await importPayloadHelper();
+
+    const paymentMethods = ['CASH', 'CARD', 'TRANSFER', 'OTHER'] as const;
+
+    for (const paymentMethod of paymentMethods) {
+      expect(
+        buildServiceRecordPayload({
+          employeeId: 'emp-1',
+          serviceId: 'svc-1',
+          priceCents: 2500,
+          paymentMethod,
+        })
+      ).toEqual({
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCents: 2500,
+        paymentMethod,
+      });
+    }
+  });
+});
+
 describe('buildBarberServiceRecordPayload', () => {
-  it('uses context employeeId, serviceId, and priceCents', async () => {
+  it('uses context employeeId, serviceId, priceCents, and optional paymentMethod', async () => {
     const { buildBarberServiceRecordPayload } = await importPayloadHelper();
 
     expect(
@@ -128,11 +188,13 @@ describe('buildBarberServiceRecordPayload', () => {
         employeeId: 'emp-1',
         serviceId: 'svc-1',
         priceCents: 2500,
+        paymentMethod: 'CASH',
       })
     ).toEqual({
       employeeId: 'emp-1',
       serviceId: 'svc-1',
       priceCents: 2500,
+      paymentMethod: 'CASH',
     });
   });
 
@@ -143,12 +205,12 @@ describe('buildBarberServiceRecordPayload', () => {
       employeeId: 'emp-1',
       serviceId: 'svc-1',
       priceCents: 1500,
+      paymentMethod: null,
     });
 
     expect(payload).not.toHaveProperty('performedAt');
   });
 });
-
 
 describe('validateServiceRecordDraft', () => {
   it('passes valid integer priceCents input', async () => {

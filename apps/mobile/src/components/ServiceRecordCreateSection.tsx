@@ -10,12 +10,13 @@ import {
 import type { GetToken } from '@/lib/api.js';
 import { fetchEmployeeServices, fetchMyAssignedServices } from '@/lib/employeeServices.js';
 import { fetchEmployees } from '@/lib/employees.js';
+import { formatPaymentMethodLabel } from '@/lib/format.js';
 import {
-  buildBarberServiceRecordPayload,
+  buildServiceRecordPayload,
   validateServiceRecordDraft,
 } from '@/lib/serviceRecordPayload.js';
 import { createServiceRecord } from '@/lib/serviceRecords.js';
-import type { EmployeeListItem, Service } from '@/lib/types.js';
+import type { EmployeeListItem, PaymentMethod, Service } from '@/lib/types.js';
 
 interface BaseProps {
   barbershopId: string;
@@ -34,6 +35,8 @@ interface BarberProps extends BaseProps {
 
 type ServiceRecordCreateSectionProps = OwnerProps | BarberProps;
 
+const PAYMENT_METHOD_OPTIONS: PaymentMethod[] = ['CASH', 'CARD', 'TRANSFER', 'OTHER'];
+
 export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProps) {
   const { barbershopId, getToken, onRecordCreated } = props;
   const isBarberMode = props.mode === 'BARBER';
@@ -45,6 +48,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
     isBarberMode ? props.employeeId : null
   );
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
   const [priceCentsInput, setPriceCentsInput] = useState('');
   const [isEmployeesLoading, setIsEmployeesLoading] = useState(false);
   const [isServicesLoading, setIsServicesLoading] = useState(false);
@@ -69,6 +73,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
       setFormError(null);
       setFormSuccess(null);
       setSelectedServiceId(null);
+      setSelectedPaymentMethod(null);
       setPriceCentsInput('');
       setServices([]);
 
@@ -189,21 +194,17 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
     setIsSubmitting(true);
 
     try {
-      const payload = isBarberMode
-        ? buildBarberServiceRecordPayload({
-            employeeId: validation.employeeId,
-            serviceId: validation.serviceId,
-            priceCents: validation.priceCents,
-          })
-        : {
-            employeeId: validation.employeeId,
-            serviceId: validation.serviceId,
-            priceCents: validation.priceCents,
-          };
+      const payload = buildServiceRecordPayload({
+        employeeId: validation.employeeId,
+        serviceId: validation.serviceId,
+        priceCents: validation.priceCents,
+        paymentMethod: selectedPaymentMethod,
+      });
 
       await createServiceRecord(getToken, barbershopId, payload);
 
       setSelectedServiceId(null);
+      setSelectedPaymentMethod(null);
       setPriceCentsInput('');
       setFormSuccess('Service record created successfully.');
 
@@ -318,6 +319,56 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         style={styles.input}
         testID="service-record-price-cents"
       />
+
+      <Text style={styles.sectionLabel}>Payment Method (optional)</Text>
+      <View style={styles.optionGroup}>
+        <TouchableOpacity
+          onPress={() => {
+            setSelectedPaymentMethod(null);
+            setFormError(null);
+            setFormSuccess(null);
+          }}
+          style={[
+            styles.optionButton,
+            selectedPaymentMethod === null && styles.optionButtonSelected,
+          ]}
+          testID="payment-method-unspecified"
+        >
+          <Text
+            style={[
+              styles.optionButtonText,
+              selectedPaymentMethod === null && styles.optionButtonTextSelected,
+            ]}
+          >
+            Unspecified
+          </Text>
+        </TouchableOpacity>
+
+        {PAYMENT_METHOD_OPTIONS.map((paymentMethod) => (
+          <TouchableOpacity
+            key={paymentMethod}
+            onPress={() => {
+              setSelectedPaymentMethod(paymentMethod);
+              setFormError(null);
+              setFormSuccess(null);
+            }}
+            style={[
+              styles.optionButton,
+              selectedPaymentMethod === paymentMethod && styles.optionButtonSelected,
+            ]}
+            testID={`payment-method-${paymentMethod.toLowerCase()}`}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                selectedPaymentMethod === paymentMethod && styles.optionButtonTextSelected,
+              ]}
+            >
+              {formatPaymentMethodLabel(paymentMethod)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       {formError && (
         <Text style={styles.errorText} testID="service-record-error">

@@ -1,7 +1,8 @@
-import type { CreateServiceRecordInput } from './types.js';
+import type { CreateServiceRecordInput, PaymentMethod } from './types.js';
 
-interface BuildBarberServiceRecordPayloadInput {
+interface BuildServiceRecordPayloadInput {
   employeeId: string;
+  paymentMethod?: PaymentMethod | null;
   priceCents: number;
   serviceId: string;
 }
@@ -19,16 +20,24 @@ type ServiceRecordDraftValidationResult =
 
 const INVALID_PRICE_ERROR = 'Enter a valid non-negative integer price in cents.';
 
-export function buildBarberServiceRecordPayload({
+export function buildServiceRecordPayload({
   employeeId,
+  paymentMethod,
   priceCents,
   serviceId,
-}: BuildBarberServiceRecordPayloadInput): CreateServiceRecordInput {
+}: BuildServiceRecordPayloadInput): CreateServiceRecordInput {
   return {
     employeeId,
     serviceId,
     priceCents,
+    ...(paymentMethod ? { paymentMethod } : {}),
   };
+}
+
+export function buildBarberServiceRecordPayload(
+  input: BuildServiceRecordPayloadInput
+): CreateServiceRecordInput {
+  return buildServiceRecordPayload(input);
 }
 
 export function validateServiceRecordDraft({
