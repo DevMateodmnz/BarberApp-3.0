@@ -12,7 +12,13 @@ import { View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, 
 import { useAuth } from '@clerk/clerk-expo';
 import { useContextStore } from '@/lib/store.js';
 import { useSummaryStore } from '@/lib/summaryStore.js';
-import { formatCents, getTodayDateString, addDaysToDateString, isTodayDateString } from '@/lib/format.js';
+import {
+  formatCents,
+  formatPaymentMethodLabel,
+  getTodayDateString,
+  addDaysToDateString,
+  isTodayDateString,
+} from '@/lib/format.js';
 import type { BarbershopDailySummary, EmployeeDailySummary } from '@/lib/types.js';
 
 export default function HomeScreen() {
@@ -231,10 +237,12 @@ function OwnerSummary({
   selectedDate: string;
 }) {
   const dateLabel = isTodayDateString(selectedDate) ? 'Today' : selectedDate;
+  const hasRecords = summary.totalRecords > 0;
+
   return (
     <>
       <Text style={styles.summaryTitle} testID="summary-title">
-        {dateLabel} — {summary.date}
+        Daily Summary — {dateLabel}
       </Text>
       <View style={styles.totalsRow}>
         <View style={styles.totalItem}>
@@ -247,7 +255,13 @@ function OwnerSummary({
         </View>
       </View>
 
-      {summary.byEmployee.length > 0 && (
+      {!hasRecords && (
+        <Text style={styles.emptySummaryText}>
+          No services recorded for this date.
+        </Text>
+      )}
+
+      {hasRecords && summary.byEmployee.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>By Employee</Text>
           {summary.byEmployee.map((emp) => (
@@ -261,12 +275,14 @@ function OwnerSummary({
         </View>
       )}
 
-      {summary.byPaymentMethod.length > 0 && (
+      {hasRecords && summary.byPaymentMethod.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>By Payment Method</Text>
           {summary.byPaymentMethod.map((pm, i) => (
             <View key={pm.paymentMethod ?? `null-${i}`} style={styles.breakdownRow}>
-              <Text style={styles.breakdownName}>{pm.paymentMethod ?? 'Unknown'}</Text>
+              <Text style={styles.breakdownName}>
+                {formatPaymentMethodLabel(pm.paymentMethod)}
+              </Text>
               <Text style={styles.breakdownDetail}>
                 {pm.recordsCount} · {formatCents(pm.revenueCents)}
               </Text>
@@ -287,10 +303,12 @@ function BarberSummary({
   selectedDate: string;
 }) {
   const dateLabel = isTodayDateString(selectedDate) ? 'Today' : selectedDate;
+  const hasRecords = summary.totalRecords > 0;
+
   return (
     <>
       <Text style={styles.summaryTitle} testID="summary-title">
-        {dateLabel} — {summary.date}
+        Daily Summary — {dateLabel}
       </Text>
       <View style={styles.totalsRow}>
         <View style={styles.totalItem}>
@@ -303,12 +321,20 @@ function BarberSummary({
         </View>
       </View>
 
-      {summary.byPaymentMethod.length > 0 && (
+      {!hasRecords && (
+        <Text style={styles.emptySummaryText}>
+          No services recorded for this date.
+        </Text>
+      )}
+
+      {hasRecords && summary.byPaymentMethod.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>By Payment Method</Text>
           {summary.byPaymentMethod.map((pm, i) => (
             <View key={pm.paymentMethod ?? `null-${i}`} style={styles.breakdownRow}>
-              <Text style={styles.breakdownName}>{pm.paymentMethod ?? 'Unknown'}</Text>
+              <Text style={styles.breakdownName}>
+                {formatPaymentMethodLabel(pm.paymentMethod)}
+              </Text>
               <Text style={styles.breakdownDetail}>
                 {pm.recordsCount} · {formatCents(pm.revenueCents)}
               </Text>
@@ -375,6 +401,12 @@ const styles = StyleSheet.create({
     color: '#999',
     fontStyle: 'italic',
     marginTop: 8,
+  },
+  emptySummaryText: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   comingSoon: {
     fontSize: 14,

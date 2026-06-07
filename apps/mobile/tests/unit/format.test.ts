@@ -47,6 +47,49 @@ describe('formatCents', () => {
   });
 });
 
+describe('formatPaymentMethodLabel', () => {
+  it('maps CASH to Cash', async () => {
+    const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');
+    expect(formatPaymentMethodLabel('CASH')).toBe('Cash');
+  });
+
+  it('maps CARD to Card', async () => {
+    const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');
+    expect(formatPaymentMethodLabel('CARD')).toBe('Card');
+  });
+
+  it('maps TRANSFER to Transfer', async () => {
+    const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');
+    expect(formatPaymentMethodLabel('TRANSFER')).toBe('Transfer');
+  });
+
+  it('maps OTHER to Other', async () => {
+    const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');
+    expect(formatPaymentMethodLabel('OTHER')).toBe('Other');
+  });
+
+  it('maps null to Unspecified', async () => {
+    const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');
+    expect(formatPaymentMethodLabel(null)).toBe('Unspecified');
+  });
+
+  it('maps undefined to Unspecified', async () => {
+    const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');
+    expect(formatPaymentMethodLabel(undefined)).toBe('Unspecified');
+  });
+
+  it('maps unknown strings to Unspecified', async () => {
+    const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');
+    expect(formatPaymentMethodLabel('CRYPTO')).toBe('Unspecified');
+  });
+
+  it('does not throw on unexpected input', async () => {
+    const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');
+    expect(() => formatPaymentMethodLabel({ method: 'CASH' })).not.toThrow();
+    expect(formatPaymentMethodLabel({ method: 'CASH' })).toBe('Unspecified');
+  });
+});
+
 describe('getTodayDateString', () => {
   it('returns YYYY-MM-DD format for current date', async () => {
     const { getTodayDateString } = await import('../../src/lib/format.js');

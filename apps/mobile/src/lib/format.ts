@@ -49,6 +49,35 @@ export function formatCents(cents: number): string {
 }
 
 /**
+ * Formats backend payment method values for display in daily summaries.
+ *
+ * Backend values are stored as enum-like strings, but older/missing records may
+ * have null, undefined, or unexpected values. Unknown inputs intentionally fall
+ * back to a human-friendly "Unspecified" label instead of leaking raw values.
+ *
+ * @param paymentMethod - Backend payment method value
+ * @returns Human-readable English label
+ */
+export function formatPaymentMethodLabel(paymentMethod: unknown): string {
+  if (typeof paymentMethod !== 'string') {
+    return 'Unspecified';
+  }
+
+  switch (paymentMethod.trim().toUpperCase()) {
+    case 'CASH':
+      return 'Cash';
+    case 'CARD':
+      return 'Card';
+    case 'TRANSFER':
+      return 'Transfer';
+    case 'OTHER':
+      return 'Other';
+    default:
+      return 'Unspecified';
+  }
+}
+
+/**
  * Returns a date string in YYYY-MM-DD format.
  *
  * Uses LOCAL calendar fields (getFullYear, getMonth, getDate)
