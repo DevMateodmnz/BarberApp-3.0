@@ -2,7 +2,7 @@
  * Protected tabs layout — shown when user is signed in.
  *
  * Minimal single-tab layout for PR-028A.
- * Will be expanded with role-based tabs in later PRs.
+ * Hidden detail routes can live inside this group without becoming visible tabs.
  */
 import { Tabs } from 'expo-router';
 
@@ -13,6 +13,13 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
+        }}
+      />
+      <Tabs.Screen
+        name="record-service"
+        options={{
+          title: 'Record Service',
+          href: null,
         }}
       />
     </Tabs>

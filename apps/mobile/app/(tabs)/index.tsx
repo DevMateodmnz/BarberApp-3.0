@@ -7,11 +7,11 @@
  * BARBER: sees their own employee summary (totals).
  * CLIENT: sees a "coming soon" message.
  */
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { DailySummarySection } from '@/components/DailySummarySection.js';
-import { ServiceRecordCreateSection } from '@/components/ServiceRecordCreateSection.js';
 import { useContextStore } from '@/lib/store.js';
 import { useSummaryStore } from '@/lib/summaryStore.js';
 import {
@@ -22,6 +22,7 @@ import {
 import type { BarbershopDailySummary, EmployeeDailySummary } from '@/lib/types.js';
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { isSignedIn, getToken, isLoaded } = useAuth();
   const { context, isLoading: isContextLoading, error: contextError, loadContext } = useContextStore();
   const {
@@ -32,6 +33,7 @@ export default function HomeScreen() {
   } = useSummaryStore();
 
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
+  const hasFocusedOnceRef = useRef(false);
 
   // Load context when signed in
   useEffect(() => {
@@ -44,6 +46,22 @@ export default function HomeScreen() {
     if (!context || !getToken) return;
     loadSummaryForDate(getToken, context, selectedDate);
   }, [context, getToken, selectedDate, loadSummaryForDate]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnceRef.current) {
+        hasFocusedOnceRef.current = true;
+        return undefined;
+      }
+
+      if (!context || !getToken) {
+        return undefined;
+      }
+
+      void loadSummaryForDate(getToken, context, selectedDate);
+      return undefined;
+    }, [context, getToken, loadSummaryForDate, selectedDate])
+  );
 
   // Pull-to-refresh: reload context then summary for selectedDate
   const handleRefresh = useCallback(async () => {
@@ -58,10 +76,11 @@ export default function HomeScreen() {
     }
   }, [getToken, loadContext, selectedDate, loadSummaryForDate]);
 
-  const handleServiceRecordCreated = useCallback(async () => {
-    if (!context || !getToken) return;
-    await loadSummaryForDate(getToken, context, selectedDate);
-  }, [context, getToken, loadSummaryForDate, selectedDate]);
+  const canRecordService =
+    !!context && (
+      (context.role === 'OWNER' && !!context.barbershopId) ||
+      (context.role === 'BARBER' && !!context.barbershopId && !!context.employeeId)
+    );
 
   const isRefreshing = isContextLoading || isSummaryLoading;
 
@@ -129,24 +148,20 @@ export default function HomeScreen() {
               )}
           </View>
 
-          {/* Summary section */}
-          {context.role === 'OWNER' && context.barbershopId && (
-            <ServiceRecordCreateSection
-              mode="OWNER"
-              barbershopId={context.barbershopId}
-              getToken={getToken}
-              onRecordCreated={handleServiceRecordCreated}
-            />
-          )}
-
-          {context.role === 'BARBER' && context.barbershopId && context.employeeId && (
-            <ServiceRecordCreateSection
-              mode="BARBER"
-              barbershopId={context.barbershopId}
-              employeeId={context.employeeId}
-              getToken={getToken}
-              onRecordCreated={handleServiceRecordCreated}
-            />
+          {canRecordService && (
+            <View style={styles.actionCard} testID="home-record-service-card">
+              <Text style={styles.actionTitle}>Record Service</Text>
+              <Text style={styles.actionText}>
+                Add a completed service record without leaving the mobile app.
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/record-service')}
+                style={styles.actionButton}
+                testID="home-record-service-button"
+              >
+                <Text style={styles.actionButtonText}>Open Form</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           {context.role === 'CLIENT' && (
@@ -313,17 +328,41 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
   },
-  emptySummaryText: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
-    textAlign: 'center',
-  },
   comingSoon: {
     fontSize: 14,
     color: '#999',
     fontStyle: 'italic',
     marginTop: 8,
+  },
+  actionCard: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    marginTop: 16,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+  },
+  actionText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 6,
+  },
+  actionButton: {
+    marginTop: 16,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   summaryCard: {
     backgroundColor: '#F5F5F5',
@@ -339,7 +378,6 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
   },
-  // Date navigation controls
   dateControls: {
     flexDirection: 'row',
     alignItems: 'center',
