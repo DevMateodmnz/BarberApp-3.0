@@ -7,12 +7,12 @@
  * BARBER: sees their own employee summary (totals).
  * CLIENT: sees a "coming soon" message.
  */
-import { useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
+import { useEffect, useCallback, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useContextStore } from '@/lib/store.js';
 import { useSummaryStore } from '@/lib/summaryStore.js';
-import { formatCents } from '@/lib/format.js';
+import { formatCents, getTodayDateString, addDaysToDateString, isTodayDateString } from '@/lib/format.js';
 import type { BarbershopDailySummary, EmployeeDailySummary } from '@/lib/types.js';
 
 export default function HomeScreen() {
@@ -22,8 +22,10 @@ export default function HomeScreen() {
     summary,
     isSummaryLoading,
     summaryError,
-    loadTodaySummary,
+    loadSummaryForDate,
   } = useSummaryStore();
+
+  const [selectedDate, setSelectedDate] = useState(getTodayDateString());
 
   // Load context when signed in
   useEffect(() => {
@@ -31,13 +33,13 @@ export default function HomeScreen() {
     loadContext(getToken);
   }, [isSignedIn, getToken, loadContext]);
 
-  // Load summary after context is loaded
+  // Load summary after context is loaded, for the selected date
   useEffect(() => {
     if (!context || !getToken) return;
-    loadTodaySummary(getToken, context);
-  }, [context, getToken, loadTodaySummary]);
+    loadSummaryForDate(getToken, context, selectedDate);
+  }, [context, getToken, selectedDate, loadSummaryForDate]);
 
-  // Pull-to-refresh: reload context then summary
+  // Pull-to-refresh: reload context then summary for selectedDate
   const handleRefresh = useCallback(async () => {
     if (!getToken) return;
     await loadContext(getToken);
@@ -46,9 +48,9 @@ export default function HomeScreen() {
     // so we explicitly reload here too.
     const { context: freshContext } = useContextStore.getState();
     if (freshContext) {
-      await loadTodaySummary(getToken, freshContext);
+      await loadSummaryForDate(getToken, freshContext, selectedDate);
     }
-  }, [getToken, loadContext, loadTodaySummary]);
+  }, [getToken, loadContext, selectedDate, loadSummaryForDate]);
 
   const isRefreshing = isContextLoading || isSummaryLoading;
 
@@ -124,6 +126,50 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* Date navigation controls — only for OWNER and BARBER, not CLIENT */}
+          {(context.role === 'OWNER' || context.role === 'BARBER') && (
+            <View style={styles.dateControls} testID="date-controls">
+              <TouchableOpacity
+                onPress={() => setSelectedDate((prev) => addDaysToDateString(prev, -1))}
+                style={styles.dateButton}
+                testID="date-prev"
+              >
+                <Text style={styles.dateButtonText}>◀</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  const today = getTodayDateString();
+                  if (selectedDate !== today) {
+                    setSelectedDate(today);
+                  }
+                }}
+                style={[styles.dateButton, isTodayDateString(selectedDate) && styles.dateButtonDisabled]}
+                disabled={isTodayDateString(selectedDate)}
+                testID="date-today"
+              >
+                <Text
+                  style={[
+                    styles.dateButtonText,
+                    isTodayDateString(selectedDate) && styles.dateButtonTextDisabled,
+                  ]}
+                >
+                  Today
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.dateDisplay} testID="date-display">{selectedDate}</Text>
+
+              <TouchableOpacity
+                onPress={() => setSelectedDate((prev) => addDaysToDateString(prev, 1))}
+                style={styles.dateButton}
+                testID="date-next"
+              >
+                <Text style={styles.dateButtonText}>▶</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {isSummaryLoading && (
             <View style={styles.summaryCard}>
               <ActivityIndicator size="small" />
@@ -142,14 +188,20 @@ export default function HomeScreen() {
           {/* OWNER summary */}
           {context.role === 'OWNER' && summary && !isSummaryLoading && !summaryError && (
             <View style={styles.summaryCard} testID="home-owner-summary">
-              <OwnerSummary summary={summary as BarbershopDailySummary} />
+              <OwnerSummary
+                summary={summary as BarbershopDailySummary}
+                selectedDate={selectedDate}
+              />
             </View>
           )}
 
           {/* BARBER summary */}
           {context.role === 'BARBER' && summary && !isSummaryLoading && !summaryError && (
             <View style={styles.summaryCard} testID="home-barber-summary">
-              <BarberSummary summary={summary as EmployeeDailySummary} />
+              <BarberSummary
+                summary={summary as EmployeeDailySummary}
+                selectedDate={selectedDate}
+              />
             </View>
           )}
 
@@ -171,10 +223,19 @@ export default function HomeScreen() {
 }
 
 /** OWNER summary: totals + employee breakdown + payment methods */
-function OwnerSummary({ summary }: { summary: BarbershopDailySummary }) {
+function OwnerSummary({
+  summary,
+  selectedDate,
+}: {
+  summary: BarbershopDailySummary;
+  selectedDate: string;
+}) {
+  const dateLabel = isTodayDateString(selectedDate) ? 'Today' : selectedDate;
   return (
     <>
-      <Text style={styles.summaryTitle}>Today — {summary.date}</Text>
+      <Text style={styles.summaryTitle} testID="summary-title">
+        {dateLabel} — {summary.date}
+      </Text>
       <View style={styles.totalsRow}>
         <View style={styles.totalItem}>
           <Text style={styles.totalValue}>{summary.totalRecords}</Text>
@@ -218,10 +279,19 @@ function OwnerSummary({ summary }: { summary: BarbershopDailySummary }) {
 }
 
 /** BARBER summary: totals + payment methods */
-function BarberSummary({ summary }: { summary: EmployeeDailySummary }) {
+function BarberSummary({
+  summary,
+  selectedDate,
+}: {
+  summary: EmployeeDailySummary;
+  selectedDate: string;
+}) {
+  const dateLabel = isTodayDateString(selectedDate) ? 'Today' : selectedDate;
   return (
     <>
-      <Text style={styles.summaryTitle}>Today — {summary.date}</Text>
+      <Text style={styles.summaryTitle} testID="summary-title">
+        {dateLabel} — {summary.date}
+      </Text>
       <View style={styles.totalsRow}>
         <View style={styles.totalItem}>
           <Text style={styles.totalValue}>{summary.totalRecords}</Text>
@@ -366,5 +436,42 @@ const styles = StyleSheet.create({
   breakdownDetail: {
     fontSize: 14,
     color: '#666',
+  },
+  // Date navigation controls
+  dateControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 400,
+  },
+  dateButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#007AFF',
+  },
+  dateButtonDisabled: {
+    backgroundColor: '#999',
+  },
+  dateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dateButtonTextDisabled: {
+    color: '#CCCCCC',
+  },
+  dateDisplay: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    fontFamily: 'monospace',
   },
 });
