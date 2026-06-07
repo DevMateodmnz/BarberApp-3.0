@@ -47,6 +47,7 @@ beforeAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
+  await prisma.workingHours.deleteMany();
   await prisma.service.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.barbershop.deleteMany();

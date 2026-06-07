@@ -6,7 +6,7 @@
  * Does NOT modify User.role — role is managed via Clerk metadata (PR-013).
  */
 import { prisma } from '../lib/prisma.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { Prisma } from '@prisma/client';
 import type { Employee, EmployeeService, Service } from '@prisma/client';
 
@@ -262,6 +262,63 @@ export async function listEmployeeServices(
   });
 
   return assignments.map((a) => a.service);
+}
+
+/**
+ * Lists active services assigned to the authenticated barber's own employee
+ * record within a barbershop.
+ *
+ * Preconditions (enforced by upstream middleware):
+ * - Caller is an authenticated BARBER with access to the barbershop
+ *
+ * Defense-in-depth:
+ * - Employee is inferred from userId + barbershopId, never from user input
+ * - Missing/inactive/deleted employee returns 403 (same access semantics as
+ *   requireBarbershopAccess for BARBER)
+ * - Returns only safe service fields needed by mobile record creation
+ */
+export async function listOwnAssignedServices(
+  barbershopId: string,
+  userId: string
+) {
+  const employee = await prisma.employee.findFirst({
+    where: {
+      barbershopId,
+      userId,
+      isActive: true,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+
+  if (!employee) {
+    throw new ForbiddenError('You are not an employee of this barbershop');
+  }
+
+  const assignments = await prisma.employeeService.findMany({
+    where: {
+      employeeId: employee.id,
+      service: {
+        isActive: true,
+        deletedAt: null,
+      },
+    },
+    select: {
+      service: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          durationMinutes: true,
+          priceCents: true,
+          currency: true,
+          isActive: true,
+        },
+      },
+    },
+  });
+
+  return assignments.map((assignment) => assignment.service);
 }
 
 // ============================================

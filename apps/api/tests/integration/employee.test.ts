@@ -1448,3 +1448,130 @@ describe('GET /api/v1/barbershops/:barbershopId/employees/:employeeId/services',
     });
   });
 });
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/me/services
+// ============================================
+
+describe('GET /api/v1/barbershops/:barbershopId/me/services', () => {
+  let employeeA: Employee;
+
+  beforeEach(async () => {
+    await prisma.employeeService.deleteMany();
+    await prisma.employee.deleteMany();
+    employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
+  });
+
+  it('BARBER lists own assigned active services in own barbershop — 200', async () => {
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA2.id },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/me/services`)
+      .set(authHeader(fixtures.barberUser.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveLength(2);
+    const ids = res.body.data.map((service: Service) => service.id);
+    expect(ids).toContain(fixtures.serviceA1.id);
+    expect(ids).toContain(fixtures.serviceA2.id);
+  });
+
+  it('BARBER response includes safe service fields and excludes unsafe/internal fields', async () => {
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/me/services`)
+      .set(authHeader(fixtures.barberUser.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    const service = res.body.data[0];
+    expect(service).toEqual({
+      id: fixtures.serviceA1.id,
+      name: fixtures.serviceA1.name,
+      description: fixtures.serviceA1.description,
+      durationMinutes: fixtures.serviceA1.durationMinutes,
+      priceCents: fixtures.serviceA1.priceCents,
+      currency: fixtures.serviceA1.currency,
+      isActive: true,
+    });
+    expect(service.barbershopId).toBeUndefined();
+    expect(service.deletedAt).toBeUndefined();
+    expect(service.employeeServices).toBeUndefined();
+  });
+
+  it('BARBER cannot list own services for another barbershop — 403', async () => {
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopB.id}/me/services`)
+      .set(authHeader(fixtures.barberUser.clerkUserId));
+
+    expect(res.status).toBe(403);
+  });
+
+  it('BARBER with no employee record in that barbershop gets 403', async () => {
+    const unlinkedBarber = await prisma.user.create({
+      data: {
+        clerkUserId: 'test_unlinked_barber_me_services',
+        email: 'unlinked_barber_me_services@test.com',
+        name: 'Unlinked Barber',
+        role: 'BARBER',
+      },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/me/services`)
+      .set(authHeader(unlinkedBarber.clerkUserId));
+
+    expect(res.status).toBe(403);
+  });
+
+  it('BARBER does not receive inactive or soft-deleted services', async () => {
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
+    });
+    await prisma.employeeService.create({
+      data: { employeeId: employeeA.id, serviceId: fixtures.serviceA2.id },
+    });
+
+    await prisma.service.update({
+      where: { id: fixtures.serviceA2.id },
+      data: { isActive: false, deletedAt: new Date() },
+    });
+
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/me/services`)
+      .set(authHeader(fixtures.barberUser.clerkUserId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].id).toBe(fixtures.serviceA1.id);
+
+    await prisma.service.update({
+      where: { id: fixtures.serviceA2.id },
+      data: { isActive: true, deletedAt: null },
+    });
+  });
+
+  it('CLIENT is forbidden — 403', async () => {
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/me/services`)
+      .set(authHeader(fixtures.clientUser.clerkUserId));
+
+    expect(res.status).toBe(403);
+  });
+
+  it('unauthenticated request returns 401', async () => {
+    const res = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/me/services`);
+
+    expect(res.status).toBe(401);
+  });
+});

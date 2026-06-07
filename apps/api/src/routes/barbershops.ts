@@ -8,6 +8,7 @@
  * - PATCH  /api/v1/barbershops/:barbershopId/employees/:employeeId/reactivate     OWNER (reactivate employee)
  * - POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (assign service)
  * - GET  /api/v1/barbershops/:barbershopId/employees/:employeeId/services       OWNER (list employee services)
+ * - GET  /api/v1/barbershops/:barbershopId/me/services                         BARBER (list own assigned services)
  * - DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/services/:serviceId  OWNER (unassign service)
  * - GET  /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments     OWNER, BARBER (list employee appointments)
  * - GET  /api/v1/barbershops/:barbershopId/working-hours                      OWNER (view working hours)
@@ -164,6 +165,27 @@ router.get(
       const services = await employeeService.listEmployeeServices(
         paramBarbershopId(req),
         paramEmployeeId(req)
+      );
+      res.json({ success: true, data: services });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/me/services
+// List assigned services for the authenticated barber's own employee record
+// ============================================
+router.get(
+  '/:barbershopId/me/services',
+  requireBarbershopAccess,
+  requireRole('BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const services = await employeeService.listOwnAssignedServices(
+        paramBarbershopId(req),
+        req.userId
       );
       res.json({ success: true, data: services });
     } catch (error) {
