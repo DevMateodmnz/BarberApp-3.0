@@ -15,11 +15,22 @@ interface SummaryState {
   summaryError: string | null;
 
   /**
-   * Loads today's daily summary based on the user's role and context.
+   * Loads a daily summary for a specific date based on the user's role and context.
    * - OWNER with barbershopId → loads barbershop summary.
    * - BARBER with barbershopId + employeeId → loads employee summary.
    * - CLIENT → no-op (summary stays null).
    * - Missing barbershopId or employeeId → no-op.
+   *
+   * @param getToken - Function to retrieve the Clerk auth token
+   * @param context - Current user context (role, shop, employee)
+   * @param date - Date string in YYYY-MM-DD format
+   */
+  loadSummaryForDate: (getToken: () => Promise<string | null>, context: CurrentUserContext, date: string) => Promise<void>;
+
+  /**
+   * Loads today's daily summary based on the user's role and context.
+   * Convenience wrapper that delegates to loadSummaryForDate with getTodayDateString().
+   * Preserved for backward compatibility with existing callers.
    */
   loadTodaySummary: (getToken: () => Promise<string | null>, context: CurrentUserContext) => Promise<void>;
 
@@ -38,7 +49,7 @@ export const useSummaryStore = create<SummaryState>((set) => ({
   isSummaryLoading: false,
   summaryError: null,
 
-  loadTodaySummary: async (getToken, context) => {
+  loadSummaryForDate: async (getToken, context, date) => {
     // CLIENT never loads summary
     if (context.role === 'CLIENT') {
       return;
@@ -57,7 +68,6 @@ export const useSummaryStore = create<SummaryState>((set) => ({
     set({ isSummaryLoading: true, summaryError: null });
 
     try {
-      const date = getTodayDateString();
       let summary: DailySummary;
 
       if (context.role === 'OWNER') {
@@ -77,6 +87,11 @@ export const useSummaryStore = create<SummaryState>((set) => ({
       const message = err instanceof Error ? err.message : 'Unknown error';
       set({ summary: null, isSummaryLoading: false, summaryError: message });
     }
+  },
+
+  loadTodaySummary: async (getToken, context) => {
+    const state = useSummaryStore.getState();
+    await state.loadSummaryForDate(getToken, context, getTodayDateString());
   },
 
   clearSummary: () => {
