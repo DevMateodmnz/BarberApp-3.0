@@ -35,6 +35,10 @@ async function importServiceRecords() {
   return import('../../src/lib/serviceRecords.js');
 }
 
+async function importPayloadHelper() {
+  return import('../../src/lib/serviceRecordPayload.js');
+}
+
 describe('createServiceRecord', () => {
   it('sends authenticated POST to /barbershops/:barbershopId/service-records', async () => {
     const { createServiceRecord } = await importServiceRecords();
@@ -112,5 +116,35 @@ describe('createServiceRecord', () => {
         priceCents: 2500,
       })
     ).rejects.toThrow('Employee ID is required');
+  });
+});
+
+describe('buildBarberServiceRecordPayload', () => {
+  it('uses context employeeId, serviceId, and priceCents', async () => {
+    const { buildBarberServiceRecordPayload } = await importPayloadHelper();
+
+    expect(
+      buildBarberServiceRecordPayload({
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCents: 2500,
+      })
+    ).toEqual({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 2500,
+    });
+  });
+
+  it('keeps performedAt omitted', async () => {
+    const { buildBarberServiceRecordPayload } = await importPayloadHelper();
+
+    const payload = buildBarberServiceRecordPayload({
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 1500,
+    });
+
+    expect(payload).not.toHaveProperty('performedAt');
   });
 });

@@ -80,3 +80,46 @@ describe('fetchEmployeeServices', () => {
     await expect(fetchEmployeeServices(getToken, 'shop-1', 'emp-1')).rejects.toThrow('Employee not found');
   });
 });
+
+describe('fetchMyAssignedServices', () => {
+  it('sends authenticated GET to /barbershops/:barbershopId/me/services', async () => {
+    const { fetchMyAssignedServices } = await importEmployeeServices();
+    const fakeServices = [
+      {
+        id: 'svc-1',
+        name: 'Classic Cut',
+        description: null,
+        durationMinutes: 30,
+        priceCents: 2500,
+        currency: 'ARS',
+        isActive: true,
+      },
+    ];
+
+    mockApi.get.mockResolvedValueOnce({
+      data: { success: true, data: fakeServices },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('barber-token');
+    const result = await fetchMyAssignedServices(getToken, 'shop-1');
+
+    expect(getToken).toHaveBeenCalled();
+    expect(mockApi.get).toHaveBeenCalledWith(
+      '/barbershops/shop-1/me/services',
+      { headers: { Authorization: 'Bearer barber-token' } }
+    );
+    expect(result).toEqual(fakeServices);
+  });
+
+  it('handles API error', async () => {
+    const { fetchMyAssignedServices } = await importEmployeeServices();
+
+    mockApi.get.mockResolvedValueOnce({
+      data: { success: false, error: { code: 'FORBIDDEN', message: 'Not allowed' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('barber-token');
+
+    await expect(fetchMyAssignedServices(getToken, 'shop-1')).rejects.toThrow('Not allowed');
+  });
+});

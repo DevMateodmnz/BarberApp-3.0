@@ -58,7 +58,7 @@ export default function HomeScreen() {
     }
   }, [getToken, loadContext, selectedDate, loadSummaryForDate]);
 
-  const handleOwnerRecordCreated = useCallback(async () => {
+  const handleServiceRecordCreated = useCallback(async () => {
     if (!context || !getToken) return;
     await loadSummaryForDate(getToken, context, selectedDate);
   }, [context, getToken, loadSummaryForDate, selectedDate]);
@@ -132,9 +132,20 @@ export default function HomeScreen() {
           {/* Summary section */}
           {context.role === 'OWNER' && context.barbershopId && (
             <ServiceRecordCreateSection
+              mode="OWNER"
               barbershopId={context.barbershopId}
               getToken={getToken}
-              onRecordCreated={handleOwnerRecordCreated}
+              onRecordCreated={handleServiceRecordCreated}
+            />
+          )}
+
+          {context.role === 'BARBER' && context.barbershopId && context.employeeId && (
+            <ServiceRecordCreateSection
+              mode="BARBER"
+              barbershopId={context.barbershopId}
+              employeeId={context.employeeId}
+              getToken={getToken}
+              onRecordCreated={handleServiceRecordCreated}
             />
           )}
 

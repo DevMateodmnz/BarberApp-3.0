@@ -103,15 +103,15 @@ export interface EmployeeListItem {
 
 export interface Service {
   id: string;
-  barbershopId: string;
+  barbershopId?: string;
   name: string;
   description: string | null;
   durationMinutes: number;
   priceCents: number;
   currency: string;
   isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreateServiceRecordInput {

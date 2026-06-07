@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -7,26 +7,39 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { fetchEmployees } from '@/lib/employees.js';
-import { fetchEmployeeServices } from '@/lib/employeeServices.js';
-import { createServiceRecord } from '@/lib/serviceRecords.js';
 import type { GetToken } from '@/lib/api.js';
+import { fetchEmployeeServices, fetchMyAssignedServices } from '@/lib/employeeServices.js';
+import { fetchEmployees } from '@/lib/employees.js';
+import { createServiceRecord } from '@/lib/serviceRecords.js';
+import { buildBarberServiceRecordPayload } from '@/lib/serviceRecordPayload.js';
 import type { EmployeeListItem, Service } from '@/lib/types.js';
 
-interface ServiceRecordCreateSectionProps {
+interface BaseProps {
   barbershopId: string;
   getToken: GetToken;
   onRecordCreated: () => Promise<void>;
 }
 
-export function ServiceRecordCreateSection({
-  barbershopId,
-  getToken,
-  onRecordCreated,
-}: ServiceRecordCreateSectionProps) {
+interface OwnerProps extends BaseProps {
+  mode: 'OWNER';
+}
+
+interface BarberProps extends BaseProps {
+  employeeId: string;
+  mode: 'BARBER';
+}
+
+type ServiceRecordCreateSectionProps = OwnerProps | BarberProps;
+
+export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProps) {
+  const { barbershopId, getToken, onRecordCreated } = props;
+  const isBarberMode = props.mode === 'BARBER';
+
   const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
+    isBarberMode ? props.employeeId : null
+  );
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [priceCentsInput, setPriceCentsInput] = useState('');
   const [isEmployeesLoading, setIsEmployeesLoading] = useState(false);
@@ -35,12 +48,53 @@ export function ServiceRecordCreateSection({
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
+  const effectiveEmployeeId = isBarberMode ? props.employeeId : selectedEmployeeId;
+
+  const helpText = isBarberMode
+    ? 'Choose one of your assigned services.'
+    : 'Choose an employee, then choose one of their assigned services.';
+
+  const servicesEmptyText = isBarberMode
+    ? 'No assigned active services found for you yet.'
+    : 'No assigned active services found for this employee.';
+
   useEffect(() => {
     let isCancelled = false;
 
-    async function loadEmployees() {
-      setIsEmployeesLoading(true);
+    async function loadInitialData() {
       setFormError(null);
+      setFormSuccess(null);
+      setSelectedServiceId(null);
+      setPriceCentsInput('');
+      setServices([]);
+
+      if (isBarberMode) {
+        setSelectedEmployeeId(props.employeeId);
+        setEmployees([]);
+        setIsEmployeesLoading(false);
+        setIsServicesLoading(true);
+
+        try {
+          const result = await fetchMyAssignedServices(getToken, barbershopId);
+          if (!isCancelled) {
+            setServices(result);
+          }
+        } catch (error) {
+          if (!isCancelled) {
+            setFormError(error instanceof Error ? error.message : 'Failed to load services');
+          }
+        } finally {
+          if (!isCancelled) {
+            setIsServicesLoading(false);
+          }
+        }
+
+        return;
+      }
+
+      setSelectedEmployeeId(null);
+      setIsEmployeesLoading(true);
+      setIsServicesLoading(false);
 
       try {
         const result = await fetchEmployees(getToken, barbershopId);
@@ -58,14 +112,16 @@ export function ServiceRecordCreateSection({
       }
     }
 
-    void loadEmployees();
+    void loadInitialData();
 
     return () => {
       isCancelled = true;
     };
-  }, [barbershopId, getToken]);
+  }, [barbershopId, getToken, isBarberMode, isBarberMode ? props.employeeId : null]);
 
   async function handleEmployeeSelect(employeeId: string) {
+    if (isBarberMode) return;
+
     setSelectedEmployeeId(employeeId);
     setSelectedServiceId(null);
     setPriceCentsInput('');
@@ -91,12 +147,17 @@ export function ServiceRecordCreateSection({
     setFormSuccess(null);
   }
 
+  const selectedService = useMemo(
+    () => services.find((service) => service.id === selectedServiceId) ?? null,
+    [services, selectedServiceId]
+  );
+
   async function handleSubmit() {
     setFormError(null);
     setFormSuccess(null);
 
-    if (!selectedEmployeeId) {
-      setFormError('Select an employee.');
+    if (!effectiveEmployeeId) {
+      setFormError(isBarberMode ? 'Employee context is missing.' : 'Select an employee.');
       return;
     }
 
@@ -114,11 +175,19 @@ export function ServiceRecordCreateSection({
     setIsSubmitting(true);
 
     try {
-      await createServiceRecord(getToken, barbershopId, {
-        employeeId: selectedEmployeeId,
-        serviceId: selectedServiceId,
-        priceCents,
-      });
+      const payload = isBarberMode
+        ? buildBarberServiceRecordPayload({
+            employeeId: effectiveEmployeeId,
+            serviceId: selectedServiceId,
+            priceCents,
+          })
+        : {
+            employeeId: effectiveEmployeeId,
+            serviceId: selectedServiceId,
+            priceCents,
+          };
+
+      await createServiceRecord(getToken, barbershopId, payload);
 
       setSelectedServiceId(null);
       setPriceCentsInput('');
@@ -133,26 +202,24 @@ export function ServiceRecordCreateSection({
   }
 
   return (
-    <View style={styles.card} testID="owner-service-record-create">
+    <View style={styles.card} testID={isBarberMode ? 'barber-service-record-create' : 'owner-service-record-create'}>
       <Text style={styles.title}>Create Service Record</Text>
-      <Text style={styles.helpText}>
-        Choose an employee, then choose one of their assigned services.
-      </Text>
+      <Text style={styles.helpText}>{helpText}</Text>
 
-      {isEmployeesLoading && (
+      {!isBarberMode && isEmployeesLoading && (
         <View style={styles.loadingRow}>
           <ActivityIndicator size="small" />
           <Text style={styles.loadingText}>Loading employees…</Text>
         </View>
       )}
 
-      {!isEmployeesLoading && employees.length === 0 && (
+      {!isBarberMode && !isEmployeesLoading && employees.length === 0 && (
         <Text style={styles.emptyText}>
           No employees available yet.
         </Text>
       )}
 
-      {!isEmployeesLoading && employees.length > 0 && (
+      {!isBarberMode && !isEmployeesLoading && employees.length > 0 && (
         <>
           <Text style={styles.sectionLabel}>Employee</Text>
           <View style={styles.optionGroup}>
@@ -180,7 +247,7 @@ export function ServiceRecordCreateSection({
         </>
       )}
 
-      {selectedEmployeeId && (
+      {(isBarberMode || !!selectedEmployeeId) && (
         <>
           <Text style={styles.sectionLabel}>Service</Text>
 
@@ -193,7 +260,7 @@ export function ServiceRecordCreateSection({
 
           {!isServicesLoading && services.length === 0 && (
             <Text style={styles.emptyText}>
-              No assigned active services found for this employee.
+              {servicesEmptyText}
             </Text>
           )}
 
@@ -232,7 +299,7 @@ export function ServiceRecordCreateSection({
           setFormError(null);
           setFormSuccess(null);
         }}
-        placeholder="e.g. 2500"
+        placeholder={selectedService ? String(selectedService.priceCents) : 'e.g. 2500'}
         keyboardType="number-pad"
         style={styles.input}
         testID="service-record-price-cents"

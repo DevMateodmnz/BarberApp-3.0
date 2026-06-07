@@ -19,3 +19,21 @@ export async function fetchEmployeeServices(
 
   return data.data;
 }
+
+export async function fetchMyAssignedServices(
+  getToken: GetToken,
+  barbershopId: string
+): Promise<Service[]> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<Service[]>>(
+    `/barbershops/${barbershopId}/me/services`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+  );
+
+  const { data } = response;
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message ?? 'Failed to fetch assigned services');
+  }
+
+  return data.data;
+}
