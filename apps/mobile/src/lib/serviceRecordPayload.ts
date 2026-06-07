@@ -1,3 +1,4 @@
+import { parseCurrencyInputToCents } from './format.js';
 import type { CreateServiceRecordInput, PaymentMethod } from './types.js';
 
 interface BuildServiceRecordPayloadInput {
@@ -29,7 +30,7 @@ type ServiceRecordDraftValidationResult =
     }
   | { error: string; ok: false };
 
-const INVALID_PRICE_ERROR = 'Enter a valid non-negative integer price in cents.';
+const INVALID_PRICE_ERROR = 'Enter a valid price amount.';
 const CLIENT_NAME_TOO_LONG_ERROR = 'Client name must be 200 characters or fewer.';
 const NOTES_TOO_LONG_ERROR = 'Notes must be 1000 characters or fewer.';
 
@@ -88,12 +89,8 @@ export function validateServiceRecordDraft({
     return { ok: false, error: 'Select a service.' };
   }
 
-  if (!/^\d+$/.test(priceCentsInput)) {
-    return { ok: false, error: INVALID_PRICE_ERROR };
-  }
-
-  const priceCents = Number(priceCentsInput);
-  if (!Number.isInteger(priceCents) || priceCents < 0) {
+  const priceCents = parseCurrencyInputToCents(priceCentsInput);
+  if (priceCents === null) {
     return { ok: false, error: INVALID_PRICE_ERROR };
   }
 

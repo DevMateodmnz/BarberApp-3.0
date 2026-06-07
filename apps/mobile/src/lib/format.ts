@@ -38,14 +38,84 @@ export function formatCents(cents: number): string {
     remaining = Math.floor(remaining / 1000);
   } while (remaining > 0);
 
-  // Parts are in reverse order (least significant first)
-  // First part is as-is; subsequent parts are zero-padded to 3 digits
   const formatted = parts
     .reverse()
     .map((part, index) => (index === 0 ? part : part.padStart(3, '0')))
     .join('.');
 
   return `$${formatted}`;
+}
+
+/**
+ * Parses a user-entered currency amount into integer cents.
+ *
+ * Accepted forms:
+ * - whole amounts: "5000"
+ * - dot decimals: "5000.50"
+ * - comma decimals: "5000,50"
+ * - optional surrounding whitespace
+ *
+ * Rejected forms:
+ * - empty strings
+ * - negatives
+ * - more than two decimal places
+ * - mixed/non-numeric content
+ *
+ * This helper uses string parsing and integer math only.
+ */
+export function parseCurrencyInputToCents(input: string): number | null {
+  const normalized = input.trim().replace(',', '.');
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(normalized);
+  if (!match) {
+    return null;
+  }
+
+  const wholePart = match[1]!;
+  const decimalPart = (match[2] ?? '').padEnd(2, '0');
+
+  const wholeCents = Number(wholePart) * 100;
+  const decimalCents = Number(decimalPart || '0');
+
+  if (!Number.isSafeInteger(wholeCents) || !Number.isSafeInteger(decimalCents)) {
+    return null;
+  }
+
+  const cents = wholeCents + decimalCents;
+  if (!Number.isSafeInteger(cents) || cents < 0) {
+    return null;
+  }
+
+  return cents;
+}
+
+/**
+ * Formats integer cents for editable input using a human-friendly decimal amount.
+ *
+ * Examples:
+ * - 500000 -> "5000"
+ * - 500050 -> "5000.50"
+ * - 99 -> "0.99"
+ */
+export function formatCentsForInput(cents: number): string {
+  if (!Number.isInteger(cents)) {
+    throw new Error('cents must be an integer');
+  }
+  if (cents < 0) {
+    throw new Error('cents must be non-negative');
+  }
+
+  const whole = Math.floor(cents / 100);
+  const remainder = cents % 100;
+
+  if (remainder === 0) {
+    return String(whole);
+  }
+
+  return `${whole}.${String(remainder).padStart(2, '0')}`;
 }
 
 /**
@@ -77,26 +147,6 @@ export function formatPaymentMethodLabel(paymentMethod: unknown): string {
   }
 }
 
-/**
- * Returns a date string in YYYY-MM-DD format.
- *
- * Uses LOCAL calendar fields (getFullYear, getMonth, getDate)
- * so that "today" means the device's local day, not UTC.
- * This is critical for barbershops in Argentina (UTC-3) where
- * a service recorded at 11pm local on Jan 15 is still Jan 15
- * in local time, even though it's Jan 16 in UTC.
- *
- * If no Date is provided, returns the current local date.
- *
- * @param date - Optional Date object. Defaults to current date.
- * @returns String in YYYY-MM-DD format (local date)
- *
- * @example
- * getTodayDateString()                                  // "2026-06-06" (today, local)
- * getTodayDateString(new Date(2026, 0, 15))            // "2026-01-15" (local Jan 15)
- * getTodayDateString(new Date(2026, 0, 15, 23, 30))   // "2026-01-15" (still local Jan 15)
- * getTodayDateString(new Date(2024, 1, 29))            // "2024-02-29" (leap year)
- */
 export function getTodayDateString(date?: Date): string {
   const d = date ?? new Date();
   const year = d.getFullYear();
@@ -105,25 +155,8 @@ export function getTodayDateString(date?: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-/**
- * Adds or subtracts days from a YYYY-MM-DD date string using
- * local calendar arithmetic via Date.setDate().
- *
- * Parses the string manually (split on '-', parseInt) to avoid
- * UTC off-by-one issues with `new Date(dateString)`.
- *
- * @param date - Date string in YYYY-MM-DD format
- * @param amount - Number of days to add (negative to subtract)
- * @returns New date string in YYYY-MM-DD format
- *
- * @example
- * addDaysToDateString('2026-01-15', -1)  // '2026-01-14'
- * addDaysToDateString('2026-01-31', 1)   // '2026-02-01'
- * addDaysToDateString('2028-03-01', -1)  // '2028-02-29' (leap year)
- */
 export function addDaysToDateString(date: string, amount: number): string {
   const parts = date.split('-');
-  // YYYY-MM-DD always splits into 3 parts
   const y = parseInt(parts[0]!, 10);
   const m = parseInt(parts[1]!, 10);
   const d = parseInt(parts[2]!, 10);
@@ -135,12 +168,6 @@ export function addDaysToDateString(date: string, amount: number): string {
   return `${year}-${month}-${day}`;
 }
 
-/**
- * Checks whether a YYYY-MM-DD date string matches today's local date.
- *
- * @param date - Date string in YYYY-MM-DD format
- * @returns true if the date is today, false otherwise
- */
 export function isTodayDateString(date: string): boolean {
   return date === getTodayDateString();
 }

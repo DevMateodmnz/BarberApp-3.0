@@ -318,7 +318,7 @@ describe('validateServiceRecordDraft', () => {
         mode: 'OWNER',
         employeeId: 'emp-1',
         serviceId: 'svc-1',
-        priceCentsInput: '2500',
+        priceCentsInput: '25.00',
         clientNameInput: '  Jane Doe  ',
         notesInput: '  VIP client  ',
       })
@@ -340,7 +340,7 @@ describe('validateServiceRecordDraft', () => {
         mode: 'OWNER',
         employeeId: null,
         serviceId: 'svc-1',
-        priceCentsInput: '2500',
+        priceCentsInput: '25.00',
       })
     ).toEqual({ ok: false, error: 'Select an employee.' });
   });
@@ -353,7 +353,7 @@ describe('validateServiceRecordDraft', () => {
         mode: 'BARBER',
         employeeId: null,
         serviceId: 'svc-1',
-        priceCentsInput: '2500',
+        priceCentsInput: '25.00',
       })
     ).toEqual({ ok: false, error: 'Employee context is missing.' });
   });
@@ -366,7 +366,7 @@ describe('validateServiceRecordDraft', () => {
         mode: 'OWNER',
         employeeId: 'emp-1',
         serviceId: null,
-        priceCentsInput: '2500',
+        priceCentsInput: '25.00',
       })
     ).toEqual({ ok: false, error: 'Select a service.' });
   });
@@ -381,10 +381,10 @@ describe('validateServiceRecordDraft', () => {
         serviceId: 'svc-1',
         priceCentsInput: '',
       })
-    ).toEqual({ ok: false, error: 'Enter a valid non-negative integer price in cents.' });
+    ).toEqual({ ok: false, error: 'Enter a valid price amount.' });
   });
 
-  it('fails for decimal price input', async () => {
+  it('fails for more than two decimal places', async () => {
     const { validateServiceRecordDraft } = await importPayloadHelper();
 
     expect(
@@ -392,9 +392,9 @@ describe('validateServiceRecordDraft', () => {
         mode: 'OWNER',
         employeeId: 'emp-1',
         serviceId: 'svc-1',
-        priceCentsInput: '12.5',
+        priceCentsInput: '10.999',
       })
-    ).toEqual({ ok: false, error: 'Enter a valid non-negative integer price in cents.' });
+    ).toEqual({ ok: false, error: 'Enter a valid price amount.' });
   });
 
   it('fails for negative price input', async () => {
@@ -407,7 +407,7 @@ describe('validateServiceRecordDraft', () => {
         serviceId: 'svc-1',
         priceCentsInput: '-1',
       })
-    ).toEqual({ ok: false, error: 'Enter a valid non-negative integer price in cents.' });
+    ).toEqual({ ok: false, error: 'Enter a valid price amount.' });
   });
 
   it('fails when clientName exceeds 200 characters', async () => {
@@ -418,7 +418,7 @@ describe('validateServiceRecordDraft', () => {
         mode: 'OWNER',
         employeeId: 'emp-1',
         serviceId: 'svc-1',
-        priceCentsInput: '2500',
+        priceCentsInput: '25.00',
         clientNameInput: 'a'.repeat(201),
       })
     ).toEqual({ ok: false, error: 'Client name must be 200 characters or fewer.' });
@@ -432,7 +432,7 @@ describe('validateServiceRecordDraft', () => {
         mode: 'OWNER',
         employeeId: 'emp-1',
         serviceId: 'svc-1',
-        priceCentsInput: '2500',
+        priceCentsInput: '25.00',
         notesInput: 'a'.repeat(1001),
       })
     ).toEqual({ ok: false, error: 'Notes must be 1000 characters or fewer.' });

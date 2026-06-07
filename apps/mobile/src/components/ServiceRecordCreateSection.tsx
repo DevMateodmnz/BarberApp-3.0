@@ -10,7 +10,7 @@ import {
 import type { GetToken } from '@/lib/api.js';
 import { fetchEmployeeServices, fetchMyAssignedServices } from '@/lib/employeeServices.js';
 import { fetchEmployees } from '@/lib/employees.js';
-import { formatPaymentMethodLabel } from '@/lib/format.js';
+import { formatCentsForInput, formatPaymentMethodLabel } from '@/lib/format.js';
 import {
   buildServiceRecordPayload,
   validateServiceRecordDraft,
@@ -165,7 +165,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
 
   function handleServiceSelect(service: Service) {
     setSelectedServiceId(service.id);
-    setPriceCentsInput(String(service.priceCents));
+    setPriceCentsInput(formatCentsForInput(service.priceCents));
     setFormError(null);
     setFormSuccess(null);
   }
@@ -316,16 +316,16 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         </>
       )}
 
-      <Text style={styles.sectionLabel}>Price (cents)</Text>
+      <Text style={styles.sectionLabel}>Price (ARS)</Text>
       <TextInput
         value={priceCentsInput}
         onChangeText={(value) => {
-          setPriceCentsInput(value.replace(/[^\d]/g, ''));
+          setPriceCentsInput(value);
           setFormError(null);
           setFormSuccess(null);
         }}
-        placeholder={selectedService ? String(selectedService.priceCents) : 'e.g. 2500'}
-        keyboardType="number-pad"
+        placeholder={selectedService ? formatCentsForInput(selectedService.priceCents) : 'e.g. 5000.50'}
+        keyboardType="decimal-pad"
         style={styles.input}
         testID="service-record-price-cents"
       />

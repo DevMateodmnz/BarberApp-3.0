@@ -47,6 +47,77 @@ describe('formatCents', () => {
   });
 });
 
+
+
+describe('parseCurrencyInputToCents', () => {
+  it('parses whole amounts as cents', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('5000')).toBe(500000);
+  });
+
+  it('parses dot decimals', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('5000.50')).toBe(500050);
+  });
+
+  it('parses comma decimals', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('5000,50')).toBe(500050);
+  });
+
+  it('parses zero', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('0')).toBe(0);
+  });
+
+  it('parses cents-only decimals', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('0.99')).toBe(99);
+  });
+
+  it('fails on empty input', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('')).toBeNull();
+  });
+
+  it('fails on non-numeric input', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('abc')).toBeNull();
+  });
+
+  it('fails on negative input', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('-1')).toBeNull();
+  });
+
+  it('fails on more than two decimal places with dot', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('10.999')).toBeNull();
+  });
+
+  it('fails on more than two decimal places with comma', async () => {
+    const { parseCurrencyInputToCents } = await import('../../src/lib/format.js');
+    expect(parseCurrencyInputToCents('10,999')).toBeNull();
+  });
+});
+
+describe('formatCentsForInput', () => {
+  it('formats round amounts without decimals', async () => {
+    const { formatCentsForInput } = await import('../../src/lib/format.js');
+    expect(formatCentsForInput(500000)).toBe('5000');
+  });
+
+  it('formats non-round amounts with two decimals', async () => {
+    const { formatCentsForInput } = await import('../../src/lib/format.js');
+    expect(formatCentsForInput(500050)).toBe('5000.50');
+  });
+
+  it('formats sub-unit amounts with leading zero', async () => {
+    const { formatCentsForInput } = await import('../../src/lib/format.js');
+    expect(formatCentsForInput(99)).toBe('0.99');
+  });
+});
+
 describe('formatPaymentMethodLabel', () => {
   it('maps CASH to Cash', async () => {
     const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');
