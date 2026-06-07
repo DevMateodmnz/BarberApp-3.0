@@ -148,3 +148,102 @@ describe('buildBarberServiceRecordPayload', () => {
     expect(payload).not.toHaveProperty('performedAt');
   });
 });
+
+
+describe('validateServiceRecordDraft', () => {
+  it('passes valid integer priceCents input', async () => {
+    const { validateServiceRecordDraft } = await importPayloadHelper();
+
+    expect(
+      validateServiceRecordDraft({
+        mode: 'OWNER',
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCentsInput: '2500',
+      })
+    ).toEqual({
+      ok: true,
+      employeeId: 'emp-1',
+      serviceId: 'svc-1',
+      priceCents: 2500,
+    });
+  });
+
+  it('fails when owner employee selection is missing', async () => {
+    const { validateServiceRecordDraft } = await importPayloadHelper();
+
+    expect(
+      validateServiceRecordDraft({
+        mode: 'OWNER',
+        employeeId: null,
+        serviceId: 'svc-1',
+        priceCentsInput: '2500',
+      })
+    ).toEqual({ ok: false, error: 'Select an employee.' });
+  });
+
+  it('fails when barber employee context is missing', async () => {
+    const { validateServiceRecordDraft } = await importPayloadHelper();
+
+    expect(
+      validateServiceRecordDraft({
+        mode: 'BARBER',
+        employeeId: null,
+        serviceId: 'svc-1',
+        priceCentsInput: '2500',
+      })
+    ).toEqual({ ok: false, error: 'Employee context is missing.' });
+  });
+
+  it('fails when service selection is missing', async () => {
+    const { validateServiceRecordDraft } = await importPayloadHelper();
+
+    expect(
+      validateServiceRecordDraft({
+        mode: 'OWNER',
+        employeeId: 'emp-1',
+        serviceId: null,
+        priceCentsInput: '2500',
+      })
+    ).toEqual({ ok: false, error: 'Select a service.' });
+  });
+
+  it('fails for empty price input', async () => {
+    const { validateServiceRecordDraft } = await importPayloadHelper();
+
+    expect(
+      validateServiceRecordDraft({
+        mode: 'OWNER',
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCentsInput: '',
+      })
+    ).toEqual({ ok: false, error: 'Enter a valid non-negative integer price in cents.' });
+  });
+
+  it('fails for decimal price input', async () => {
+    const { validateServiceRecordDraft } = await importPayloadHelper();
+
+    expect(
+      validateServiceRecordDraft({
+        mode: 'OWNER',
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCentsInput: '12.5',
+      })
+    ).toEqual({ ok: false, error: 'Enter a valid non-negative integer price in cents.' });
+  });
+
+  it('fails for negative price input', async () => {
+    const { validateServiceRecordDraft } = await importPayloadHelper();
+
+    expect(
+      validateServiceRecordDraft({
+        mode: 'OWNER',
+        employeeId: 'emp-1',
+        serviceId: 'svc-1',
+        priceCentsInput: '-1',
+      })
+    ).toEqual({ ok: false, error: 'Enter a valid non-negative integer price in cents.' });
+  });
+});

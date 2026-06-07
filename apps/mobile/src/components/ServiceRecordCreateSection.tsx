@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -10,8 +10,11 @@ import {
 import type { GetToken } from '@/lib/api.js';
 import { fetchEmployeeServices, fetchMyAssignedServices } from '@/lib/employeeServices.js';
 import { fetchEmployees } from '@/lib/employees.js';
+import {
+  buildBarberServiceRecordPayload,
+  validateServiceRecordDraft,
+} from '@/lib/serviceRecordPayload.js';
 import { createServiceRecord } from '@/lib/serviceRecords.js';
-import { buildBarberServiceRecordPayload } from '@/lib/serviceRecordPayload.js';
 import type { EmployeeListItem, Service } from '@/lib/types.js';
 
 interface BaseProps {
@@ -34,6 +37,7 @@ type ServiceRecordCreateSectionProps = OwnerProps | BarberProps;
 export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProps) {
   const { barbershopId, getToken, onRecordCreated } = props;
   const isBarberMode = props.mode === 'BARBER';
+  const latestOwnerServicesRequestIdRef = useRef(0);
 
   const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -92,6 +96,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         return;
       }
 
+      latestOwnerServicesRequestIdRef.current += 1;
       setSelectedEmployeeId(null);
       setIsEmployeesLoading(true);
       setIsServicesLoading(false);
@@ -122,6 +127,9 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
   async function handleEmployeeSelect(employeeId: string) {
     if (isBarberMode) return;
 
+    const requestId = latestOwnerServicesRequestIdRef.current + 1;
+    latestOwnerServicesRequestIdRef.current = requestId;
+
     setSelectedEmployeeId(employeeId);
     setSelectedServiceId(null);
     setPriceCentsInput('');
@@ -132,11 +140,17 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
 
     try {
       const result = await fetchEmployeeServices(getToken, barbershopId, employeeId);
-      setServices(result);
+      if (latestOwnerServicesRequestIdRef.current === requestId) {
+        setServices(result);
+      }
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Failed to load services');
+      if (latestOwnerServicesRequestIdRef.current === requestId) {
+        setFormError(error instanceof Error ? error.message : 'Failed to load services');
+      }
     } finally {
-      setIsServicesLoading(false);
+      if (latestOwnerServicesRequestIdRef.current === requestId) {
+        setIsServicesLoading(false);
+      }
     }
   }
 
@@ -153,22 +167,22 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
   );
 
   async function handleSubmit() {
+    if (isSubmitting) {
+      return;
+    }
+
     setFormError(null);
     setFormSuccess(null);
 
-    if (!effectiveEmployeeId) {
-      setFormError(isBarberMode ? 'Employee context is missing.' : 'Select an employee.');
-      return;
-    }
+    const validation = validateServiceRecordDraft({
+      mode: props.mode,
+      employeeId: effectiveEmployeeId,
+      serviceId: selectedServiceId,
+      priceCentsInput,
+    });
 
-    if (!selectedServiceId) {
-      setFormError('Select a service.');
-      return;
-    }
-
-    const priceCents = Number(priceCentsInput);
-    if (!Number.isInteger(priceCents) || priceCents < 0) {
-      setFormError('Enter a valid non-negative integer price in cents.');
+    if (!validation.ok) {
+      setFormError(validation.error);
       return;
     }
 
@@ -177,14 +191,14 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
     try {
       const payload = isBarberMode
         ? buildBarberServiceRecordPayload({
-            employeeId: effectiveEmployeeId,
-            serviceId: selectedServiceId,
-            priceCents,
+            employeeId: validation.employeeId,
+            serviceId: validation.serviceId,
+            priceCents: validation.priceCents,
           })
         : {
-            employeeId: effectiveEmployeeId,
-            serviceId: selectedServiceId,
-            priceCents,
+            employeeId: validation.employeeId,
+            serviceId: validation.serviceId,
+            priceCents: validation.priceCents,
           };
 
       await createServiceRecord(getToken, barbershopId, payload);
