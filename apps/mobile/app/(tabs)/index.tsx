@@ -11,6 +11,7 @@ import { useEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { DailySummarySection } from '@/components/DailySummarySection.js';
+import { ServiceRecordCreateSection } from '@/components/ServiceRecordCreateSection.js';
 import { useContextStore } from '@/lib/store.js';
 import { useSummaryStore } from '@/lib/summaryStore.js';
 import {
@@ -56,6 +57,11 @@ export default function HomeScreen() {
       await loadSummaryForDate(getToken, freshContext, selectedDate);
     }
   }, [getToken, loadContext, selectedDate, loadSummaryForDate]);
+
+  const handleOwnerRecordCreated = useCallback(async () => {
+    if (!context || !getToken) return;
+    await loadSummaryForDate(getToken, context, selectedDate);
+  }, [context, getToken, loadSummaryForDate, selectedDate]);
 
   const isRefreshing = isContextLoading || isSummaryLoading;
 
@@ -124,6 +130,14 @@ export default function HomeScreen() {
           </View>
 
           {/* Summary section */}
+          {context.role === 'OWNER' && context.barbershopId && (
+            <ServiceRecordCreateSection
+              barbershopId={context.barbershopId}
+              getToken={getToken}
+              onRecordCreated={handleOwnerRecordCreated}
+            />
+          )}
+
           {context.role === 'CLIENT' && (
             <View style={styles.summaryCard} testID="home-client-message">
               <Text style={styles.summaryTitle}>Dashboard</Text>

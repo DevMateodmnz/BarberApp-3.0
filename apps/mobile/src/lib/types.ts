@@ -11,6 +11,7 @@
  * CLIENT: End user who books appointments.
  */
 export type UserRole = 'OWNER' | 'BARBER' | 'CLIENT';
+export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
 
 /**
  * Current user context — returned by GET /api/v1/me/context.
@@ -80,3 +81,71 @@ export interface EmployeeDailySummary {
 
 /** Union type — the store holds either OWNER or BARBER summary. */
 export type DailySummary = BarbershopDailySummary | EmployeeDailySummary;
+
+// ============================================
+// Employee + service types for owner record creation
+// ============================================
+
+export interface EmployeeListItem {
+  id: string;
+  barbershopId: string;
+  userId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+    role: UserRole;
+  };
+}
+
+export interface Service {
+  id: string;
+  barbershopId: string;
+  name: string;
+  description: string | null;
+  durationMinutes: number;
+  priceCents: number;
+  currency: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateServiceRecordInput {
+  employeeId: string;
+  serviceId: string;
+  priceCents: number;
+  clientName?: string;
+  paymentMethod?: PaymentMethod;
+  notes?: string;
+}
+
+export interface ServiceRecord {
+  id: string;
+  barbershopId: string;
+  employeeId: string;
+  serviceId: string;
+  appointmentId: string | null;
+  clientName: string | null;
+  priceCents: number;
+  paymentMethod: PaymentMethod | null;
+  notes: string | null;
+  performedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  service: {
+    id: string;
+    name: string;
+  };
+  employee: {
+    id: string;
+    user: {
+      id: string;
+      name: string | null;
+    };
+  };
+}
