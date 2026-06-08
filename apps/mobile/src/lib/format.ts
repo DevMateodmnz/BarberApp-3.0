@@ -93,6 +93,32 @@ export function parseCurrencyInputToCents(input: string): number | null {
 }
 
 /**
+ * Returns true when the user's price input represents a different
+ * amount than the selected service's default price.
+ *
+ * - Returns false when defaultPriceCents is undefined (no service selected).
+ * - Returns false when the input is empty or invalid.
+ * - Returns true only when the input is valid AND differs from defaultPriceCents.
+ *
+ * Uses parseCurrencyInputToCents internally — integer math, no floats.
+ */
+export function hasPriceChangedFromDefault(
+  input: string,
+  defaultPriceCents?: number,
+): boolean {
+  if (defaultPriceCents === undefined) {
+    return false;
+  }
+
+  const parsed = parseCurrencyInputToCents(input);
+  if (parsed === null) {
+    return false;
+  }
+
+  return parsed !== defaultPriceCents;
+}
+
+/**
  * Formats integer cents for editable input using a human-friendly decimal amount.
  *
  * Examples:

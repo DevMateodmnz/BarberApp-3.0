@@ -118,6 +118,48 @@ describe('formatCentsForInput', () => {
   });
 });
 
+describe('hasPriceChangedFromDefault', () => {
+  it('returns false when no default price is provided', async () => {
+    const { hasPriceChangedFromDefault } = await import('../../src/lib/format.js');
+    expect(hasPriceChangedFromDefault('5000')).toBe(false);
+  });
+
+  it('returns false when input is empty', async () => {
+    const { hasPriceChangedFromDefault } = await import('../../src/lib/format.js');
+    expect(hasPriceChangedFromDefault('', 500000)).toBe(false);
+  });
+
+  it('returns false when input is invalid', async () => {
+    const { hasPriceChangedFromDefault } = await import('../../src/lib/format.js');
+    expect(hasPriceChangedFromDefault('abc', 500000)).toBe(false);
+  });
+
+  it('returns false when integer input matches default', async () => {
+    const { hasPriceChangedFromDefault } = await import('../../src/lib/format.js');
+    expect(hasPriceChangedFromDefault('5000', 500000)).toBe(false);
+  });
+
+  it('returns false when comma-decimal input matches default', async () => {
+    const { hasPriceChangedFromDefault } = await import('../../src/lib/format.js');
+    expect(hasPriceChangedFromDefault('5000,00', 500000)).toBe(false);
+  });
+
+  it('returns true when input is lower than default', async () => {
+    const { hasPriceChangedFromDefault } = await import('../../src/lib/format.js');
+    expect(hasPriceChangedFromDefault('4500', 500000)).toBe(true);
+  });
+
+  it('returns true when input with cents differs from default', async () => {
+    const { hasPriceChangedFromDefault } = await import('../../src/lib/format.js');
+    expect(hasPriceChangedFromDefault('5000.50', 500000)).toBe(true);
+  });
+
+  it('returns true when default is undefined and input is valid', async () => {
+    const { hasPriceChangedFromDefault } = await import('../../src/lib/format.js');
+    expect(hasPriceChangedFromDefault('1500', undefined)).toBe(false);
+  });
+});
+
 describe('formatPaymentMethodLabel', () => {
   it('maps CASH to Cash', async () => {
     const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');

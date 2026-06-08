@@ -10,7 +10,7 @@ import {
 import type { GetToken } from '@/lib/api.js';
 import { fetchEmployeeServices, fetchMyAssignedServices } from '@/lib/employeeServices.js';
 import { fetchEmployees } from '@/lib/employees.js';
-import { formatCentsForInput, formatPaymentMethodLabel } from '@/lib/format.js';
+import { formatCentsForInput, formatPaymentMethodLabel, hasPriceChangedFromDefault } from '@/lib/format.js';
 import {
   buildServiceRecordPayload,
   validateServiceRecordDraft,
@@ -175,6 +175,11 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
     [services, selectedServiceId]
   );
 
+  const priceDiffersFromDefault = useMemo(
+    () => hasPriceChangedFromDefault(priceCentsInput, selectedService?.priceCents),
+    [priceCentsInput, selectedService],
+  );
+
   async function handleSubmit() {
     if (isSubmitting) {
       return;
@@ -328,6 +333,12 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         style={styles.input}
         testID="service-record-price-cents"
       />
+
+      {priceDiffersFromDefault && (
+        <Text style={styles.priceDiffText} testID="service-record-price-diff">
+          Price differs from the service default.
+        </Text>
+      )}
 
       <Text style={styles.sectionLabel}>Payment Method (optional)</Text>
       <View style={styles.optionGroup}>
@@ -514,6 +525,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     color: '#333',
+  },
+  priceDiffText: {
+    fontSize: 12,
+    color: '#E65100',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   notesInput: {
     minHeight: 88,
