@@ -65,3 +65,21 @@ export function getServiceStatusCounts(
     ALL: active + inactive,
   };
 }
+
+/**
+ * Filters a list of services by name search query.
+ *
+ * - Case-insensitive substring match on service.name.
+ * - Trims leading/trailing whitespace from the query.
+ * - Empty or whitespace-only query returns all services unchanged.
+ */
+export function filterServicesByName(
+  services: readonly Service[],
+  query: string,
+): Service[] {
+  const trimmed = query.trim();
+  if (trimmed.length === 0) return [...services];
+
+  const lower = trimmed.toLowerCase();
+  return services.filter((s) => s.name.toLowerCase().includes(lower));
+}

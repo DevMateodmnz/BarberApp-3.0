@@ -2,7 +2,7 @@
  * Unit tests for service filters — PR-049A
  */
 import { describe, it, expect } from 'vitest';
-import { filterServicesByStatus, getServiceStatusCounts } from '../../src/lib/serviceFilters.js';
+import { filterServicesByStatus, filterServicesByName, getServiceStatusCounts } from '../../src/lib/serviceFilters.js';
 import type { Service } from '../../src/lib/types.js';
 
 function svc(id: string, isActive: boolean): Service {
@@ -79,5 +79,53 @@ describe('getServiceStatusCounts', () => {
   it('returns all services as inactive when every one is inactive', () => {
     const result = getServiceStatusCounts([inactiveC, inactiveD]);
     expect(result).toEqual({ ACTIVE: 0, INACTIVE: 2, ALL: 2 });
+  });
+});
+
+describe('filterServicesByName', () => {
+  it('empty query returns all provided services', () => {
+    expect(filterServicesByName(allServices, '')).toEqual(allServices);
+  });
+
+  it('whitespace-only query returns all provided services', () => {
+    expect(filterServicesByName(allServices, '   ')).toEqual(allServices);
+  });
+
+  it('matches service name case-insensitively', () => {
+    const result = filterServicesByName(allServices, 'SERVICE A');
+    expect(result).toEqual([activeA]);
+  });
+
+  it('partial substring match works', () => {
+    const result = filterServicesByName(allServices, 'erv');
+    expect(result).toEqual(allServices);
+  });
+
+  it('query with no matches returns empty array', () => {
+    expect(filterServicesByName(allServices, 'zzz')).toEqual([]);
+  });
+
+  it('combines with ACTIVE filter to return only matching active services', () => {
+    const result = filterServicesByName(
+      filterServicesByStatus(allServices, 'ACTIVE'),
+      'Service',
+    );
+    expect(result).toEqual([activeA, activeB]);
+  });
+
+  it('combines with INACTIVE filter to return only matching inactive services', () => {
+    const result = filterServicesByName(
+      filterServicesByStatus(allServices, 'INACTIVE'),
+      'Service',
+    );
+    expect(result).toEqual([inactiveC, inactiveD]);
+  });
+
+  it('combines with ALL filter to return all matching services', () => {
+    const result = filterServicesByName(
+      filterServicesByStatus(allServices, 'ALL'),
+      'Service c',
+    );
+    expect(result).toEqual([inactiveC]);
   });
 });

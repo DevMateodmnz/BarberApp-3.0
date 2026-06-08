@@ -27,7 +27,7 @@ import {
   parseCurrencyInputToCents,
 } from '@/lib/format.js';
 import { useFlashStore } from '@/lib/flashStore.js';
-import { filterServicesByStatus, getServiceStatusCounts, type ServiceStatusFilter, SERVICE_STATUS_FILTERS } from '@/lib/serviceFilters.js';
+import { filterServicesByStatus, filterServicesByName, getServiceStatusCounts, type ServiceStatusFilter, SERVICE_STATUS_FILTERS } from '@/lib/serviceFilters.js';
 import type { Service } from '@/lib/types.js';
 
 export default function ServicesScreen() {
@@ -62,9 +62,13 @@ export default function ServicesScreen() {
   const [editError, setEditError] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<ServiceStatusFilter>('ACTIVE');
+  const [searchQuery, setSearchQuery] = useState('');
   const visibleServices = useMemo(
-    () => filterServicesByStatus(services, statusFilter),
-    [services, statusFilter],
+    () => {
+      const byStatus = filterServicesByStatus(services, statusFilter);
+      return filterServicesByName(byStatus, searchQuery);
+    },
+    [services, statusFilter, searchQuery],
   );
 
   const statusCounts = useMemo(
@@ -333,6 +337,16 @@ export default function ServicesScreen() {
             </View>
           )}
 
+          {/* Search */}
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search services by name…"
+            style={styles.searchInput}
+            testID="services-search-input"
+            autoCorrect={false}
+          />
+
           {/* Status filter */}
           <View style={styles.filterBar} testID="services-filter-bar">
             {SERVICE_STATUS_FILTERS.map((filter) => (
@@ -374,9 +388,13 @@ export default function ServicesScreen() {
           {!isServicesLoading && !servicesError && visibleServices.length === 0 && (
             <View style={styles.messageCard}>
               <Text style={styles.emptyText} testID="services-empty">
-                {statusFilter === 'ACTIVE' && 'No active services.'}
-                {statusFilter === 'INACTIVE' && 'No inactive services.'}
-                {statusFilter === 'ALL' && 'No services yet.'}
+                {searchQuery.trim().length > 0
+                  ? 'No services match your search.'
+                  : statusFilter === 'ACTIVE'
+                    ? 'No active services.'
+                    : statusFilter === 'INACTIVE'
+                      ? 'No inactive services.'
+                      : 'No services yet.'}
               </Text>
             </View>
           )}
@@ -475,6 +493,7 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 12 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 4, marginTop: 8 },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CCCCCC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333' },
+  searchInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CCCCCC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333', marginTop: 16, width: '100%', maxWidth: 400 },
   createActions: { marginTop: 16, gap: 8 },
   submitButton: { backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
   submitButtonDisabled: { backgroundColor: '#999999' },
