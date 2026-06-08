@@ -197,6 +197,23 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* OWNER-only: barbershop service catalog entry */}
+          {context.role === 'OWNER' && !!context.barbershopId && (
+            <View style={styles.actionCard} testID="home-services-card">
+              <Text style={styles.actionTitle}>Services</Text>
+              <Text style={styles.actionText}>
+                View your barbershop service catalog.
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/services')}
+                style={styles.actionButton}
+                testID="home-services-button"
+              >
+                <Text style={styles.actionButtonText}>View Services</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {context.role === 'CLIENT' && (
             <View style={styles.summaryCard} testID="home-client-message">
               <Text style={styles.summaryTitle}>Dashboard</Text>
