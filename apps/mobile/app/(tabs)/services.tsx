@@ -24,10 +24,10 @@ import { useServicesStore } from '@/lib/servicesStore.js';
 import {
   formatCentsForDisplay,
   formatCentsForInput,
-  parseCurrencyInputToCents,
 } from '@/lib/format.js';
 import { useFlashStore } from '@/lib/flashStore.js';
 import { filterServicesByStatus, filterServicesByName, getServiceStatusCounts, type ServiceStatusFilter, SERVICE_STATUS_FILTERS } from '@/lib/serviceFilters.js';
+import { validateServiceForm } from '@/lib/serviceForm.js';
 import type { Service } from '@/lib/types.js';
 
 export default function ServicesScreen() {
@@ -117,21 +117,14 @@ export default function ServicesScreen() {
   async function handleCreateService() {
     setCreateError(null);
 
-    const trimmedName = newName.trim();
-    if (trimmedName.length === 0) {
-      setCreateError('Service name is required.');
-      return;
-    }
-
-    const priceCents = parseCurrencyInputToCents(newPriceInput);
-    if (priceCents === null) {
-      setCreateError('Enter a valid price amount.');
-      return;
-    }
-
-    const durationMinutes = Number(newDurationInput);
-    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-      setCreateError('Enter a valid positive duration in minutes.');
+    const result = validateServiceForm({
+      name: newName,
+      priceInput: newPriceInput,
+      durationInput: newDurationInput,
+      description: newDescription,
+    });
+    if (!result.ok) {
+      setCreateError(result.error);
       return;
     }
 
@@ -143,13 +136,7 @@ export default function ServicesScreen() {
     setIsCreating(true);
 
     try {
-      const description = newDescription.trim() || undefined;
-      await createService(getToken, context.barbershopId, {
-        name: trimmedName,
-        durationMinutes,
-        priceCents,
-        ...(description ? { description } : {}),
-      });
+      await createService(getToken, context.barbershopId, result.payload);
 
       resetCreateForm();
       useFlashStore.getState().setMessage('Service created successfully.');
@@ -163,21 +150,14 @@ export default function ServicesScreen() {
   async function handleUpdateService() {
     setEditError(null);
 
-    const trimmedName = editName.trim();
-    if (trimmedName.length === 0) {
-      setEditError('Service name is required.');
-      return;
-    }
-
-    const priceCents = parseCurrencyInputToCents(editPriceInput);
-    if (priceCents === null) {
-      setEditError('Enter a valid price amount.');
-      return;
-    }
-
-    const durationMinutes = Number(editDurationInput);
-    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-      setEditError('Enter a valid positive duration in minutes.');
+    const result = validateServiceForm({
+      name: editName,
+      priceInput: editPriceInput,
+      durationInput: editDurationInput,
+      description: editDescription,
+    });
+    if (!result.ok) {
+      setEditError(result.error);
       return;
     }
 
@@ -189,13 +169,7 @@ export default function ServicesScreen() {
     setIsUpdating(true);
 
     try {
-      const description = editDescription.trim() || undefined;
-      await updateService(getToken, context.barbershopId, editingServiceId, {
-        name: trimmedName,
-        durationMinutes,
-        priceCents,
-        ...(description !== undefined ? { description } : {}),
-      });
+      await updateService(getToken, context.barbershopId, editingServiceId, result.payload);
 
       cancelEditing();
       useFlashStore.getState().setMessage('Service updated successfully.');
