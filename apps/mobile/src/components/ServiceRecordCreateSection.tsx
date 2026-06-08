@@ -10,7 +10,7 @@ import {
 import type { GetToken } from '@/lib/api.js';
 import { fetchEmployeeServices, fetchMyAssignedServices } from '@/lib/employeeServices.js';
 import { fetchEmployees } from '@/lib/employees.js';
-import { formatCentsForInput, formatPaymentMethodLabel, hasPriceChangedFromDefault } from '@/lib/format.js';
+import { formatCentsForDisplay, formatCentsForInput, formatPaymentMethodLabel, hasPriceChangedFromDefault } from '@/lib/format.js';
 import {
   buildServiceRecordPayload,
   getNextServiceRecordPriceInput,
@@ -327,6 +327,22 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         </>
       )}
 
+      {selectedService && (
+        <View style={styles.selectedServiceContext} testID="service-record-selected-context">
+          <Text style={styles.selectedServiceName}>
+            Selected: {selectedService.name}
+          </Text>
+          <Text style={styles.selectedServiceDefault}>
+            Default: {formatCentsForDisplay(selectedService.priceCents)} · {selectedService.durationMinutes} min
+          </Text>
+          {!priceDiffersFromDefault && (
+            <Text style={styles.selectedServiceUsingDefault}>
+              Using default service price.
+            </Text>
+          )}
+        </View>
+      )}
+
       <Text style={styles.sectionLabel}>Price (ARS)</Text>
       <TextInput
         value={priceCentsInput}
@@ -536,6 +552,28 @@ const styles = StyleSheet.create({
   priceDiffText: {
     fontSize: 12,
     color: '#E65100',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  selectedServiceContext: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+  },
+  selectedServiceName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  selectedServiceDefault: {
+    fontSize: 13,
+    color: '#555',
+    marginTop: 4,
+  },
+  selectedServiceUsingDefault: {
+    fontSize: 12,
+    color: '#2E7D32',
     marginTop: 4,
     fontStyle: 'italic',
   },
