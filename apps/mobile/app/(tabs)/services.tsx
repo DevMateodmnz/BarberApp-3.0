@@ -5,9 +5,10 @@
  * "View Services" card on Home for OWNER users with a barbershop.
  * OWNER can view, create, and edit services.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -67,6 +68,11 @@ export default function ServicesScreen() {
     if (!context || !getToken) return;
     void loadServices(getToken, context.barbershopId);
   }, [context, getToken, loadServices]);
+
+  const handleRefresh = useCallback(() => {
+    if (!getToken || !context?.barbershopId) return;
+    void loadServices(getToken, context.barbershopId);
+  }, [getToken, context?.barbershopId, loadServices]);
 
   function resetCreateForm() {
     setNewName('');
@@ -215,7 +221,17 @@ export default function ServicesScreen() {
   const isOwner = context.role === 'OWNER' && !!context.barbershopId;
 
   return (
-    <ScrollView style={styles.scrollView} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={isServicesLoading}
+          onRefresh={handleRefresh}
+          testID="services-refresh"
+        />
+      }
+    >
       <View style={styles.headerCard}>
         <Text style={styles.title}>Services</Text>
         <Text style={styles.subtitle}>Your barbershop service catalog.</Text>
