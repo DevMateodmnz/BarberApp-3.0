@@ -119,6 +119,85 @@ describe('createServiceRecord', () => {
   });
 });
 
+describe('fetchBarbershopRecords', () => {
+  it('sends authenticated GET with date param', async () => {
+    const { fetchBarbershopRecords } = await importServiceRecords();
+    const fakeRecords = [
+      { id: 'rec-1', employeeId: 'emp-1', serviceId: 'svc-1', priceCents: 2500 },
+      { id: 'rec-2', employeeId: 'emp-2', serviceId: 'svc-2', priceCents: 1500 },
+    ];
+
+    mockApi.get.mockResolvedValueOnce({
+      data: { success: true, data: fakeRecords },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    const result = await fetchBarbershopRecords(getToken, 'shop-1', '2026-06-08');
+
+    expect(getToken).toHaveBeenCalled();
+    expect(mockApi.get).toHaveBeenCalledWith(
+      '/barbershops/shop-1/service-records',
+      {
+        headers: { Authorization: 'Bearer owner-token' },
+        params: { date: '2026-06-08' },
+      },
+    );
+    expect(result).toEqual(fakeRecords);
+  });
+
+  it('handles API error for barbershop records', async () => {
+    const { fetchBarbershopRecords } = await importServiceRecords();
+
+    mockApi.get.mockResolvedValueOnce({
+      data: { success: false, error: { code: 'NOT_FOUND', message: 'Barbershop not found' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    await expect(
+      fetchBarbershopRecords(getToken, 'shop-1', '2026-06-08')
+    ).rejects.toThrow('Barbershop not found');
+  });
+});
+
+describe('fetchEmployeeRecords', () => {
+  it('sends authenticated GET with date param', async () => {
+    const { fetchEmployeeRecords } = await importServiceRecords();
+    const fakeRecords = [
+      { id: 'rec-1', employeeId: 'emp-1', serviceId: 'svc-1', priceCents: 2500 },
+    ];
+
+    mockApi.get.mockResolvedValueOnce({
+      data: { success: true, data: fakeRecords },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('barber-token');
+    const result = await fetchEmployeeRecords(getToken, 'shop-1', 'emp-1', '2026-06-08');
+
+    expect(getToken).toHaveBeenCalled();
+    expect(mockApi.get).toHaveBeenCalledWith(
+      '/barbershops/shop-1/employees/emp-1/service-records',
+      {
+        headers: { Authorization: 'Bearer barber-token' },
+        params: { date: '2026-06-08' },
+      },
+    );
+    expect(result).toEqual(fakeRecords);
+  });
+
+  it('handles API error for employee records', async () => {
+    const { fetchEmployeeRecords } = await importServiceRecords();
+
+    mockApi.get.mockResolvedValueOnce({
+      data: { success: false, error: { code: 'FORBIDDEN', message: 'Not authorized' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('barber-token');
+    await expect(
+      fetchEmployeeRecords(getToken, 'shop-1', 'emp-1', '2026-06-08')
+    ).rejects.toThrow('Not authorized');
+  });
+});
+
 describe('buildServiceRecordPayload', () => {
   it('includes paymentMethod when selected', async () => {
     const { buildServiceRecordPayload } = await importPayloadHelper();

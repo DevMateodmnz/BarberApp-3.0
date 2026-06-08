@@ -20,3 +20,58 @@ export async function createServiceRecord(
 
   return data.data;
 }
+
+/**
+ * Fetches service records for a barbershop on a given date (OWNER view).
+ *
+ * GET /barbershops/:barbershopId/service-records?date=YYYY-MM-DD
+ */
+export async function fetchBarbershopRecords(
+  getToken: GetToken,
+  barbershopId: string,
+  date: string,
+): Promise<ServiceRecord[]> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<ServiceRecord[]>>(
+    `/barbershops/${barbershopId}/service-records`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: { date },
+    },
+  );
+
+  const { data } = response;
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message ?? 'Failed to fetch service records');
+  }
+
+  return data.data;
+}
+
+/**
+ * Fetches service records for a specific employee on a given date (BARBER view).
+ *
+ * GET /barbershops/:barbershopId/employees/:employeeId/service-records?date=YYYY-MM-DD
+ */
+export async function fetchEmployeeRecords(
+  getToken: GetToken,
+  barbershopId: string,
+  employeeId: string,
+  date: string,
+): Promise<ServiceRecord[]> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<ServiceRecord[]>>(
+    `/barbershops/${barbershopId}/employees/${employeeId}/service-records`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: { date },
+    },
+  );
+
+  const { data } = response;
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message ?? 'Failed to fetch employee records');
+  }
+
+  return data.data;
+}

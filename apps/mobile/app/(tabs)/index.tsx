@@ -15,6 +15,7 @@ import { DailySummarySection } from '@/components/DailySummarySection.js';
 import { useContextStore } from '@/lib/store.js';
 import { useSummaryStore } from '@/lib/summaryStore.js';
 import { useFlashStore } from '@/lib/flashStore.js';
+import { useRecordsStore } from '@/lib/recordsStore.js';
 import {
   getTodayDateString,
   addDaysToDateString,
@@ -39,6 +40,13 @@ export default function HomeScreen() {
   const flashMessage = useFlashStore((s) => s.message);
   const clearFlashMessage = useFlashStore((s) => s.clearMessage);
 
+  const {
+    records,
+    isRecordsLoading,
+    recordsError,
+    loadRecordsForDate,
+  } = useRecordsStore();
+
   // Auto-clear flash message after a short display period
   useEffect(() => {
     if (!flashMessage) return;
@@ -54,11 +62,12 @@ export default function HomeScreen() {
     loadContext(getToken);
   }, [isSignedIn, getToken, loadContext]);
 
-  // Load summary after context is loaded, for the selected date
+  // Load summary and records after context is loaded, for the selected date
   useEffect(() => {
     if (!context || !getToken) return;
     loadSummaryForDate(getToken, context, selectedDate);
-  }, [context, getToken, selectedDate, loadSummaryForDate]);
+    loadRecordsForDate(getToken, context, selectedDate);
+  }, [context, getToken, selectedDate, loadSummaryForDate, loadRecordsForDate]);
 
   useFocusEffect(
     useCallback(() => {
@@ -72,6 +81,7 @@ export default function HomeScreen() {
       }
 
       void loadSummaryForDate(getToken, context, selectedDate);
+      void loadRecordsForDate(getToken, context, selectedDate);
       return undefined;
     }, [context, getToken, loadSummaryForDate, selectedDate])
   );
@@ -86,8 +96,9 @@ export default function HomeScreen() {
     const { context: freshContext } = useContextStore.getState();
     if (freshContext) {
       await loadSummaryForDate(getToken, freshContext, selectedDate);
+      await loadRecordsForDate(getToken, freshContext, selectedDate);
     }
-  }, [getToken, loadContext, selectedDate, loadSummaryForDate]);
+  }, [getToken, loadContext, selectedDate, loadSummaryForDate, loadRecordsForDate]);
 
   const canRecordService =
     !!context && (
@@ -95,7 +106,7 @@ export default function HomeScreen() {
       (context.role === 'BARBER' && !!context.barbershopId && !!context.employeeId)
     );
 
-  const isRefreshing = isContextLoading || isSummaryLoading;
+  const isRefreshing = isContextLoading || isSummaryLoading || isRecordsLoading;
 
   if (!isLoaded || !isSignedIn) {
     return null;
@@ -275,6 +286,73 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* Service records list — only for OWNER and BARBER */}
+          {(context.role === 'OWNER' || context.role === 'BARBER') && (
+            <>
+              {isRecordsLoading && (
+                <View style={styles.summaryCard}>
+                  <ActivityIndicator size="small" />
+                  <Text style={styles.loadingText}>Loading records…</Text>
+                </View>
+              )}
+
+              {recordsError && (
+                <View style={styles.summaryCard}>
+                  <Text style={styles.errorText} testID="home-records-error">
+                    {recordsError}
+                  </Text>
+                </View>
+              )}
+
+              {!isRecordsLoading && !recordsError && (
+                <View style={styles.summaryCard} testID="home-records-section">
+                  <Text style={styles.summaryTitle}>Service Records</Text>
+
+                  {records.length === 0 ? (
+                    <Text style={styles.emptyHint} testID="home-records-empty">
+                      No service records for this date.
+                    </Text>
+                  ) : (
+                    records.map((record) => (
+                      <View key={record.id} style={styles.recordRow} testID={`record-${record.id}`}>
+                        <View style={styles.recordRowMain}>
+                          <Text style={styles.recordServiceName}>
+                            {record.service?.name ?? 'Unknown service'}
+                          </Text>
+                          {context.role === 'OWNER' && record.employee?.user?.name && (
+                            <Text style={styles.recordBarberName}>
+                              {record.employee.user.name}
+                            </Text>
+                          )}
+                        </View>
+                        <View style={styles.recordRowDetails}>
+                          <Text style={styles.recordPrice}>
+                            ${(record.priceCents / 100).toFixed(2)}
+                          </Text>
+                          {record.paymentMethod && (
+                            <Text style={styles.recordPaymentMethod}>
+                              {record.paymentMethod}
+                            </Text>
+                          )}
+                        </View>
+                        {record.clientName && (
+                          <Text style={styles.recordClientName} numberOfLines={1}>
+                            Client: {record.clientName}
+                          </Text>
+                        )}
+                        {record.notes && (
+                          <Text style={styles.recordNotes} numberOfLines={2}>
+                            {record.notes}
+                          </Text>
+                        )}
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+            </>
+          )}
+
           {/* Missing IDs — no summary to load */}
           {(context.role === 'OWNER' || context.role === 'BARBER') &&
             !context.barbershopId && !isSummaryLoading && !summary && (
@@ -450,5 +528,48 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#333',
     fontFamily: 'monospace',
+  },
+  recordRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#DDD',
+    paddingVertical: 12,
+    gap: 4,
+  },
+  recordRowMain: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  recordServiceName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  recordBarberName: {
+    fontSize: 12,
+    color: '#666',
+  },
+  recordRowDetails: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+  },
+  recordPrice: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2E7D32',
+  },
+  recordPaymentMethod: {
+    fontSize: 12,
+    color: '#666',
+  },
+  recordClientName: {
+    fontSize: 12,
+    color: '#555',
+  },
+  recordNotes: {
+    fontSize: 12,
+    color: '#777',
+    fontStyle: 'italic',
   },
 });
