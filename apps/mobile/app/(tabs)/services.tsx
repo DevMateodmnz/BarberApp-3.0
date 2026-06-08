@@ -338,14 +338,26 @@ export default function ServicesScreen() {
           )}
 
           {/* Search */}
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search services by name…"
-            style={styles.searchInput}
-            testID="services-search-input"
-            autoCorrect={false}
-          />
+          <View style={styles.searchRow}>
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search services by name…"
+              style={styles.searchInput}
+              testID="services-search-input"
+              autoCorrect={false}
+            />
+            {searchQuery.trim().length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                style={styles.searchClearButton}
+                accessibilityLabel="Clear service search"
+                testID="services-search-clear"
+              >
+                <Text style={styles.searchClearButtonText}>×</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Status filter */}
           <View style={styles.filterBar} testID="services-filter-bar">
@@ -493,7 +505,10 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 12 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 4, marginTop: 8 },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CCCCCC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333' },
-  searchInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CCCCCC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333', marginTop: 16, width: '100%', maxWidth: 400 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, width: '100%', maxWidth: 400 },
+  searchInput: { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CCCCCC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333' },
+  searchClearButton: { marginLeft: 8, paddingHorizontal: 10, paddingVertical: 10 },
+  searchClearButtonText: { fontSize: 18, color: '#999', fontWeight: '600' },
   createActions: { marginTop: 16, gap: 8 },
   submitButton: { backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
   submitButtonDisabled: { backgroundColor: '#999999' },
