@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -189,21 +190,42 @@ export default function ServicesScreen() {
     }
   }
 
-  async function handleToggleActive(service: Service) {
+  function performToggle(service: Service, newIsActive: boolean) {
     if (!context?.barbershopId) return;
 
-    const newIsActive = !service.isActive;
+    updateService(getToken, context.barbershopId, service.id, { isActive: newIsActive })
+      .then(() => {
+        useFlashStore.getState().setMessage(
+          newIsActive ? 'Service reactivated.' : 'Service deactivated.',
+        );
+      })
+      .catch((err: unknown) => {
+        useFlashStore.getState().setMessage(
+          err instanceof Error ? err.message : 'Failed to update service',
+        );
+      });
+  }
 
-    try {
-      await updateService(getToken, context.barbershopId, service.id, { isActive: newIsActive });
-      useFlashStore.getState().setMessage(
-        newIsActive ? 'Service reactivated.' : 'Service deactivated.',
-      );
-    } catch (err) {
-      useFlashStore.getState().setMessage(
-        err instanceof Error ? err.message : 'Failed to update service',
-      );
+  function handleToggleActive(service: Service) {
+    // Reactivate is immediate — no confirmation needed
+    if (!service.isActive) {
+      performToggle(service, true);
+      return;
     }
+
+    // Deactivate requires confirmation
+    Alert.alert(
+      'Deactivate service?',
+      'This service will no longer be available for new records, but past records will stay unchanged.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Deactivate',
+          style: 'destructive',
+          onPress: () => performToggle(service, false),
+        },
+      ],
+    );
   }
 
   if (!isLoaded || !isSignedIn) {
