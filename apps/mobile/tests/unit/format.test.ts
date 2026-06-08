@@ -160,6 +160,65 @@ describe('hasPriceChangedFromDefault', () => {
   });
 });
 
+describe('formatCentsForDisplay', () => {
+  it('formats zero cents', async () => {
+    const { formatCentsForDisplay } = await import('../../src/lib/format.js');
+    expect(formatCentsForDisplay(0)).toBe('$0.00');
+  });
+
+  it('formats round thousands', async () => {
+    const { formatCentsForDisplay } = await import('../../src/lib/format.js');
+    expect(formatCentsForDisplay(500000)).toBe('$5000.00');
+  });
+
+  it('formats amount with cents', async () => {
+    const { formatCentsForDisplay } = await import('../../src/lib/format.js');
+    expect(formatCentsForDisplay(500050)).toBe('$5000.50');
+  });
+
+  it('formats sub-unit amount', async () => {
+    const { formatCentsForDisplay } = await import('../../src/lib/format.js');
+    expect(formatCentsForDisplay(99)).toBe('$0.99');
+  });
+
+  it('formats single cent', async () => {
+    const { formatCentsForDisplay } = await import('../../src/lib/format.js');
+    expect(formatCentsForDisplay(1)).toBe('$0.01');
+  });
+});
+
+describe('formatRecordTime', () => {
+  it('returns null for undefined', async () => {
+    const { formatRecordTime } = await import('../../src/lib/format.js');
+    expect(formatRecordTime(undefined)).toBeNull();
+  });
+
+  it('returns null for null', async () => {
+    const { formatRecordTime } = await import('../../src/lib/format.js');
+    expect(formatRecordTime(null)).toBeNull();
+  });
+
+  it('returns null for invalid date string', async () => {
+    const { formatRecordTime } = await import('../../src/lib/format.js');
+    expect(formatRecordTime('not-a-date')).toBeNull();
+  });
+
+  it('formats ISO timestamp as HH:mm', async () => {
+    const { formatRecordTime } = await import('../../src/lib/format.js');
+    // Use a fixed timestamp to avoid timezone flakiness
+    const result = formatRecordTime('2026-06-08T14:30:00.000Z');
+    expect(result).toMatch(/^\d{2}:\d{2}$/);
+    expect(result).toBeTruthy();
+  });
+
+  it('pads single-digit hours', async () => {
+    const { formatRecordTime } = await import('../../src/lib/format.js');
+    const result = formatRecordTime('2026-06-08T09:05:00.000Z');
+    expect(result).toMatch(/^\d{2}:\d{2}$/);
+    expect(result).toBeTruthy();
+  });
+});
+
 describe('formatPaymentMethodLabel', () => {
   it('maps CASH to Cash', async () => {
     const { formatPaymentMethodLabel } = await import('../../src/lib/format.js');

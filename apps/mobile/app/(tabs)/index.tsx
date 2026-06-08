@@ -20,6 +20,8 @@ import {
   getTodayDateString,
   addDaysToDateString,
   isTodayDateString,
+  formatCentsForDisplay,
+  formatRecordTime,
 } from '@/lib/format.js';
 import type { BarbershopDailySummary, EmployeeDailySummary } from '@/lib/types.js';
 
@@ -327,11 +329,16 @@ export default function HomeScreen() {
                         </View>
                         <View style={styles.recordRowDetails}>
                           <Text style={styles.recordPrice}>
-                            ${(record.priceCents / 100).toFixed(2)}
+                            {formatCentsForDisplay(record.priceCents)}
                           </Text>
                           {record.paymentMethod && (
                             <Text style={styles.recordPaymentMethod}>
                               {record.paymentMethod}
+                            </Text>
+                          )}
+                          {formatRecordTime(record.performedAt) && (
+                            <Text style={styles.recordTime}>
+                              {formatRecordTime(record.performedAt)}
                             </Text>
                           )}
                         </View>
@@ -562,6 +569,11 @@ const styles = StyleSheet.create({
   recordPaymentMethod: {
     fontSize: 12,
     color: '#666',
+  },
+  recordTime: {
+    fontSize: 12,
+    color: '#999',
+    marginLeft: 'auto',
   },
   recordClientName: {
     fontSize: 12,

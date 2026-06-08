@@ -145,6 +145,57 @@ export function formatCentsForInput(cents: number): string {
 }
 
 /**
+ * Formats integer cents for display with a "$" prefix and two decimal places.
+ *
+ * Uses integer math only — no floating-point division.
+ *
+ * Examples:
+ * - 500000 -> "$5000.00"
+ * - 500050 -> "$5000.50"
+ * - 99 -> "$0.99"
+ * - 0 -> "$0.00"
+ */
+export function formatCentsForDisplay(cents: number): string {
+  if (!Number.isInteger(cents)) {
+    throw new Error('cents must be an integer');
+  }
+  if (cents < 0) {
+    throw new Error('cents must be non-negative');
+  }
+
+  const whole = Math.floor(cents / 100);
+  const remainder = cents % 100;
+  return `$${whole}.${String(remainder).padStart(2, '0')}`;
+}
+
+/**
+ * Extracts a local "HH:mm" time string from an ISO date string.
+ *
+ * Returns null when performedAt is undefined, null, or not a valid date.
+ * Uses the device's local time — suitable for display but NOT for
+ * cross-timezone comparisons.
+ *
+ * Examples:
+ * - "2026-06-08T14:30:00.000Z" -> "14:30" (or local equivalent)
+ * - null -> null
+ * - "invalid" -> null
+ */
+export function formatRecordTime(performedAt?: string | null): string | null {
+  if (!performedAt) {
+    return null;
+  }
+
+  const date = new Date(performedAt);
+  if (isNaN(date.getTime())) {
+    return null;
+  }
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+/**
  * Formats backend payment method values for display in daily summaries.
  *
  * Backend values are stored as enum-like strings, but older/missing records may
