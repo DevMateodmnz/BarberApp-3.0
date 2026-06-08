@@ -1,4 +1,4 @@
-import { parseCurrencyInputToCents } from './format.js';
+import { formatCentsForInput, parseCurrencyInputToCents } from './format.js';
 import type { CreateServiceRecordInput, PaymentMethod } from './types.js';
 
 interface BuildServiceRecordPayloadInput {
@@ -112,4 +112,41 @@ export function validateServiceRecordDraft({
     ...(clientName ? { clientName } : {}),
     ...(notes ? { notes } : {}),
   };
+}
+
+export interface GetNextPriceInputParams {
+  currentPriceInput: string;
+  /** The default price of the previously selected service, or null if no service was selected. */
+  previousServiceDefaultPriceCents: number | null;
+  /** The default price of the newly selected service. */
+  nextServiceDefaultPriceCents: number;
+}
+
+/**
+ * Determines the price input value when the user selects a new service.
+ *
+ * - If the current input is empty → auto-fill with the new service's default.
+ * - If the current input matches the PREVIOUS service's default → update to the new default.
+ * - Otherwise, the user typed a custom price → preserve it.
+ */
+export function getNextServiceRecordPriceInput(
+  params: GetNextPriceInputParams,
+): string {
+  const { currentPriceInput, previousServiceDefaultPriceCents, nextServiceDefaultPriceCents } = params;
+
+  // Auto-fill when input is empty (including first-time selection)
+  if (currentPriceInput === '') {
+    return formatCentsForInput(nextServiceDefaultPriceCents);
+  }
+
+  // If the user hasn't modified the price from the previous default, update it
+  if (
+    previousServiceDefaultPriceCents !== null &&
+    currentPriceInput === formatCentsForInput(previousServiceDefaultPriceCents)
+  ) {
+    return formatCentsForInput(nextServiceDefaultPriceCents);
+  }
+
+  // Preserve custom input
+  return currentPriceInput;
 }

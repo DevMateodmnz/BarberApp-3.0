@@ -517,3 +517,91 @@ describe('validateServiceRecordDraft', () => {
     ).toEqual({ ok: false, error: 'Notes must be 1000 characters or fewer.' });
   });
 });
+
+describe('getNextServiceRecordPriceInput', () => {
+  it('empty price input auto-fills with next service default', async () => {
+    const { getNextServiceRecordPriceInput } = await importPayloadHelper();
+
+    const result = getNextServiceRecordPriceInput({
+      currentPriceInput: '',
+      previousServiceDefaultPriceCents: null,
+      nextServiceDefaultPriceCents: 500000,
+    });
+    // formatCentsForInput(500000) = "5000"
+    expect(result).toBe('5000');
+  });
+
+  it('empty price input auto-fills with default even when previous default exists', async () => {
+    const { getNextServiceRecordPriceInput } = await importPayloadHelper();
+
+    const result = getNextServiceRecordPriceInput({
+      currentPriceInput: '',
+      previousServiceDefaultPriceCents: 200000,
+      nextServiceDefaultPriceCents: 500000,
+    });
+    // User cleared the field; should still auto-fill with new default
+    expect(result).toBe('5000');
+  });
+
+  it('updates price when current input equals previous service default', async () => {
+    const { getNextServiceRecordPriceInput } = await importPayloadHelper();
+
+    // User had service A (1000 cents → "10"), switches to service B (500000 cents → "5000")
+    const result = getNextServiceRecordPriceInput({
+      currentPriceInput: '10',
+      previousServiceDefaultPriceCents: 1000,
+      nextServiceDefaultPriceCents: 500000,
+    });
+    expect(result).toBe('5000');
+  });
+
+  it('preserves custom price when switching services', async () => {
+    const { getNextServiceRecordPriceInput } = await importPayloadHelper();
+
+    // User manually typed "75.50", which doesn't match previous default
+    const result = getNextServiceRecordPriceInput({
+      currentPriceInput: '75.50',
+      previousServiceDefaultPriceCents: 1000,
+      nextServiceDefaultPriceCents: 500000,
+    });
+    expect(result).toBe('75.50');
+  });
+
+  it('handles next service default of zero cents', async () => {
+    const { getNextServiceRecordPriceInput } = await importPayloadHelper();
+
+    const result = getNextServiceRecordPriceInput({
+      currentPriceInput: '',
+      previousServiceDefaultPriceCents: null,
+      nextServiceDefaultPriceCents: 0,
+    });
+    // formatCentsForInput(0) = "0"
+    expect(result).toBe('0');
+  });
+
+  it('preserves existing zero input even when switching from a zero-default service', async () => {
+    const { getNextServiceRecordPriceInput } = await importPayloadHelper();
+
+    // User is on a service with price 0 (input shows "0"), switching to service with price 300000
+    const result = getNextServiceRecordPriceInput({
+      currentPriceInput: '0',
+      previousServiceDefaultPriceCents: 0,
+      nextServiceDefaultPriceCents: 300000,
+    });
+    // "0" matches previous default, so update to new default
+    expect(result).toBe('3000');
+  });
+
+  it('preserves custom input when previous default is null (no previous service)', async () => {
+    const { getNextServiceRecordPriceInput } = await importPayloadHelper();
+
+    // This shouldn't happen in normal flow (if no previous service, input should be empty),
+    // but the helper shouldn't crash — it should preserve whatever is there
+    const result = getNextServiceRecordPriceInput({
+      currentPriceInput: '42',
+      previousServiceDefaultPriceCents: null,
+      nextServiceDefaultPriceCents: 500000,
+    });
+    expect(result).toBe('42');
+  });
+});

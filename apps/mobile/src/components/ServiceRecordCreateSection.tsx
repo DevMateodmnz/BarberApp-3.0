@@ -13,6 +13,7 @@ import { fetchEmployees } from '@/lib/employees.js';
 import { formatCentsForInput, formatPaymentMethodLabel, hasPriceChangedFromDefault } from '@/lib/format.js';
 import {
   buildServiceRecordPayload,
+  getNextServiceRecordPriceInput,
   validateServiceRecordDraft,
 } from '@/lib/serviceRecordPayload.js';
 import { createServiceRecord } from '@/lib/serviceRecords.js';
@@ -164,8 +165,14 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
   }
 
   function handleServiceSelect(service: Service) {
+    const previousDefault = selectedService?.priceCents ?? null;
+    const nextPrice = getNextServiceRecordPriceInput({
+      currentPriceInput: priceCentsInput,
+      previousServiceDefaultPriceCents: previousDefault,
+      nextServiceDefaultPriceCents: service.priceCents,
+    });
     setSelectedServiceId(service.id);
-    setPriceCentsInput(formatCentsForInput(service.priceCents));
+    setPriceCentsInput(nextPrice);
     setFormError(null);
     setFormSuccess(null);
   }
