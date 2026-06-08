@@ -23,6 +23,24 @@ export interface ApiResponse<T = unknown> {
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
 
 /**
+ * Structured API error — thrown by API client helpers when a response
+ * carries an error payload.
+ *
+ * Preserves the backend error code and HTTP status so callers can
+ * use robust code/status checks instead of fragile string matching.
+ */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly code?: string,
+    public readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/**
  * Pre-configured Axios instance for BarberApp API calls.
  *
  * Usage:

@@ -1,4 +1,4 @@
-import { api, type ApiResponse, type GetToken } from './api.js';
+import { api, ApiError, type ApiResponse, type GetToken } from './api.js';
 import type { EmployeeListItem } from './types.js';
 
 export async function fetchEmployees(
@@ -22,19 +22,37 @@ export async function fetchEmployees(
 /**
  * Maps raw API error messages for createEmployee to user-friendly copy.
  *
- * Keeps known backend messages human-readable while passing through
- * unknown messages unchanged. Safe for use in UI error display.
+ * Accepts either a plain string (legacy / unknown errors) or an ApiError
+ * object carrying structured code and status fields.
+ *
+ * Structured matching (by status 404/409 or code NOT_FOUND/CONFLICT) is
+ * preferred — it survives backend message rewordings.  Falls back to exact
+ * string matching when structure is absent or unrecognised, and finally
+ * passes through the raw message for completely unknown errors.
  */
-export function friendlyCreateEmployeeError(rawMessage: string): string {
-  if (rawMessage === 'User not found') {
+export function friendlyCreateEmployeeError(raw: string | ApiError): string {
+  // --- structured matching (more robust) ---
+  if (raw instanceof ApiError) {
+    if (raw.status === 404 || raw.code === 'NOT_FOUND') {
+      return 'No account found with this email or ID. Make sure the person has logged in at least once.';
+    }
+    if (raw.status === 409 || raw.code === 'CONFLICT') {
+      return 'This person is already an employee of this barbershop.';
+    }
+    // Fall through to message string matching
+    return friendlyCreateEmployeeError(raw.message);
+  }
+
+  // --- legacy string matching ---
+  if (raw === 'User not found') {
     return 'No account found with this email or ID. Make sure the person has logged in at least once.';
   }
 
-  if (rawMessage === 'User is already an employee of this barbershop') {
+  if (raw === 'User is already an employee of this barbershop') {
     return 'This person is already an employee of this barbershop.';
   }
 
-  return rawMessage;
+  return raw;
 }
 
 /**
@@ -110,9 +128,13 @@ export async function createEmployee(
     { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
   );
 
-  const { data } = response;
+  const { data, status } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to create employee');
+    throw new ApiError(
+      data.error?.message ?? 'Failed to create employee',
+      data.error?.code,
+      status,
+    );
   }
 
   return data.data;

@@ -10,7 +10,9 @@ import {
   deactivateEmployee as deactivateEmployeeApi,
   reactivateEmployee as reactivateEmployeeApi,
   createEmployee as createEmployeeApi,
+  friendlyCreateEmployeeError,
 } from './employees.js';
+import { ApiError } from './api.js';
 import {
   fetchEmployeeServices,
   assignEmployeeService as assignEmployeeServiceApi,
@@ -125,8 +127,11 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
       const employees = await fetchEmployees(getToken, barbershopId);
       set({ employees });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      set({ employeesError: message });
+      set({
+        employeesError: friendlyCreateEmployeeError(
+          err instanceof ApiError ? err : (err instanceof Error ? err.message : 'Unknown error'),
+        ),
+      });
     }
   },
 

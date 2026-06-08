@@ -268,4 +268,126 @@ describe('friendlyCreateEmployeeError', () => {
     );
     expect(result).toBe('Provide exactly one of: userId or email');
   });
+
+  // PR-068A: structured ApiError matching — robust against message rewording
+  describe('with ApiError (structured)', () => {
+    async function getApiError() {
+      const apiModule = await importApi();
+      return apiModule.ApiError;
+    }
+
+    it('maps ApiError with status=404 to user-friendly message (even with random message)', async () => {
+      const { friendlyCreateEmployeeError } = await importEmployees();
+      const ApiError = await getApiError();
+      const err = new ApiError('Some completely different error text', 'NOT_FOUND', 404);
+      const result = friendlyCreateEmployeeError(err);
+      expect(result).toBe(
+        'No account found with this email or ID. Make sure the person has logged in at least once.',
+      );
+    });
+
+    it('maps ApiError with code=NOT_FOUND to user-friendly message (even with random message)', async () => {
+      const { friendlyCreateEmployeeError } = await importEmployees();
+      const ApiError = await getApiError();
+      const err = new ApiError('User does not exist in the database', 'NOT_FOUND');
+      const result = friendlyCreateEmployeeError(err);
+      expect(result).toBe(
+        'No account found with this email or ID. Make sure the person has logged in at least once.',
+      );
+    });
+
+    it('maps ApiError with status=409 to duplicate-employee message', async () => {
+      const { friendlyCreateEmployeeError } = await importEmployees();
+      const ApiError = await getApiError();
+      const err = new ApiError('Employee relationship exists already', 'CONFLICT', 409);
+      const result = friendlyCreateEmployeeError(err);
+      expect(result).toBe('This person is already an employee of this barbershop.');
+    });
+
+    it('maps ApiError with code=CONFLICT to duplicate-employee message', async () => {
+      const { friendlyCreateEmployeeError } = await importEmployees();
+      const ApiError = await getApiError();
+      const err = new ApiError('Resource conflict', 'CONFLICT');
+      const result = friendlyCreateEmployeeError(err);
+      expect(result).toBe('This person is already an employee of this barbershop.');
+    });
+
+    it('falls through to message matching when status/code are unknown', async () => {
+      const { friendlyCreateEmployeeError } = await importEmployees();
+      const ApiError = await getApiError();
+      // status 400 with code VALIDATION_ERROR — not explicitly handled, should fall to message
+      const err = new ApiError('User not found', 'VALIDATION_ERROR', 400);
+      const result = friendlyCreateEmployeeError(err);
+      // Falls through to string matching: "User not found" matches legacy rule
+      expect(result).toBe(
+        'No account found with this email or ID. Make sure the person has logged in at least once.',
+      );
+    });
+
+    it('passes through completely unknown ApiError unchanged', async () => {
+      const { friendlyCreateEmployeeError } = await importEmployees();
+      const ApiError = await getApiError();
+      const err = new ApiError('Something exploded', undefined, 500);
+      const result = friendlyCreateEmployeeError(err);
+      expect(result).toBe('Something exploded');
+    });
+  });
+});
+
+// ============================================
+// createEmployee throws ApiError — PR-068A
+// ============================================
+
+describe('createEmployee ApiError', () => {
+  it('throws ApiError with code and status on NOT_FOUND', async () => {
+    const { createEmployee } = await importEmployees();
+    const apiModule = await importApi();
+    const ApiError = apiModule.ApiError;
+
+    mockApi.post.mockResolvedValueOnce({
+      status: 404,
+      data: { success: false, error: { code: 'NOT_FOUND', message: 'User not found' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+
+    let caught: unknown;
+    try {
+      await createEmployee(getToken, 'shop-1', 'noone@test.com');
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    const apiErr = caught as InstanceType<typeof ApiError>;
+    expect(apiErr.message).toBe('User not found');
+    expect(apiErr.code).toBe('NOT_FOUND');
+    expect(apiErr.status).toBe(404);
+  });
+
+  it('throws ApiError with code and status on CONFLICT', async () => {
+    const { createEmployee } = await importEmployees();
+    const apiModule = await importApi();
+    const ApiError = apiModule.ApiError;
+
+    mockApi.post.mockResolvedValueOnce({
+      status: 409,
+      data: { success: false, error: { code: 'CONFLICT', message: 'User is already an employee of this barbershop' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+
+    let caught: unknown;
+    try {
+      await createEmployee(getToken, 'shop-1', 'existing@test.com');
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    const apiErr = caught as InstanceType<typeof ApiError>;
+    expect(apiErr.message).toBe('User is already an employee of this barbershop');
+    expect(apiErr.code).toBe('CONFLICT');
+    expect(apiErr.status).toBe(409);
+  });
 });

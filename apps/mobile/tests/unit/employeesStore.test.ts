@@ -9,12 +9,16 @@ const mockDeactivateEmployee = vi.fn();
 const mockReactivateEmployee = vi.fn();
 const mockCreateEmployee = vi.fn();
 
-vi.mock('../../src/lib/employees.js', () => ({
-  fetchEmployees: (...args: unknown[]) => mockFetchEmployees(...args),
-  deactivateEmployee: (...args: unknown[]) => mockDeactivateEmployee(...args),
-  reactivateEmployee: (...args: unknown[]) => mockReactivateEmployee(...args),
-  createEmployee: (...args: unknown[]) => mockCreateEmployee(...args),
-}));
+vi.mock('../../src/lib/employees.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/lib/employees.js')>();
+  return {
+    ...actual,
+    fetchEmployees: (...args: unknown[]) => mockFetchEmployees(...args),
+    deactivateEmployee: (...args: unknown[]) => mockDeactivateEmployee(...args),
+    reactivateEmployee: (...args: unknown[]) => mockReactivateEmployee(...args),
+    createEmployee: (...args: unknown[]) => mockCreateEmployee(...args),
+  };
+});
 
 const mockFetchEmployeeServices = vi.fn();
 const mockAssignEmployeeService = vi.fn();
@@ -164,7 +168,9 @@ describe('useEmployeesStore', () => {
     const getToken = vi.fn().mockResolvedValue('token');
     await useEmployeesStore.getState().createEmployee(getToken, 'shop-1', 'bad-id');
 
-    expect(useEmployeesStore.getState().employeesError).toBe('User not found');
+    expect(useEmployeesStore.getState().employeesError).toBe(
+      'No account found with this email or ID. Make sure the person has logged in at least once.',
+    );
     expect(useEmployeesStore.getState().employees).toEqual([existingEmp]);
   });
 
