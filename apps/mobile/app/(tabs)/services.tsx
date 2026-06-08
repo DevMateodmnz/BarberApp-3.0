@@ -5,7 +5,7 @@
  * "View Services" card on Home for OWNER users with a barbershop.
  * OWNER can view, create, and edit services.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +27,7 @@ import {
   parseCurrencyInputToCents,
 } from '@/lib/format.js';
 import { useFlashStore } from '@/lib/flashStore.js';
+import { filterServicesByStatus, type ServiceStatusFilter, SERVICE_STATUS_FILTERS } from '@/lib/serviceFilters.js';
 import type { Service } from '@/lib/types.js';
 
 export default function ServicesScreen() {
@@ -59,6 +60,12 @@ export default function ServicesScreen() {
   const [editDescription, setEditDescription] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  const [statusFilter, setStatusFilter] = useState<ServiceStatusFilter>('ACTIVE');
+  const visibleServices = useMemo(
+    () => filterServicesByStatus(services, statusFilter),
+    [services, statusFilter],
+  );
 
   useEffect(() => {
     if (!isSignedIn || !getToken || context) return;
@@ -321,6 +328,30 @@ export default function ServicesScreen() {
             </View>
           )}
 
+          {/* Status filter */}
+          <View style={styles.filterBar} testID="services-filter-bar">
+            {SERVICE_STATUS_FILTERS.map((filter) => (
+              <TouchableOpacity
+                key={filter}
+                onPress={() => setStatusFilter(filter)}
+                style={[
+                  styles.filterChip,
+                  statusFilter === filter && styles.filterChipSelected,
+                ]}
+                testID={`services-filter-${filter.toLowerCase()}`}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    statusFilter === filter && styles.filterChipTextSelected,
+                  ]}
+                >
+                  {filter === 'ACTIVE' ? 'Active' : filter === 'INACTIVE' ? 'Inactive' : 'All'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {/* Service list */}
           {isServicesLoading && (
             <View style={styles.loadingRow}>
@@ -335,15 +366,19 @@ export default function ServicesScreen() {
             </View>
           )}
 
-          {!isServicesLoading && !servicesError && services.length === 0 && (
+          {!isServicesLoading && !servicesError && visibleServices.length === 0 && (
             <View style={styles.messageCard}>
-              <Text style={styles.emptyText} testID="services-empty">No services yet.</Text>
+              <Text style={styles.emptyText} testID="services-empty">
+                {statusFilter === 'ACTIVE' && 'No active services.'}
+                {statusFilter === 'INACTIVE' && 'No inactive services.'}
+                {statusFilter === 'ALL' && 'No services yet.'}
+              </Text>
             </View>
           )}
 
-          {!isServicesLoading && !servicesError && services.length > 0 && (
+          {!isServicesLoading && !servicesError && visibleServices.length > 0 && (
             <View style={styles.listCard} testID="services-list">
-              {services.map((service) => (
+              {visibleServices.map((service) => (
                 <View key={service.id}>
                   {editingServiceId === service.id ? (
                     /* Edit form */
@@ -425,6 +460,11 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: '#666', marginTop: 6 },
   addButton: { marginTop: 16, backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 20, width: '100%', maxWidth: 400, alignItems: 'center' },
   addButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  filterBar: { flexDirection: 'row', gap: 8, marginTop: 16, width: '100%', maxWidth: 400 },
+  filterChip: { flex: 1, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#CCCCCC', backgroundColor: '#FFFFFF', alignItems: 'center' },
+  filterChipSelected: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+  filterChipText: { fontSize: 12, fontWeight: '600', color: '#666' },
+  filterChipTextSelected: { color: '#FFFFFF' },
   createCard: { backgroundColor: '#F5F5F5', borderRadius: 12, padding: 20, width: '100%', maxWidth: 400, marginTop: 16 },
   editCard: { backgroundColor: '#FFF8E1', borderRadius: 12, padding: 20, marginBottom: 8 },
   sectionLabel: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 12 },
