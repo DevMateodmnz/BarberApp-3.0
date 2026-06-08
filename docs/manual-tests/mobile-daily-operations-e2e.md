@@ -66,12 +66,14 @@ npm run dev --workspace @barberapp/mobile
 
 ### 1.2 Employees — Add a barber
 
+> **Detailed employee onboarding QA**: see [`mobile-employee-onboarding.md`](./mobile-employee-onboarding.md) for the full checklist covering email add, error paths, User ID fallback, role restrictions, and PR-069A regression checks.
+
 12. Tap **Back to Home**.
 13. Tap **View Employees**.
 14. Confirm the Employees screen opens (empty list or existing employees).
 
 15. Tap **+ Add Employee**.
-16. Enter the BARBER's email address (e.g. `barber@shop.com`) in the Email or User ID field.
+16. Confirm the label says "Email (or User ID)" and the placeholder shows an email example. Enter the BARBER's email address (e.g. `barber@shop.com`).
 17. Tap **Add Employee**.
 18. Confirm success flash and the employee appears in the list.
 19. Confirm the employee shows: name/email, role `BARBER`, `Active` badge.
@@ -249,12 +251,14 @@ npm run dev --workspace @barberapp/mobile
 
 ### 4.6 Validation — add employee
 
+> Comprehensive validation (empty input, unknown email, duplicate, User ID fallback, PR-069A regression) has been extracted to [`mobile-employee-onboarding.md`](./mobile-employee-onboarding.md). Run that checklist alongside this document.
+
 109. On Employees screen, tap **+ Add Employee**.
 110. Leave the field empty and tap **Add Employee**.
 111. Confirm the error: `Email or User ID is required.`
 
 112. Enter a nonexistent email (e.g. `noone@test.com`).
-113. Confirm the API returns an error message (e.g. `User not found`).
+113. Confirm the friendly error message appears (not raw "User not found").
 
 ---
 
