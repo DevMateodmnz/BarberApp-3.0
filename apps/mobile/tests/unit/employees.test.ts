@@ -160,3 +160,47 @@ describe('reactivateEmployee', () => {
     ).rejects.toThrow('Already active');
   });
 });
+
+describe('createEmployee', () => {
+  it('sends POST to /barbershops/:barbershopId/employees with userId', async () => {
+    const { createEmployee } = await importEmployees();
+
+    const created = {
+      id: 'emp-new',
+      barbershopId: 'shop-1',
+      userId: 'user-3',
+      isActive: true,
+      createdAt: '2026-06-08T00:00:00.000Z',
+      updatedAt: '2026-06-08T00:00:00.000Z',
+      user: { id: 'user-3', email: 'new@t.com', name: 'New Barber', role: 'BARBER' as const },
+    };
+
+    mockApi.post.mockResolvedValueOnce({
+      data: { success: true, data: created },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    const result = await createEmployee(getToken, 'shop-1', 'user-3');
+
+    expect(getToken).toHaveBeenCalled();
+    expect(mockApi.post).toHaveBeenCalledWith(
+      '/barbershops/shop-1/employees',
+      { userId: 'user-3' },
+      { headers: { Authorization: 'Bearer owner-token' } },
+    );
+    expect(result).toEqual(created);
+  });
+
+  it('throws on API error', async () => {
+    const { createEmployee } = await importEmployees();
+
+    mockApi.post.mockResolvedValueOnce({
+      data: { success: false, error: { code: 'NOT_FOUND', message: 'User not found' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    await expect(
+      createEmployee(getToken, 'shop-1', 'nonexistent'),
+    ).rejects.toThrow('User not found');
+  });
+});

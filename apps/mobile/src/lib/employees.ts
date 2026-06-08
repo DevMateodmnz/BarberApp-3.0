@@ -65,3 +65,29 @@ export async function reactivateEmployee(
 
   return data.data;
 }
+
+/**
+ * Creates a new employee by linking an existing user to the barbershop.
+ * The user must already exist in the system (via Clerk webhook or seed).
+ *
+ * POST /barbershops/:barbershopId/employees
+ */
+export async function createEmployee(
+  getToken: GetToken,
+  barbershopId: string,
+  userId: string,
+): Promise<EmployeeListItem> {
+  const token = await getToken();
+  const response = await api.post<ApiResponse<EmployeeListItem>>(
+    `/barbershops/${barbershopId}/employees`,
+    { userId },
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  const { data } = response;
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message ?? 'Failed to create employee');
+  }
+
+  return data.data;
+}

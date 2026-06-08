@@ -7,11 +7,13 @@ import type { EmployeeListItem } from '../../src/lib/types.js';
 const mockFetchEmployees = vi.fn();
 const mockDeactivateEmployee = vi.fn();
 const mockReactivateEmployee = vi.fn();
+const mockCreateEmployee = vi.fn();
 
 vi.mock('../../src/lib/employees.js', () => ({
   fetchEmployees: (...args: unknown[]) => mockFetchEmployees(...args),
   deactivateEmployee: (...args: unknown[]) => mockDeactivateEmployee(...args),
   reactivateEmployee: (...args: unknown[]) => mockReactivateEmployee(...args),
+  createEmployee: (...args: unknown[]) => mockCreateEmployee(...args),
 }));
 
 async function importStore() {
@@ -122,5 +124,36 @@ describe('useEmployeesStore', () => {
     expect(mockReactivateEmployee).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1');
     expect(mockFetchEmployees).toHaveBeenCalledWith(getToken, 'shop-1');
     expect(useEmployeesStore.getState().employees).toEqual(freshList);
+  });
+
+  it('createEmployee sends userId and reloads list', async () => {
+    const { useEmployeesStore } = await importStore();
+    const existingEmp = makeEmployee({ id: 'emp-1' });
+    useEmployeesStore.setState({ employees: [existingEmp] });
+
+    const newEmp = makeEmployee({ id: 'emp-2', userId: 'user-2' });
+    mockCreateEmployee.mockResolvedValueOnce(newEmp);
+    const freshList = [existingEmp, newEmp];
+    mockFetchEmployees.mockResolvedValueOnce(freshList);
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useEmployeesStore.getState().createEmployee(getToken, 'shop-1', 'user-2');
+
+    expect(mockCreateEmployee).toHaveBeenCalledWith(getToken, 'shop-1', 'user-2');
+    expect(mockFetchEmployees).toHaveBeenCalledWith(getToken, 'shop-1');
+    expect(useEmployeesStore.getState().employees).toEqual(freshList);
+  });
+
+  it('createEmployee error does not mutate list', async () => {
+    const { useEmployeesStore } = await importStore();
+    const existingEmp = makeEmployee({ id: 'emp-1' });
+    useEmployeesStore.setState({ employees: [existingEmp] });
+    mockCreateEmployee.mockRejectedValueOnce(new Error('User not found'));
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useEmployeesStore.getState().createEmployee(getToken, 'shop-1', 'bad-id');
+
+    expect(useEmployeesStore.getState().employeesError).toBe('User not found');
+    expect(useEmployeesStore.getState().employees).toEqual([existingEmp]);
   });
 });

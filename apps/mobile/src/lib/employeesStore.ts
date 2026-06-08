@@ -9,6 +9,7 @@ import {
   fetchEmployees,
   deactivateEmployee as deactivateEmployeeApi,
   reactivateEmployee as reactivateEmployeeApi,
+  createEmployee as createEmployeeApi,
 } from './employees.js';
 import type { EmployeeListItem } from './types.js';
 
@@ -32,6 +33,12 @@ interface EmployeesState {
     getToken: () => Promise<string | null>,
     barbershopId: string,
     employeeId: string,
+  ) => Promise<void>;
+
+  createEmployee: (
+    getToken: () => Promise<string | null>,
+    barbershopId: string,
+    userId: string,
   ) => Promise<void>;
 
   clearEmployees: () => void;
@@ -72,6 +79,19 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
         const message = err instanceof Error ? err.message : 'Unknown error';
         set({ employeesError: message });
       });
+  },
+
+  createEmployee: async (getToken, barbershopId, userId) => {
+    set({ employeesError: null });
+    try {
+      await createEmployeeApi(getToken, barbershopId, userId);
+      // Reload the full list for consistent ordering
+      const employees = await fetchEmployees(getToken, barbershopId);
+      set({ employees });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      set({ employeesError: message });
+    }
   },
 
   clearEmployees: () => {

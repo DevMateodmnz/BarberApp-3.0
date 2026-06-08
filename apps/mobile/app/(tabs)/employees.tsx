@@ -5,7 +5,7 @@
  * "View Employees" card on Home for OWNER users with a barbershop.
  * OWNER can view, deactivate, and reactivate employees.
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -34,6 +35,7 @@ export default function EmployeesScreen() {
     loadEmployees,
     deactivateEmployee,
     reactivateEmployee,
+    createEmployee,
   } = useEmployeesStore();
 
   useEffect(() => {
@@ -45,6 +47,45 @@ export default function EmployeesScreen() {
     if (!context || !getToken) return;
     void loadEmployees(getToken, context.barbershopId);
   }, [context, getToken, loadEmployees]);
+
+  // Add employee form state
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newUserId, setNewUserId] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  function resetAddForm() {
+    setNewUserId('');
+    setCreateError(null);
+    setShowAddForm(false);
+  }
+
+  async function handleCreateEmployee() {
+    setCreateError(null);
+
+    const userId = newUserId.trim();
+    if (userId.length === 0) {
+      setCreateError('User ID is required.');
+      return;
+    }
+
+    if (!context?.barbershopId) {
+      setCreateError('No barbershop context available.');
+      return;
+    }
+
+    setIsCreating(true);
+
+    try {
+      await createEmployee(getToken, context.barbershopId, userId);
+      resetAddForm();
+      useFlashStore.getState().setMessage('Employee added successfully.');
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to add employee');
+    } finally {
+      setIsCreating(false);
+    }
+  }
 
   const handleRefresh = useCallback(() => {
     if (!getToken || !context?.barbershopId) return;
@@ -150,6 +191,60 @@ export default function EmployeesScreen() {
 
       {isOwner && (
         <>
+          {/* Add Employee toggle */}
+          {!showAddForm ? (
+            <TouchableOpacity
+              onPress={() => setShowAddForm(true)}
+              style={styles.addButton}
+              testID="employees-add-button"
+            >
+              <Text style={styles.addButtonText}>+ Add Employee</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.createCard} testID="employees-add-form">
+              <Text style={styles.sectionLabel}>New Employee</Text>
+              <Text style={styles.helpText}>
+                Enter the Clerk user ID of an existing user to add them as an employee.
+              </Text>
+
+              <Text style={styles.fieldLabel}>User ID</Text>
+              <TextInput
+                value={newUserId}
+                onChangeText={setNewUserId}
+                placeholder="e.g. user_<clerk-id>..."
+                style={styles.input}
+                testID="employees-add-userid"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              {createError && (
+                <Text style={styles.errorText} testID="employees-add-error">{createError}</Text>
+              )}
+
+              <View style={styles.createActions}>
+                <TouchableOpacity
+                  onPress={() => void handleCreateEmployee()}
+                  disabled={isCreating}
+                  style={[styles.submitButton, isCreating && styles.submitButtonDisabled]}
+                  testID="employees-add-submit"
+                >
+                  <Text style={styles.submitButtonText}>
+                    {isCreating ? 'Adding…' : 'Add Employee'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={resetAddForm}
+                  disabled={isCreating}
+                  style={styles.cancelButton}
+                  testID="employees-add-cancel"
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {isEmployeesLoading && (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" />
@@ -245,4 +340,17 @@ const styles = StyleSheet.create({
   reactivateButtonText: { fontSize: 12, color: '#2E7D32', fontWeight: '600' },
   backButton: { marginTop: 16, marginBottom: 24, backgroundColor: '#333333', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 20, width: '100%', maxWidth: 400, alignItems: 'center' },
   backButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  addButton: { marginTop: 16, backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 20, width: '100%', maxWidth: 400, alignItems: 'center' },
+  addButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  createCard: { backgroundColor: '#F5F5F5', borderRadius: 12, padding: 20, width: '100%', maxWidth: 400, marginTop: 16 },
+  sectionLabel: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 12 },
+  helpText: { fontSize: 13, color: '#666', marginBottom: 8 },
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 4, marginTop: 8 },
+  input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CCCCCC', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#333' },
+  createActions: { marginTop: 16, gap: 8 },
+  submitButton: { backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+  submitButtonDisabled: { backgroundColor: '#999999' },
+  submitButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  cancelButton: { backgroundColor: '#EEEEEE', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  cancelButtonText: { color: '#666', fontSize: 14 },
 });
