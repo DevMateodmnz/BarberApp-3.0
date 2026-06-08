@@ -21,6 +21,7 @@ import {
   addDaysToDateString,
   isTodayDateString,
   formatCentsForDisplay,
+  formatPaymentMethodLabel,
   formatRecordTime,
 } from '@/lib/format.js';
 import type { BarbershopDailySummary, EmployeeDailySummary } from '@/lib/types.js';
@@ -332,7 +333,9 @@ export default function HomeScreen() {
                       No service records for this date.
                     </Text>
                   ) : (
-                    records.map((record) => (
+                    records.map((record) => {
+                      const recordTime = formatRecordTime(record.performedAt);
+                      return (
                       <View key={record.id} style={styles.recordRow} testID={`record-${record.id}`}>
                         <View style={styles.recordRowMain}>
                           <Text style={styles.recordServiceName}>
@@ -350,13 +353,11 @@ export default function HomeScreen() {
                           </Text>
                           {record.paymentMethod && (
                             <Text style={styles.recordPaymentMethod}>
-                              {record.paymentMethod}
+                              {formatPaymentMethodLabel(record.paymentMethod)}
                             </Text>
                           )}
-                          {formatRecordTime(record.performedAt) && (
-                            <Text style={styles.recordTime}>
-                              {formatRecordTime(record.performedAt)}
-                            </Text>
+                          {recordTime && (
+                            <Text style={styles.recordTime}>{recordTime}</Text>
                           )}
                         </View>
                         {record.clientName && (
@@ -370,7 +371,8 @@ export default function HomeScreen() {
                           </Text>
                         )}
                       </View>
-                    ))
+                      );
+                    })
                   )}
                 </View>
               )}
