@@ -5,19 +5,35 @@ import { api, type ApiResponse, type GetToken } from './api.js';
 import type { CreateServiceInput, Service, UpdateServiceInput } from './types.js';
 
 /**
- * Fetches all active services for a barbershop (OWNER view).
+ * Options for fetching barbershop services.
+ */
+export interface FetchServicesOptions {
+  /** When true, includes inactive services (default: false for backward compat). */
+  includeInactive?: boolean;
+}
+
+/**
+ * Fetches services for a barbershop (OWNER view).
  *
- * GET /barbershops/:barbershopId/services
+ * GET /barbershops/:barbershopId/services?includeInactive=true
  * Requires OWNER role on the backend.
  */
 export async function fetchBarbershopServices(
   getToken: GetToken,
   barbershopId: string,
+  options: FetchServicesOptions = {},
 ): Promise<Service[]> {
   const token = await getToken();
+  const params: Record<string, string> = {};
+  if (options.includeInactive) {
+    params.includeInactive = 'true';
+  }
   const response = await api.get<ApiResponse<Service[]>>(
     `/barbershops/${barbershopId}/services`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params,
+    },
   );
 
   const { data } = response;

@@ -189,6 +189,23 @@ export default function ServicesScreen() {
     }
   }
 
+  async function handleToggleActive(service: Service) {
+    if (!context?.barbershopId) return;
+
+    const newIsActive = !service.isActive;
+
+    try {
+      await updateService(getToken, context.barbershopId, service.id, { isActive: newIsActive });
+      useFlashStore.getState().setMessage(
+        newIsActive ? 'Service reactivated.' : 'Service deactivated.',
+      );
+    } catch (err) {
+      useFlashStore.getState().setMessage(
+        err instanceof Error ? err.message : 'Failed to update service',
+      );
+    }
+  }
+
   if (!isLoaded || !isSignedIn) {
     return null;
   }
@@ -340,14 +357,27 @@ export default function ServicesScreen() {
                       </View>
                       <View style={styles.serviceRowMeta}>
                         <Text style={styles.serviceDuration}>{service.durationMinutes} min</Text>
-                        {!service.isActive && <Text style={styles.serviceInactive}>Inactive</Text>}
+                        <Text style={service.isActive ? styles.serviceActiveBadge : styles.serviceInactive}>
+                          {service.isActive ? 'Active' : 'Inactive'}
+                        </Text>
                       </View>
                       {service.description && (
                         <Text style={styles.serviceDescription} numberOfLines={2}>{service.description}</Text>
                       )}
-                      <TouchableOpacity onPress={() => startEditing(service)} style={styles.editButton} testID={`service-edit-button-${service.id}`}>
-                        <Text style={styles.editButtonText}>Edit</Text>
-                      </TouchableOpacity>
+                      <View style={styles.serviceRowActions}>
+                        <TouchableOpacity onPress={() => startEditing(service)} style={styles.editButton} testID={`service-edit-button-${service.id}`}>
+                          <Text style={styles.editButtonText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => void handleToggleActive(service)}
+                          style={service.isActive ? styles.deactivateButton : styles.reactivateButton}
+                          testID={`service-toggle-${service.id}`}
+                        >
+                          <Text style={service.isActive ? styles.deactivateButtonText : styles.reactivateButtonText}>
+                            {service.isActive ? 'Deactivate' : 'Reactivate'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   )}
                 </View>
@@ -396,10 +426,16 @@ const styles = StyleSheet.create({
   servicePrice: { fontSize: 13, fontWeight: '600', color: '#2E7D32' },
   serviceRowMeta: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   serviceDuration: { fontSize: 12, color: '#666' },
+  serviceActiveBadge: { fontSize: 11, color: '#2E7D32', fontWeight: '600' },
   serviceInactive: { fontSize: 11, color: '#D32F2F', fontWeight: '600' },
   serviceDescription: { fontSize: 12, color: '#777', fontStyle: 'italic' },
-  editButton: { alignSelf: 'flex-end', marginTop: 6, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, backgroundColor: '#E3F2FD' },
+  serviceRowActions: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  editButton: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, backgroundColor: '#E3F2FD' },
   editButtonText: { fontSize: 12, color: '#007AFF', fontWeight: '600' },
+  deactivateButton: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, backgroundColor: '#FFEBEE' },
+  deactivateButtonText: { fontSize: 12, color: '#D32F2F', fontWeight: '600' },
+  reactivateButton: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, backgroundColor: '#E8F5E9' },
+  reactivateButtonText: { fontSize: 12, color: '#2E7D32', fontWeight: '600' },
   backButton: { marginTop: 16, marginBottom: 24, backgroundColor: '#333333', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 20, width: '100%', maxWidth: 400, alignItems: 'center' },
   backButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
 });

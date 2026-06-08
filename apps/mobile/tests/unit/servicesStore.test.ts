@@ -44,7 +44,7 @@ describe('useServicesStore', () => {
     const getToken = vi.fn().mockResolvedValue('token');
     await useServicesStore.getState().loadServices(getToken, 'shop-1');
 
-    expect(mockFetchBarbershopServices).toHaveBeenCalledWith(getToken, 'shop-1');
+    expect(mockFetchBarbershopServices).toHaveBeenCalledWith(getToken, 'shop-1', { includeInactive: true });
     expect(useServicesStore.getState().services).toEqual(fakeServices);
     expect(useServicesStore.getState().isServicesLoading).toBe(false);
   });
@@ -139,5 +139,21 @@ describe('useServicesStore', () => {
     await expect(
       useServicesStore.getState().updateService(getToken, 'shop-1', 'svc-1', { name: 'X' }),
     ).rejects.toThrow('Not found');
+  });
+
+  it('updateService can send isActive: false to deactivate', async () => {
+    const { useServicesStore } = await importStore();
+    const original = { id: 'svc-1', name: 'Cut', durationMinutes: 30, priceCents: 2000, isActive: true };
+    const updated = { ...original, isActive: false };
+    mockUpdateBarbershopService.mockResolvedValueOnce(updated);
+
+    useServicesStore.setState({ services: [original] });
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    const result = await useServicesStore.getState().updateService(getToken, 'shop-1', 'svc-1', { isActive: false });
+
+    expect(mockUpdateBarbershopService).toHaveBeenCalledWith(getToken, 'shop-1', 'svc-1', { isActive: false });
+    expect(result).toEqual(updated);
+    expect(useServicesStore.getState().services).toEqual([updated]);
   });
 });

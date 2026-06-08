@@ -126,6 +126,7 @@ export interface UpdateServiceInput {
   durationMinutes?: number;
   priceCents?: number;
   description?: string;
+  isActive?: boolean;
 }
 
 export interface CreateServiceRecordInput {

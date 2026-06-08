@@ -55,7 +55,7 @@ export const useServicesStore = create<ServicesState>((set, get) => ({
     set({ isServicesLoading: true, servicesError: null });
 
     try {
-      const services = await fetchBarbershopServices(getToken, barbershopId);
+      const services = await fetchBarbershopServices(getToken, barbershopId, { includeInactive: true });
       set({ services, isServicesLoading: false, servicesError: null });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';

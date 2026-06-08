@@ -53,7 +53,34 @@ describe('fetchBarbershopServices', () => {
     expect(getToken).toHaveBeenCalled();
     expect(mockApi.get).toHaveBeenCalledWith(
       '/barbershops/shop-1/services',
-      { headers: { Authorization: 'Bearer owner-token' } },
+      {
+        headers: { Authorization: 'Bearer owner-token' },
+        params: {},
+      },
+    );
+    expect(result).toEqual(fakeServices);
+  });
+
+  it('sends includeInactive=true when option is set', async () => {
+    const { fetchBarbershopServices } = await importServices();
+    const fakeServices = [
+      { id: 'svc-1', name: 'Active', isActive: true },
+      { id: 'svc-2', name: 'Inactive', isActive: false },
+    ];
+
+    mockApi.get.mockResolvedValueOnce({
+      data: { success: true, data: fakeServices },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    const result = await fetchBarbershopServices(getToken, 'shop-1', { includeInactive: true });
+
+    expect(mockApi.get).toHaveBeenCalledWith(
+      '/barbershops/shop-1/services',
+      {
+        headers: { Authorization: 'Bearer owner-token' },
+        params: { includeInactive: 'true' },
+      },
     );
     expect(result).toEqual(fakeServices);
   });
