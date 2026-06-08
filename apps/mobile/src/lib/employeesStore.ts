@@ -49,7 +49,7 @@ interface EmployeesState {
   createEmployee: (
     getToken: () => Promise<string | null>,
     barbershopId: string,
-    userId: string,
+    identifier: string,
   ) => Promise<void>;
 
   loadAssignments: (
@@ -118,10 +118,10 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
       });
   },
 
-  createEmployee: async (getToken, barbershopId, userId) => {
+  createEmployee: async (getToken, barbershopId, identifier) => {
     set({ employeesError: null });
     try {
-      await createEmployeeApi(getToken, barbershopId, userId);
+      await createEmployeeApi(getToken, barbershopId, identifier);
       const employees = await fetchEmployees(getToken, barbershopId);
       set({ employees });
     } catch (err) {

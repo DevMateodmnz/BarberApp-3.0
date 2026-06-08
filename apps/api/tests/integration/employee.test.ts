@@ -158,6 +158,13 @@ function addEmployee(shopId: string, userId: string, asClerkId: string) {
     .send({ userId });
 }
 
+function addEmployeeByEmail(shopId: string, email: string, asClerkId: string) {
+  return request(app)
+    .post(`/api/v1/barbershops/${shopId}/employees`)
+    .set(authHeader(asClerkId))
+    .send({ email });
+}
+
 // ============================================
 // TESTS
 // ============================================
@@ -322,6 +329,97 @@ describe('POST /api/v1/barbershops/:barbershopId/employees', () => {
       where: { barbershopId: fixtures.shopB.id, userId: fixtures.barberUser.id },
     });
     expect(shopBEmployee).toBeNull();
+  });
+
+  // --- Email-based employee creation ---
+
+  it('OWNER adds employee by email — 201', async () => {
+    const res = await addEmployeeByEmail(
+      fixtures.shopA.id,
+      'barber_emp@test.com',
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.userId).toBe(fixtures.barberUser.id);
+    expect(res.body.data.user.email).toBe('barber_emp@test.com');
+  });
+
+  it('email lookup is case-insensitive', async () => {
+    const res = await addEmployeeByEmail(
+      fixtures.shopA.id,
+      'Barber_EMP@TEST.com',
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.userId).toBe(fixtures.barberUser.id);
+  });
+
+  it('unknown email returns 404', async () => {
+    const res = await addEmployeeByEmail(
+      fixtures.shopA.id,
+      'nonexistent@test.com',
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it('both userId and email returns 400', async () => {
+    const res = await request(app)
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/employees`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ userId: fixtures.barberUser.id, email: 'barber_emp@test.com' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('neither userId nor email returns 400', async () => {
+    const res = await request(app)
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/employees`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+
+  it('duplicate by email is rejected same as duplicate by userId', async () => {
+    await addEmployeeByEmail(
+      fixtures.shopA.id,
+      'barber_emp@test.com',
+      fixtures.ownerA.clerkUserId
+    );
+
+    const res = await addEmployeeByEmail(
+      fixtures.shopA.id,
+      'barber_emp@test.com',
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toContain('already an employee');
+  });
+
+  it('BARBER cannot add by email — 403', async () => {
+    const res = await addEmployeeByEmail(
+      fixtures.shopA.id,
+      'barber_emp@test.com',
+      fixtures.barberUser.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it('OWNER cannot add by email to another barbershop — 403', async () => {
+    const res = await addEmployeeByEmail(
+      fixtures.shopB.id,
+      'external_emp@test.com',
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(403);
   });
 });
 

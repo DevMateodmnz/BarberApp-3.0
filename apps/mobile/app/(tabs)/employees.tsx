@@ -73,9 +73,9 @@ export default function EmployeesScreen() {
   async function handleCreateEmployee() {
     setCreateError(null);
 
-    const userId = newUserId.trim();
-    if (userId.length === 0) {
-      setCreateError('User ID is required.');
+    const identifier = newUserId.trim();
+    if (identifier.length === 0) {
+      setCreateError('Email or User ID is required.');
       return;
     }
 
@@ -87,7 +87,7 @@ export default function EmployeesScreen() {
     setIsCreating(true);
 
     try {
-      await createEmployee(getToken, context.barbershopId, userId);
+      await createEmployee(getToken, context.barbershopId, identifier);
       resetAddForm();
       useFlashStore.getState().setMessage('Employee added successfully.');
     } catch (err) {
@@ -233,10 +233,10 @@ export default function EmployeesScreen() {
             <View style={styles.createCard} testID="employees-add-form">
               <Text style={styles.sectionLabel}>New Employee</Text>
               <Text style={styles.helpText}>
-                Enter the Clerk user ID of an existing user to add them as an employee.
+                Enter an existing user's email or Clerk user ID to add them as an employee.
               </Text>
 
-              <Text style={styles.fieldLabel}>User ID</Text>
+              <Text style={styles.fieldLabel}>Email or User ID</Text>
               <TextInput
                 value={newUserId}
                 onChangeText={setNewUserId}

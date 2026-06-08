@@ -162,7 +162,7 @@ describe('reactivateEmployee', () => {
 });
 
 describe('createEmployee', () => {
-  it('sends POST to /barbershops/:barbershopId/employees with userId', async () => {
+  it('sends POST with userId when identifier does not contain @', async () => {
     const { createEmployee } = await importEmployees();
 
     const created = {
@@ -186,6 +186,35 @@ describe('createEmployee', () => {
     expect(mockApi.post).toHaveBeenCalledWith(
       '/barbershops/shop-1/employees',
       { userId: 'user-3' },
+      { headers: { Authorization: 'Bearer owner-token' } },
+    );
+    expect(result).toEqual(created);
+  });
+
+  it('sends POST with email when identifier contains @', async () => {
+    const { createEmployee } = await importEmployees();
+
+    const created = {
+      id: 'emp-new',
+      barbershopId: 'shop-1',
+      userId: 'user-3',
+      isActive: true,
+      createdAt: '2026-06-08T00:00:00.000Z',
+      updatedAt: '2026-06-08T00:00:00.000Z',
+      user: { id: 'user-3', email: 'barber@test.com', name: 'Barber', role: 'BARBER' as const },
+    };
+
+    mockApi.post.mockResolvedValueOnce({
+      data: { success: true, data: created },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    const result = await createEmployee(getToken, 'shop-1', '  Barber@TEST.com  ');
+
+    expect(getToken).toHaveBeenCalled();
+    expect(mockApi.post).toHaveBeenCalledWith(
+      '/barbershops/shop-1/employees',
+      { email: 'barber@test.com' },
       { headers: { Authorization: 'Bearer owner-token' } },
     );
     expect(result).toEqual(created);

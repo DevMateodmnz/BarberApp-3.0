@@ -9,6 +9,25 @@ import { prisma } from '../lib/prisma.js';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { Prisma } from '@prisma/client';
 import type { Employee, EmployeeService, Service } from '@prisma/client';
+import type { CreateEmployeeInput } from '../schemas/employee.js';
+
+/**
+ * Resolves a user ID from either a direct userId or an email lookup.
+ * Returns the internal user ID. Throws NotFoundError if the user doesn't exist.
+ */
+async function resolveUserId(input: CreateEmployeeInput): Promise<string> {
+  if (input.userId) {
+    const user = await prisma.user.findUnique({ where: { id: input.userId } });
+    if (!user || user.deletedAt) throw new NotFoundError('User');
+    return user.id;
+  }
+
+  // email path
+  const normalizedEmail = input.email!.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (!user || user.deletedAt) throw new NotFoundError('User');
+  return user.id;
+}
 
 /**
  * Adds an existing user as an employee of a barbershop.
@@ -19,6 +38,8 @@ import type { Employee, EmployeeService, Service } from '@prisma/client';
  *
  * Behavior:
  * - Target user must exist and not be soft-deleted → 404 otherwise
+ * - Supports lookup by userId or email (exactly one required)
+ * - Email is trimmed and lowercased before lookup
  * - Duplicate employee link (same user + same barbershop) → 409 Conflict
  * - Does NOT modify User.role
  * - Does NOT create Clerk users
@@ -26,16 +47,9 @@ import type { Employee, EmployeeService, Service } from '@prisma/client';
  */
 export async function addEmployee(
   barbershopId: string,
-  userId: string
+  input: CreateEmployeeInput
 ): Promise<Employee> {
-  // Verify target user exists and is not soft-deleted
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-  });
-
-  if (!user || user.deletedAt) {
-    throw new NotFoundError('User');
-  }
+  const userId = await resolveUserId(input);
 
   try {
     return await prisma.employee.create({

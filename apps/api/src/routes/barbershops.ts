@@ -98,7 +98,7 @@ router.post(
     try {
       const employee = await employeeService.addEmployee(
         paramBarbershopId(req),
-        req.body.userId
+        req.body
       );
       res.status(201).json({ success: true, data: employee });
     } catch (error) {
