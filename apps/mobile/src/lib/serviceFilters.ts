@@ -7,6 +7,12 @@ import type { Service } from './types.js';
 
 export type ServiceStatusFilter = 'ACTIVE' | 'INACTIVE' | 'ALL';
 
+export interface ServiceStatusCounts {
+  ACTIVE: number;
+  INACTIVE: number;
+  ALL: number;
+}
+
 export const SERVICE_STATUS_FILTERS: readonly ServiceStatusFilter[] = [
   'ACTIVE',
   'INACTIVE',
@@ -32,4 +38,30 @@ export function filterServicesByStatus(
     case 'ALL':
       return [...services];
   }
+}
+
+/**
+ * Counts services by their isActive status from the full loaded array.
+ *
+ * Returns { ACTIVE, INACTIVE, ALL } where ALL is the total length.
+ */
+export function getServiceStatusCounts(
+  services: readonly Service[],
+): ServiceStatusCounts {
+  let active = 0;
+  let inactive = 0;
+
+  for (const s of services) {
+    if (s.isActive) {
+      active++;
+    } else {
+      inactive++;
+    }
+  }
+
+  return {
+    ACTIVE: active,
+    INACTIVE: inactive,
+    ALL: active + inactive,
+  };
 }

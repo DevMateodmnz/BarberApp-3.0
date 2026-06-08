@@ -2,7 +2,7 @@
  * Unit tests for service filters — PR-049A
  */
 import { describe, it, expect } from 'vitest';
-import { filterServicesByStatus } from '../../src/lib/serviceFilters.js';
+import { filterServicesByStatus, getServiceStatusCounts } from '../../src/lib/serviceFilters.js';
 import type { Service } from '../../src/lib/types.js';
 
 function svc(id: string, isActive: boolean): Service {
@@ -57,5 +57,27 @@ describe('filterServicesByStatus', () => {
 
   it('INACTIVE on all-active returns empty', () => {
     expect(filterServicesByStatus([activeA, activeB], 'INACTIVE')).toEqual([]);
+  });
+});
+
+describe('getServiceStatusCounts', () => {
+  it('returns correct counts for mixed active/inactive services', () => {
+    const result = getServiceStatusCounts(allServices);
+    expect(result).toEqual({ ACTIVE: 2, INACTIVE: 2, ALL: 4 });
+  });
+
+  it('returns zero counts for empty services array', () => {
+    const result = getServiceStatusCounts([]);
+    expect(result).toEqual({ ACTIVE: 0, INACTIVE: 0, ALL: 0 });
+  });
+
+  it('returns all services as active when every one is active', () => {
+    const result = getServiceStatusCounts([activeA, activeB]);
+    expect(result).toEqual({ ACTIVE: 2, INACTIVE: 0, ALL: 2 });
+  });
+
+  it('returns all services as inactive when every one is inactive', () => {
+    const result = getServiceStatusCounts([inactiveC, inactiveD]);
+    expect(result).toEqual({ ACTIVE: 0, INACTIVE: 2, ALL: 2 });
   });
 });

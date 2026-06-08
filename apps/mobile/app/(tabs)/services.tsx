@@ -27,7 +27,7 @@ import {
   parseCurrencyInputToCents,
 } from '@/lib/format.js';
 import { useFlashStore } from '@/lib/flashStore.js';
-import { filterServicesByStatus, type ServiceStatusFilter, SERVICE_STATUS_FILTERS } from '@/lib/serviceFilters.js';
+import { filterServicesByStatus, getServiceStatusCounts, type ServiceStatusFilter, SERVICE_STATUS_FILTERS } from '@/lib/serviceFilters.js';
 import type { Service } from '@/lib/types.js';
 
 export default function ServicesScreen() {
@@ -65,6 +65,11 @@ export default function ServicesScreen() {
   const visibleServices = useMemo(
     () => filterServicesByStatus(services, statusFilter),
     [services, statusFilter],
+  );
+
+  const statusCounts = useMemo(
+    () => getServiceStatusCounts(services),
+    [services],
   );
 
   useEffect(() => {
@@ -346,7 +351,7 @@ export default function ServicesScreen() {
                     statusFilter === filter && styles.filterChipTextSelected,
                   ]}
                 >
-                  {filter === 'ACTIVE' ? 'Active' : filter === 'INACTIVE' ? 'Inactive' : 'All'}
+                  {filter === 'ACTIVE' ? `Active (${statusCounts.ACTIVE})` : filter === 'INACTIVE' ? `Inactive (${statusCounts.INACTIVE})` : `All (${statusCounts.ALL})`}
                 </Text>
               </TouchableOpacity>
             ))}
