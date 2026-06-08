@@ -61,6 +61,44 @@ export const api = axios.create({
 });
 
 /**
+ * Normalises an Axios rejection (or any thrown error) into a project ApiError.
+ *
+ * When the backend returns a non-2xx response, Axios rejects with an error
+ * carrying `response.status` and `response.data`.  This function extracts the
+ * structured `error.code` and `error.message` from the backend payload and
+ * re-throws as a typed {@link ApiError} that the mobile friendly-error
+ * mapper (`friendlyCreateEmployeeError`) can consume.
+ *
+ * Errors without a `response` (network failures, timeouts, non-HTTP throws)
+ * pass through unchanged.
+ *
+ * Exported so the interceptor logic can be tested in isolation.
+ */
+export function toApiError(error: unknown): never {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const err = error as {
+      response?: { status: number; data: ApiResponse };
+      message?: string;
+    };
+    if (err.response) {
+      const data = err.response.data;
+      const message =
+        data?.error?.message ?? err.message ?? 'Request failed';
+      const code = data?.error?.code;
+      const status = err.response.status;
+      throw new ApiError(message, code, status);
+    }
+  }
+  throw error;
+}
+
+// Register the response error interceptor so every API call automatically
+// converts non-2xx Axios rejections into structured ApiError instances.
+api.interceptors.response.use(undefined, (error: unknown) =>
+  toApiError(error),
+);
+
+/**
  * Token provider function type — matches Clerk's getToken().
  * Returns a JWT string or null if the user is not authenticated.
  */

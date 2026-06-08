@@ -335,17 +335,19 @@ describe('friendlyCreateEmployeeError', () => {
 });
 
 // ============================================
-// createEmployee throws ApiError — PR-068A
+// createEmployee ApiError — PR-068A (defense-in-depth for 2xx + success:false)
 // ============================================
 
-describe('createEmployee ApiError', () => {
-  it('throws ApiError with code and status on NOT_FOUND', async () => {
+describe('createEmployee ApiError (defense-in-depth)', () => {
+  it('throws ApiError on 200 with success:false and NOT_FOUND code', async () => {
     const { createEmployee } = await importEmployees();
     const apiModule = await importApi();
     const ApiError = apiModule.ApiError;
 
+    // Simulate a 200 response with structured error — the interceptor
+    // passes 2xx through, so createEmployee's own check fires.
     mockApi.post.mockResolvedValueOnce({
-      status: 404,
+      status: 200,
       data: { success: false, error: { code: 'NOT_FOUND', message: 'User not found' } },
     });
 
@@ -362,16 +364,16 @@ describe('createEmployee ApiError', () => {
     const apiErr = caught as InstanceType<typeof ApiError>;
     expect(apiErr.message).toBe('User not found');
     expect(apiErr.code).toBe('NOT_FOUND');
-    expect(apiErr.status).toBe(404);
+    expect(apiErr.status).toBe(200);
   });
 
-  it('throws ApiError with code and status on CONFLICT', async () => {
+  it('throws ApiError on 200 with success:false and CONFLICT code', async () => {
     const { createEmployee } = await importEmployees();
     const apiModule = await importApi();
     const ApiError = apiModule.ApiError;
 
     mockApi.post.mockResolvedValueOnce({
-      status: 409,
+      status: 200,
       data: { success: false, error: { code: 'CONFLICT', message: 'User is already an employee of this barbershop' } },
     });
 
@@ -388,6 +390,130 @@ describe('createEmployee ApiError', () => {
     const apiErr = caught as InstanceType<typeof ApiError>;
     expect(apiErr.message).toBe('User is already an employee of this barbershop');
     expect(apiErr.code).toBe('CONFLICT');
+    expect(apiErr.status).toBe(200);
+  });
+});
+
+// ============================================
+// toApiError — PR-070B: normalise Axios non-2xx → ApiError
+// ============================================
+
+describe('toApiError (interceptor)', () => {
+  async function getToApiError() {
+    const apiModule = await importApi();
+    return apiModule.toApiError;
+  }
+
+  async function getApiErrorClass() {
+    const apiModule = await importApi();
+    return apiModule.ApiError;
+  }
+
+  it('converts Axios 404 rejection to ApiError with NOT_FOUND', async () => {
+    const toApiError = await getToApiError();
+    const ApiError = await getApiErrorClass();
+
+    const axiosError = {
+      message: 'Request failed with status code 404',
+      response: {
+        status: 404,
+        data: { success: false, error: { code: 'NOT_FOUND', message: 'User not found' } },
+      },
+    };
+
+    let caught: unknown;
+    try {
+      toApiError(axiosError);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    const apiErr = caught as InstanceType<typeof ApiError>;
+    expect(apiErr.message).toBe('User not found');
+    expect(apiErr.code).toBe('NOT_FOUND');
+    expect(apiErr.status).toBe(404);
+  });
+
+  it('converts Axios 409 rejection to ApiError with CONFLICT', async () => {
+    const toApiError = await getToApiError();
+    const ApiError = await getApiErrorClass();
+
+    const axiosError = {
+      message: 'Request failed with status code 409',
+      response: {
+        status: 409,
+        data: { success: false, error: { code: 'CONFLICT', message: 'User is already an employee of this barbershop' } },
+      },
+    };
+
+    let caught: unknown;
+    try {
+      toApiError(axiosError);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    const apiErr = caught as InstanceType<typeof ApiError>;
+    expect(apiErr.message).toBe('User is already an employee of this barbershop');
+    expect(apiErr.code).toBe('CONFLICT');
     expect(apiErr.status).toBe(409);
+  });
+
+  it('falls back to Axios error message when response.data.error is missing', async () => {
+    const toApiError = await getToApiError();
+    const ApiError = await getApiErrorClass();
+
+    const axiosError = {
+      message: 'Request failed with status code 500',
+      response: {
+        status: 500,
+        data: { success: false },
+      },
+    };
+
+    let caught: unknown;
+    try {
+      toApiError(axiosError);
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    const apiErr = caught as InstanceType<typeof ApiError>;
+    expect(apiErr.message).toBe('Request failed with status code 500');
+    expect(apiErr.code).toBeUndefined();
+    expect(apiErr.status).toBe(500);
+  });
+
+  it('re-throws network error (no response) unchanged', async () => {
+    const toApiError = await getToApiError();
+
+    const networkError = new Error('Network Error');
+
+    let caught: unknown;
+    try {
+      toApiError(networkError);
+    } catch (err) {
+      caught = err;
+    }
+
+    // Should be the same Error instance, not an ApiError
+    expect(caught).toBe(networkError);
+    expect(caught).not.toBeInstanceOf((await getApiErrorClass()));
+  });
+
+  it('re-throws non-object errors unchanged', async () => {
+    const toApiError = await getToApiError();
+
+    let caught: unknown;
+    try {
+      toApiError('raw string error');
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBe('raw string error');
   });
 });
