@@ -130,9 +130,10 @@ function createService(shopId: string, body: Record<string, unknown>, asClerkId:
     .send(body);
 }
 
-function listServices(shopId: string, asClerkId: string) {
+function listServices(shopId: string, asClerkId: string, query?: Record<string, string>) {
   return request(app)
     .get(`/api/v1/barbershops/${shopId}/services`)
+    .query(query ?? {})
     .set(authHeader(asClerkId));
 }
 
@@ -490,6 +491,44 @@ describe('GET /api/v1/barbershops/:barbershopId/services', () => {
 
     expect(res.status).toBe(401);
   });
+
+  it('includeInactive=true returns active and inactive services', async () => {
+    const active = await createServiceInDb(fixtures.shopA.id, { name: 'Active' });
+    const inactive = await createServiceInDb(fixtures.shopA.id, { name: 'Inactive' });
+    await prisma.service.update({ where: { id: inactive.id }, data: { isActive: false } });
+
+    const res = await listServices(fixtures.shopA.id, fixtures.ownerA.clerkUserId, { includeInactive: 'true' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(2);
+    const names = res.body.data.map((s: Service) => s.name);
+    expect(names).toContain('Active');
+    expect(names).toContain('Inactive');
+  });
+
+  it('includeInactive=false (default) still excludes inactive', async () => {
+    await createServiceInDb(fixtures.shopA.id, { name: 'Active' });
+    const inactive = await createServiceInDb(fixtures.shopA.id, { name: 'Inactive' });
+    await prisma.service.update({ where: { id: inactive.id }, data: { isActive: false } });
+
+    const res = await listServices(fixtures.shopA.id, fixtures.ownerA.clerkUserId, { includeInactive: 'false' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
+    expect(res.body.data[0].name).toBe('Active');
+  });
+
+  it('includeInactive=true still excludes deleted services', async () => {
+    await createServiceInDb(fixtures.shopA.id, { name: 'Active' });
+    const deleted = await createServiceInDb(fixtures.shopA.id, { name: 'Deleted' });
+    await prisma.service.update({ where: { id: deleted.id }, data: { isActive: false, deletedAt: new Date() } });
+
+    const res = await listServices(fixtures.shopA.id, fixtures.ownerA.clerkUserId, { includeInactive: 'true' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
+    expect(res.body.data[0].name).toBe('Active');
+  });
 });
 
 // ============================================
@@ -643,6 +682,53 @@ describe('PATCH /api/v1/barbershops/:barbershopId/services/:serviceId', () => {
     );
 
     expect(res.status).toBe(404);
+  });
+
+  it('OWNER deactivates service — 200 and isActive=false', async () => {
+    const res = await updateService(
+      fixtures.shopA.id,
+      svcA.id,
+      { isActive: false },
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.isActive).toBe(false);
+  });
+
+  it('OWNER reactivates service — 200 and isActive=true', async () => {
+    // First deactivate, then reactivate
+    await updateService(
+      fixtures.shopA.id,
+      svcA.id,
+      { isActive: false },
+      fixtures.ownerA.clerkUserId
+    );
+
+    const res = await updateService(
+      fixtures.shopA.id,
+      svcA.id,
+      { isActive: true },
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.isActive).toBe(true);
+  });
+
+  it('isActive combined with other fields — 200', async () => {
+    const res = await updateService(
+      fixtures.shopA.id,
+      svcA.id,
+      { name: 'Inactive Cut', isActive: false },
+      fixtures.ownerA.clerkUserId
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.name).toBe('Inactive Cut');
+    expect(res.body.data.isActive).toBe(false);
   });
 });
 

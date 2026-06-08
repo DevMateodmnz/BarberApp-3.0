@@ -38,17 +38,20 @@ export async function createService(
 }
 
 /**
- * Lists all active, non-deleted services for a barbershop.
+ * Lists services for a barbershop.
+ *
+ * By default returns only active, non-deleted services.
+ * Pass includeInactive=true to also include inactive (but not deleted) services.
  *
  * Preconditions (enforced by upstream middleware):
  * - Caller is the OWNER of the barbershop (requireBarbershopAccess + requireRole)
  */
-export async function listServices(barbershopId: string) {
+export async function listServices(barbershopId: string, includeInactive = false) {
   return prisma.service.findMany({
     where: {
       barbershopId,
       deletedAt: null,
-      isActive: true,
+      ...(includeInactive ? {} : { isActive: true }),
     },
     orderBy: { createdAt: 'asc' },
     select: {
@@ -94,6 +97,7 @@ export async function updateService(
       ...(input.durationMinutes !== undefined && { durationMinutes: input.durationMinutes }),
       ...(input.priceCents !== undefined && { priceCents: input.priceCents }),
       ...(input.description !== undefined && { description: input.description }),
+      ...(input.isActive !== undefined && { isActive: input.isActive }),
     },
     select: {
       id: true,

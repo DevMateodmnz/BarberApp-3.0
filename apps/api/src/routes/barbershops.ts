@@ -335,8 +335,10 @@ router.get(
   requireRole('OWNER'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const includeInactive = req.query.includeInactive === 'true';
       const services = await serviceService.listServices(
-        paramBarbershopId(req)
+        paramBarbershopId(req),
+        includeInactive
       );
       res.json({ success: true, data: services });
     } catch (error) {
