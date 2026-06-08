@@ -1,10 +1,13 @@
 # Employee Onboarding — Design Investigation
 
 Date: 2026-06-08 · Based on codebase inspection through PR-062A (fa2c44c).
+**Status: Option A (Email Lookup) implemented in PR-065A (8292af2). Option B (Clerk Invitation) remains as future work.**
 
 ## Purpose
 
 The current employee add flow requires the OWNER to know and paste a raw Clerk user ID (`user_<clerk-id>...`). This document investigates options for improving this UX toward invite-by-email or user lookup, assessing security, complexity, and MVP value.
+
+**Update (PR-065A)**: Email lookup is now implemented. OWNERs can add employees by email (`barber@shop.com`) in addition to userId. The remaining gap is "user doesn't exist yet" — solved by Option B (Clerk invitation, not yet implemented).
 
 ---
 
@@ -16,7 +19,8 @@ The current employee add flow requires the OWNER to know and paste a raw Clerk u
 |--------|--------|
 | Endpoint | `POST /api/v1/barbershops/:barbershopId/employees` |
 | Auth | `requireAuth` → `requireBarbershopAccess` → `requireRole('OWNER')` |
-| Body | `{ userId: string }` (Zod: `z.string().min(1)`) |
+| Body | `{ email: string }` OR `{ userId: string }` (Zod: XOR refine — exactly one required) |
+| Mobile form | "Email or User ID" field. Auto-detects: `@` → sends `{ email }`, otherwise `{ userId }`. |
 | Response (201) | Full `Employee` object with `user` include (id, email, name, role) |
 | Preconditions | User must exist in local DB, not be soft-deleted (`deletedAt: null`) |
 | Errors | `404` user not found, `409` duplicate employee, `403` cross-tenant, `403` non-OWNER |
@@ -57,10 +61,11 @@ model User {
 
 | Step | What happens |
 |------|-------------|
-| OWNER taps "+ Add Employee" | Inline form appears with one field: User ID |
-| OWNER enters Clerk user ID | e.g. `user_<clerk-id>...` |
+| OWNER taps "+ Add Employee" | Inline form appears with one field: "Email or User ID" |
+| OWNER enters email or ID | e.g. `barber@shop.com` or `user_<clerk-id>...` |
+| Mobile auto-detects | `@` → `{ email }`, otherwise `{ userId }` |
 | Validate | Non-empty after trim |
-| API call | `POST /employees { userId }` |
+| API call | `POST /employees { email }` or `{ userId }` |
 | Success | Form resets, employee list reloads, flash message |
 
 **Pain points**:
@@ -103,7 +108,7 @@ model User {
 
 ## 3. Options Compared
 
-### Option A: Add Employee by Email (lookup existing user)
+### Option A: Add Employee by Email (lookup existing user) ✅ IMPLEMENTED — PR-065A
 
 **What**: Change the add-employee form to accept an email address instead of (or in addition to) a user ID. The backend looks up the user by email and creates the employee link.
 
@@ -233,7 +238,11 @@ model User {
 
 ## 5. Recommended Path
 
-### Immediate next PR: Option A — Email Lookup
+### ✅ Implemented: Option A — Email Lookup (PR-065A)
+
+Email lookup is now live. OWNERs can add employees by email. The mobile form auto-detects `@` to send `{ email }` vs `{ userId }`. Backend normalizes email (trim + lowercase) and looks up via `findUnique({ email })`.
+
+### Next: Option B — Clerk Invitation (future)
 
 **Why**:
 1. **Lowest complexity that delivers real UX improvement.** OWNERs know their barbers' emails; they don't know Clerk UUIDs.

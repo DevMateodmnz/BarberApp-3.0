@@ -25,8 +25,7 @@ Before starting, confirm:
 - [ ] If testing on a physical phone, `EXPO_PUBLIC_API_URL` uses the LAN IP, not `localhost`.
 - [ ] Clerk publishable key is configured.
 - [ ] An OWNER account exists with a barbershop context.
-- [ ] A BARBER account exists (a Clerk user with BARBER role).
-- [ ] You know the BARBER's Clerk user ID (e.g. `user_<clerk-id>...`) — needed for employee add.
+- [ ] A BARBER account exists (a Clerk user with BARBER role). You know their email address (or Clerk user ID as fallback).
 - [ ] The barbershop has no pre-existing services or employees (clean state) — or you can work with existing data.
 
 ## Start the app
@@ -72,7 +71,7 @@ npm run dev --workspace @barberapp/mobile
 14. Confirm the Employees screen opens (empty list or existing employees).
 
 15. Tap **+ Add Employee**.
-16. Enter the BARBER's Clerk user ID in the User ID field.
+16. Enter the BARBER's email address (e.g. `barber@shop.com`) in the Email or User ID field.
 17. Tap **Add Employee**.
 18. Confirm success flash and the employee appears in the list.
 19. Confirm the employee shows: name/email, role `BARBER`, `Active` badge.
@@ -251,10 +250,10 @@ npm run dev --workspace @barberapp/mobile
 ### 4.6 Validation — add employee
 
 109. On Employees screen, tap **+ Add Employee**.
-110. Leave the User ID field empty and tap **Add Employee**.
-111. Confirm the error: `User ID is required.`
+110. Leave the field empty and tap **Add Employee**.
+111. Confirm the error: `Email or User ID is required.`
 
-112. Enter a nonexistent user ID (e.g. `nonexistent-123`).
+112. Enter a nonexistent email (e.g. `noone@test.com`).
 113. Confirm the API returns an error message (e.g. `User not found`).
 
 ---
@@ -294,7 +293,9 @@ npm run dev --workspace @barberapp/mobile
 
 Documented for testers and future PRs:
 
-- [ ] **Employee add requires raw User ID**: OWNER must know the Clerk user ID (e.g. `user_<clerk-id>...`). No email lookup or invite flow yet.
+- [ ] **Employee add supports email (PR-065A)**: OWNER can add employees by their email address (`barber@shop.com`) in addition to Clerk user ID. The user must already exist in the system — this is NOT an invite flow. Email is normalized (trimmed, lowercased) before lookup.
+- [ ] **No Clerk invitation yet**: if the user doesn't exist, OWNER must create them via Clerk Dashboard or seed script first.
+- [ ] **No autocomplete/user search**: single text field for email or user ID. Broad user search is intentionally avoided for security.
 - [ ] **No invite-by-email**: cannot create a new Clerk user from the mobile app.
 - [ ] **No component-level tests**: React Native / Vitest component-test infrastructure is blocked. All manual.
 - [ ] **No service record edit/delete**: mistakes cannot be corrected from mobile.
@@ -311,7 +312,7 @@ Documented for testers and future PRs:
   - 1 OWNER with a barbershop
   - 1 BARBER (Clerk user with BARBER role)
   - 2 services (`Classic Cut` and `Beard Trim`)
-  - The BARBER's Clerk user ID for the add-employee step
+  - The BARBER's email address (or Clerk user ID as fallback) for the add-employee step
 - If the BARBER user doesn't exist yet, create one via Clerk dashboard or seed script before testing.
 - The flow is designed to be run sequentially — each phase depends on the previous.
 - If a step fails, note the step number and what you observed vs expected.
