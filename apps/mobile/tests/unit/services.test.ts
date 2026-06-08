@@ -70,3 +70,41 @@ describe('fetchBarbershopServices', () => {
     ).rejects.toThrow('Not authorized');
   });
 });
+
+describe('createBarbershopService', () => {
+  it('sends authenticated POST with correct body', async () => {
+    const { createBarbershopService } = await importServices();
+    const fakeService = {
+      id: 'svc-new', name: 'New Cut', durationMinutes: 30, priceCents: 2500, isActive: true,
+    };
+
+    mockApi.post.mockResolvedValueOnce({
+      data: { success: true, data: fakeService },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    const input = { name: 'New Cut', durationMinutes: 30, priceCents: 2500 };
+    const result = await createBarbershopService(getToken, 'shop-1', input);
+
+    expect(getToken).toHaveBeenCalled();
+    expect(mockApi.post).toHaveBeenCalledWith(
+      '/barbershops/shop-1/services',
+      input,
+      { headers: { Authorization: 'Bearer owner-token' } },
+    );
+    expect(result).toEqual(fakeService);
+  });
+
+  it('handles API error on create', async () => {
+    const { createBarbershopService } = await importServices();
+
+    mockApi.post.mockResolvedValueOnce({
+      data: { success: false, error: { code: 'VALIDATION_ERROR', message: 'Name is required' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    await expect(
+      createBarbershopService(getToken, 'shop-1', { name: '', durationMinutes: 30, priceCents: 2500 }),
+    ).rejects.toThrow('Name is required');
+  });
+});

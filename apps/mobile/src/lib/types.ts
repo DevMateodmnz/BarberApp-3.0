@@ -114,6 +114,13 @@ export interface Service {
   updatedAt?: string;
 }
 
+export interface CreateServiceInput {
+  name: string;
+  durationMinutes: number;
+  priceCents: number;
+  description?: string;
+}
+
 export interface CreateServiceRecordInput {
   employeeId: string;
   serviceId: string;

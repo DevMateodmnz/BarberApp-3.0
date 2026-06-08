@@ -5,8 +5,8 @@
  * BARBER and CLIENT are no-ops.
  */
 import { create } from 'zustand';
-import { fetchBarbershopServices } from './services.js';
-import type { Service } from './types.js';
+import { fetchBarbershopServices, createBarbershopService } from './services.js';
+import type { CreateServiceInput, Service } from './types.js';
 
 interface ServicesState {
   services: Service[];
@@ -22,10 +22,20 @@ interface ServicesState {
     barbershopId: string | null,
   ) => Promise<void>;
 
+  /**
+   * Creates a new service and prepends it to the local list.
+   * Returns the created Service on success. Throws on failure.
+   */
+  createService: (
+    getToken: () => Promise<string | null>,
+    barbershopId: string,
+    input: CreateServiceInput,
+  ) => Promise<Service>;
+
   clearServices: () => void;
 }
 
-export const useServicesStore = create<ServicesState>((set) => ({
+export const useServicesStore = create<ServicesState>((set, get) => ({
   services: [],
   isServicesLoading: false,
   servicesError: null,
@@ -44,6 +54,12 @@ export const useServicesStore = create<ServicesState>((set) => ({
       const message = err instanceof Error ? err.message : 'Unknown error';
       set({ services: [], isServicesLoading: false, servicesError: message });
     }
+  },
+
+  createService: async (getToken, barbershopId, input) => {
+    const service = await createBarbershopService(getToken, barbershopId, input);
+    set({ services: [service, ...get().services] });
+    return service;
   },
 
   clearServices: () => {

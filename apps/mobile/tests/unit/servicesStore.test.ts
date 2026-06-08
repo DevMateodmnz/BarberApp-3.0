@@ -5,9 +5,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Service } from '../../src/lib/types.js';
 
 const mockFetchBarbershopServices = vi.fn();
+const mockCreateBarbershopService = vi.fn();
 
 vi.mock('../../src/lib/services.js', () => ({
   fetchBarbershopServices: (...args: unknown[]) => mockFetchBarbershopServices(...args),
+  createBarbershopService: (...args: unknown[]) => mockCreateBarbershopService(...args),
 }));
 
 // Dynamic import so the mock above is registered first
@@ -80,5 +82,33 @@ describe('useServicesStore', () => {
     expect(state.services).toEqual([]);
     expect(state.isServicesLoading).toBe(false);
     expect(state.servicesError).toBeNull();
+  });
+
+  it('createService sends input and prepends to list', async () => {
+    const { useServicesStore } = await importStore();
+    const fakeService = { id: 'svc-new', name: 'New Cut', durationMinutes: 30, priceCents: 2500 };
+    mockCreateBarbershopService.mockResolvedValueOnce(fakeService);
+
+    // Pre-populate with an existing service
+    useServicesStore.setState({ services: [{ id: 'svc-old', name: 'Old Cut' } as Service] });
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    const input = { name: 'New Cut', durationMinutes: 30, priceCents: 2500 };
+    const result = await useServicesStore.getState().createService(getToken, 'shop-1', input);
+
+    expect(mockCreateBarbershopService).toHaveBeenCalledWith(getToken, 'shop-1', input);
+    expect(result).toEqual(fakeService);
+    // New service should be prepended
+    expect(useServicesStore.getState().services).toEqual([fakeService, { id: 'svc-old', name: 'Old Cut' }]);
+  });
+
+  it('createService throws on API error', async () => {
+    const { useServicesStore } = await importStore();
+    mockCreateBarbershopService.mockRejectedValueOnce(new Error('Name is required'));
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    await expect(
+      useServicesStore.getState().createService(getToken, 'shop-1', { name: '', durationMinutes: 30, priceCents: 2500 }),
+    ).rejects.toThrow('Name is required');
   });
 });
