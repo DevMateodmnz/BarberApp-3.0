@@ -23,7 +23,6 @@ import { useContextStore } from '@/lib/store.js';
 import { useEmployeesStore } from '@/lib/employeesStore.js';
 import { useServicesStore } from '@/lib/servicesStore.js';
 import { useFlashStore } from '@/lib/flashStore.js';
-import { friendlyCreateEmployeeError } from '@/lib/employees.js';
 import type { EmployeeListItem } from '@/lib/types.js';
 
 export default function EmployeesScreen() {
@@ -91,10 +90,9 @@ export default function EmployeesScreen() {
       await createEmployee(getToken, context.barbershopId, identifier);
       resetAddForm();
       useFlashStore.getState().setMessage('Employee added successfully.');
-    } catch (err) {
-      setCreateError(friendlyCreateEmployeeError(
-        err instanceof Error ? err.message : 'Failed to add employee'
-      ));
+    } catch {
+      // Store already set employeesError with a friendly message.
+      // Keep the form open so the user can retry without re-typing.
     } finally {
       setIsCreating(false);
     }

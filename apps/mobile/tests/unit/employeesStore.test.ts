@@ -159,19 +159,44 @@ describe('useEmployeesStore', () => {
     expect(useEmployeesStore.getState().employees).toEqual(freshList);
   });
 
-  it('createEmployee error does not mutate list', async () => {
+  it('createEmployee error does not mutate list and rethrows', async () => {
     const { useEmployeesStore } = await importStore();
     const existingEmp = makeEmployee({ id: 'emp-1' });
     useEmployeesStore.setState({ employees: [existingEmp] });
     mockCreateEmployee.mockRejectedValueOnce(new Error('User not found'));
 
     const getToken = vi.fn().mockResolvedValue('token');
-    await useEmployeesStore.getState().createEmployee(getToken, 'shop-1', 'bad-id');
+    await expect(
+      useEmployeesStore.getState().createEmployee(getToken, 'shop-1', 'bad-id'),
+    ).rejects.toThrow('User not found');
 
     expect(useEmployeesStore.getState().employeesError).toBe(
       'No account found with this email or ID. Make sure the person has logged in at least once.',
     );
     expect(useEmployeesStore.getState().employees).toEqual([existingEmp]);
+  });
+
+  it('createEmployee ApiError rethrow preserves code and status', async () => {
+    const apiModule = await import('../../src/lib/api.js');
+    const ApiError = apiModule.ApiError;
+    const { useEmployeesStore } = await importStore();
+    const err = new ApiError('Conflict', 'CONFLICT', 409);
+    mockCreateEmployee.mockRejectedValueOnce(err);
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    let caught: unknown;
+    try {
+      await useEmployeesStore.getState().createEmployee(getToken, 'shop-1', 'dup');
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    expect((caught as InstanceType<typeof ApiError>).code).toBe('CONFLICT');
+    expect((caught as InstanceType<typeof ApiError>).status).toBe(409);
+    expect(useEmployeesStore.getState().employeesError).toBe(
+      'This person is already an employee of this barbershop.',
+    );
   });
 
   describe('service assignments', () => {

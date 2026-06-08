@@ -132,6 +132,7 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
           err instanceof ApiError ? err : (err instanceof Error ? err.message : 'Unknown error'),
         ),
       });
+      throw err;
     }
   },
 
