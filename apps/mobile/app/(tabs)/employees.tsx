@@ -23,6 +23,7 @@ import { useContextStore } from '@/lib/store.js';
 import { useEmployeesStore } from '@/lib/employeesStore.js';
 import { useServicesStore } from '@/lib/servicesStore.js';
 import { useFlashStore } from '@/lib/flashStore.js';
+import { friendlyCreateEmployeeError } from '@/lib/employees.js';
 import type { EmployeeListItem } from '@/lib/types.js';
 
 export default function EmployeesScreen() {
@@ -91,7 +92,9 @@ export default function EmployeesScreen() {
       resetAddForm();
       useFlashStore.getState().setMessage('Employee added successfully.');
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to add employee');
+      setCreateError(friendlyCreateEmployeeError(
+        err instanceof Error ? err.message : 'Failed to add employee'
+      ));
     } finally {
       setIsCreating(false);
     }
@@ -233,14 +236,14 @@ export default function EmployeesScreen() {
             <View style={styles.createCard} testID="employees-add-form">
               <Text style={styles.sectionLabel}>New Employee</Text>
               <Text style={styles.helpText}>
-                Enter an existing user's email or Clerk user ID to add them as an employee.
+                The person must have an account (logged in at least once). Enter their email or, if you know it, their Clerk user ID.
               </Text>
 
-              <Text style={styles.fieldLabel}>Email or User ID</Text>
+              <Text style={styles.fieldLabel}>Email (or User ID)</Text>
               <TextInput
                 value={newUserId}
                 onChangeText={setNewUserId}
-                placeholder="e.g. user_<clerk-id>..."
+                placeholder="e.g. barber@example.com"
                 style={styles.input}
                 testID="employees-add-userid"
                 autoCapitalize="none"

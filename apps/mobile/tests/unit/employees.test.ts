@@ -233,3 +233,39 @@ describe('createEmployee', () => {
     ).rejects.toThrow('User not found');
   });
 });
+
+// ============================================
+// friendlyCreateEmployeeError — PR-067A
+// ============================================
+
+describe('friendlyCreateEmployeeError', () => {
+  it('maps "User not found" to a user-friendly message', async () => {
+    const { friendlyCreateEmployeeError } = await importEmployees();
+    const result = friendlyCreateEmployeeError('User not found');
+    expect(result).toBe(
+      'No account found with this email or ID. Make sure the person has logged in at least once.',
+    );
+  });
+
+  it('maps "User is already an employee of this barbershop" to a user-friendly message', async () => {
+    const { friendlyCreateEmployeeError } = await importEmployees();
+    const result = friendlyCreateEmployeeError(
+      'User is already an employee of this barbershop',
+    );
+    expect(result).toBe('This person is already an employee of this barbershop.');
+  });
+
+  it('passes through unknown messages unchanged', async () => {
+    const { friendlyCreateEmployeeError } = await importEmployees();
+    const result = friendlyCreateEmployeeError('Network error');
+    expect(result).toBe('Network error');
+  });
+
+  it('passes through "Provide exactly one of: userId or email" unchanged', async () => {
+    const { friendlyCreateEmployeeError } = await importEmployees();
+    const result = friendlyCreateEmployeeError(
+      'Provide exactly one of: userId or email',
+    );
+    expect(result).toBe('Provide exactly one of: userId or email');
+  });
+});

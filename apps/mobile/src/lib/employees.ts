@@ -20,6 +20,24 @@ export async function fetchEmployees(
 }
 
 /**
+ * Maps raw API error messages for createEmployee to user-friendly copy.
+ *
+ * Keeps known backend messages human-readable while passing through
+ * unknown messages unchanged. Safe for use in UI error display.
+ */
+export function friendlyCreateEmployeeError(rawMessage: string): string {
+  if (rawMessage === 'User not found') {
+    return 'No account found with this email or ID. Make sure the person has logged in at least once.';
+  }
+
+  if (rawMessage === 'User is already an employee of this barbershop') {
+    return 'This person is already an employee of this barbershop.';
+  }
+
+  return rawMessage;
+}
+
+/**
  * Deactivates an employee (soft-delete). OWNER only.
  *
  * DELETE /barbershops/:barbershopId/employees/:employeeId
