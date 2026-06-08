@@ -215,6 +215,23 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* OWNER-only: employee roster entry */}
+          {context.role === 'OWNER' && !!context.barbershopId && (
+            <View style={styles.actionCard} testID="home-employees-card">
+              <Text style={styles.actionTitle}>Employees</Text>
+              <Text style={styles.actionText}>
+                View and manage your barbershop employee roster.
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/employees')}
+                style={styles.actionButton}
+                testID="home-employees-button"
+              >
+                <Text style={styles.actionButtonText}>View Employees</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {context.role === 'CLIENT' && (
             <View style={styles.summaryCard} testID="home-client-message">
               <Text style={styles.summaryTitle}>Dashboard</Text>
