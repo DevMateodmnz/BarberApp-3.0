@@ -1,35 +1,42 @@
 /**
  * Services store — Zustand store for barbershop service catalog.
  *
- * OWNER-only: loads all active services for the current barbershop.
+ * OWNER-only: loads, creates, and updates barbershop services.
  * BARBER and CLIENT are no-ops.
  */
 import { create } from 'zustand';
-import { fetchBarbershopServices, createBarbershopService } from './services.js';
-import type { CreateServiceInput, Service } from './types.js';
+import {
+  fetchBarbershopServices,
+  createBarbershopService,
+  updateBarbershopService,
+} from './services.js';
+import type { CreateServiceInput, Service, UpdateServiceInput } from './types.js';
 
 interface ServicesState {
   services: Service[];
   isServicesLoading: boolean;
   servicesError: string | null;
 
-  /**
-   * Loads all active services for a barbershop.
-   * Only loads when barbershopId is present (OWNER with a shop).
-   */
   loadServices: (
     getToken: () => Promise<string | null>,
     barbershopId: string | null,
   ) => Promise<void>;
 
-  /**
-   * Creates a new service and prepends it to the local list.
-   * Returns the created Service on success. Throws on failure.
-   */
   createService: (
     getToken: () => Promise<string | null>,
     barbershopId: string,
     input: CreateServiceInput,
+  ) => Promise<Service>;
+
+  /**
+   * Updates an existing service and replaces it in the local list.
+   * Returns the updated Service on success. Throws on failure.
+   */
+  updateService: (
+    getToken: () => Promise<string | null>,
+    barbershopId: string,
+    serviceId: string,
+    input: UpdateServiceInput,
   ) => Promise<Service>;
 
   clearServices: () => void;
@@ -60,6 +67,14 @@ export const useServicesStore = create<ServicesState>((set, get) => ({
     const service = await createBarbershopService(getToken, barbershopId, input);
     set({ services: [service, ...get().services] });
     return service;
+  },
+
+  updateService: async (getToken, barbershopId, serviceId, input) => {
+    const updated = await updateBarbershopService(getToken, barbershopId, serviceId, input);
+    set({
+      services: get().services.map((s) => (s.id === serviceId ? updated : s)),
+    });
+    return updated;
   },
 
   clearServices: () => {

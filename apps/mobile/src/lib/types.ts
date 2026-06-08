@@ -121,6 +121,13 @@ export interface CreateServiceInput {
   description?: string;
 }
 
+export interface UpdateServiceInput {
+  name?: string;
+  durationMinutes?: number;
+  priceCents?: number;
+  description?: string;
+}
+
 export interface CreateServiceRecordInput {
   employeeId: string;
   serviceId: string;

@@ -7,6 +7,7 @@ function createMockApi() {
   return {
     get: vi.fn(),
     post: vi.fn(),
+    patch: vi.fn(),
     interceptors: {
       request: { use: vi.fn() },
       response: { use: vi.fn() },
@@ -106,5 +107,43 @@ describe('createBarbershopService', () => {
     await expect(
       createBarbershopService(getToken, 'shop-1', { name: '', durationMinutes: 30, priceCents: 2500 }),
     ).rejects.toThrow('Name is required');
+  });
+});
+
+describe('updateBarbershopService', () => {
+  it('sends authenticated PATCH with correct body', async () => {
+    const { updateBarbershopService } = await importServices();
+    const updatedService = {
+      id: 'svc-1', name: 'Updated Cut', durationMinutes: 45, priceCents: 3000, isActive: true,
+    };
+
+    mockApi.patch.mockResolvedValueOnce({
+      data: { success: true, data: updatedService },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    const input = { name: 'Updated Cut', durationMinutes: 45, priceCents: 3000 };
+    const result = await updateBarbershopService(getToken, 'shop-1', 'svc-1', input);
+
+    expect(getToken).toHaveBeenCalled();
+    expect(mockApi.patch).toHaveBeenCalledWith(
+      '/barbershops/shop-1/services/svc-1',
+      input,
+      { headers: { Authorization: 'Bearer owner-token' } },
+    );
+    expect(result).toEqual(updatedService);
+  });
+
+  it('handles API error on update', async () => {
+    const { updateBarbershopService } = await importServices();
+
+    mockApi.patch.mockResolvedValueOnce({
+      data: { success: false, error: { code: 'NOT_FOUND', message: 'Service not found' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    await expect(
+      updateBarbershopService(getToken, 'shop-1', 'svc-1', { name: 'X' }),
+    ).rejects.toThrow('Service not found');
   });
 });

@@ -6,10 +6,12 @@ import type { Service } from '../../src/lib/types.js';
 
 const mockFetchBarbershopServices = vi.fn();
 const mockCreateBarbershopService = vi.fn();
+const mockUpdateBarbershopService = vi.fn();
 
 vi.mock('../../src/lib/services.js', () => ({
   fetchBarbershopServices: (...args: unknown[]) => mockFetchBarbershopServices(...args),
   createBarbershopService: (...args: unknown[]) => mockCreateBarbershopService(...args),
+  updateBarbershopService: (...args: unknown[]) => mockUpdateBarbershopService(...args),
 }));
 
 // Dynamic import so the mock above is registered first
@@ -110,5 +112,32 @@ describe('useServicesStore', () => {
     await expect(
       useServicesStore.getState().createService(getToken, 'shop-1', { name: '', durationMinutes: 30, priceCents: 2500 }),
     ).rejects.toThrow('Name is required');
+  });
+
+  it('updateService sends input and replaces in list', async () => {
+    const { useServicesStore } = await importStore();
+    const original = { id: 'svc-1', name: 'Old Cut', durationMinutes: 30, priceCents: 2000 };
+    const updated = { id: 'svc-1', name: 'New Cut', durationMinutes: 45, priceCents: 3000 };
+    mockUpdateBarbershopService.mockResolvedValueOnce(updated);
+
+    useServicesStore.setState({ services: [original] });
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    const input = { name: 'New Cut', durationMinutes: 45, priceCents: 3000 };
+    const result = await useServicesStore.getState().updateService(getToken, 'shop-1', 'svc-1', input);
+
+    expect(mockUpdateBarbershopService).toHaveBeenCalledWith(getToken, 'shop-1', 'svc-1', input);
+    expect(result).toEqual(updated);
+    expect(useServicesStore.getState().services).toEqual([updated]);
+  });
+
+  it('updateService throws on API error', async () => {
+    const { useServicesStore } = await importStore();
+    mockUpdateBarbershopService.mockRejectedValueOnce(new Error('Not found'));
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    await expect(
+      useServicesStore.getState().updateService(getToken, 'shop-1', 'svc-1', { name: 'X' }),
+    ).rejects.toThrow('Not found');
   });
 });

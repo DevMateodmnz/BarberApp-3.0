@@ -2,7 +2,7 @@
  * Mobile API helpers for barbershop services.
  */
 import { api, type ApiResponse, type GetToken } from './api.js';
-import type { CreateServiceInput, Service } from './types.js';
+import type { CreateServiceInput, Service, UpdateServiceInput } from './types.js';
 
 /**
  * Fetches all active services for a barbershop (OWNER view).
@@ -48,6 +48,32 @@ export async function createBarbershopService(
   const { data } = response;
   if (!data.success || !data.data) {
     throw new Error(data.error?.message ?? 'Failed to create service');
+  }
+
+  return data.data;
+}
+
+/**
+ * Updates an existing service (OWNER only).
+ *
+ * PATCH /barbershops/:barbershopId/services/:serviceId
+ */
+export async function updateBarbershopService(
+  getToken: GetToken,
+  barbershopId: string,
+  serviceId: string,
+  input: UpdateServiceInput,
+): Promise<Service> {
+  const token = await getToken();
+  const response = await api.patch<ApiResponse<Service>>(
+    `/barbershops/${barbershopId}/services/${serviceId}`,
+    input,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  const { data } = response;
+  if (!data.success || !data.data) {
+    throw new Error(data.error?.message ?? 'Failed to update service');
   }
 
   return data.data;
