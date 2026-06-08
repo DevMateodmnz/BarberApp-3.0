@@ -2,7 +2,7 @@
  * Unit tests for employeesStore — PR-060A
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { EmployeeListItem } from '../../src/lib/types.js';
+import type { EmployeeListItem, Service } from '../../src/lib/types.js';
 
 const mockFetchEmployees = vi.fn();
 const mockDeactivateEmployee = vi.fn();
@@ -14,6 +14,17 @@ vi.mock('../../src/lib/employees.js', () => ({
   deactivateEmployee: (...args: unknown[]) => mockDeactivateEmployee(...args),
   reactivateEmployee: (...args: unknown[]) => mockReactivateEmployee(...args),
   createEmployee: (...args: unknown[]) => mockCreateEmployee(...args),
+}));
+
+const mockFetchEmployeeServices = vi.fn();
+const mockAssignEmployeeService = vi.fn();
+const mockUnassignEmployeeService = vi.fn();
+
+vi.mock('../../src/lib/employeeServices.js', () => ({
+  fetchEmployeeServices: (...args: unknown[]) => mockFetchEmployeeServices(...args),
+  fetchMyAssignedServices: vi.fn(),
+  assignEmployeeService: (...args: unknown[]) => mockAssignEmployeeService(...args),
+  unassignEmployeeService: (...args: unknown[]) => mockUnassignEmployeeService(...args),
 }));
 
 async function importStore() {
@@ -155,5 +166,57 @@ describe('useEmployeesStore', () => {
 
     expect(useEmployeesStore.getState().employeesError).toBe('User not found');
     expect(useEmployeesStore.getState().employees).toEqual([existingEmp]);
+  });
+
+  describe('service assignments', () => {
+    function makeSvc(id: string): Service {
+      return {
+        id,
+        name: `Service ${id}`,
+        description: null,
+        durationMinutes: 30,
+        priceCents: 1000,
+        currency: 'ARS',
+        isActive: true,
+      };
+    }
+
+    it('loadAssignments sets assigned and all services', async () => {
+      const { useEmployeesStore } = await importStore();
+      const assignedSvcs = [makeSvc('svc-1')];
+      mockFetchEmployeeServices.mockResolvedValueOnce(assignedSvcs);
+
+      const getToken = vi.fn().mockResolvedValue('token');
+      await useEmployeesStore.getState().loadAssignments(getToken, 'shop-1', 'emp-1');
+
+      expect(mockFetchEmployeeServices).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1');
+      expect(useEmployeesStore.getState().assignedServices).toEqual(assignedSvcs);
+    });
+
+    it('assignService reloads assigned services', async () => {
+      const { useEmployeesStore } = await importStore();
+      const afterAssign = [makeSvc('svc-1'), makeSvc('svc-2')];
+      mockAssignEmployeeService.mockResolvedValueOnce({});
+      mockFetchEmployeeServices.mockResolvedValueOnce(afterAssign);
+
+      const getToken = vi.fn().mockResolvedValue('token');
+      await useEmployeesStore.getState().assignService(getToken, 'shop-1', 'emp-1', 'svc-2');
+
+      expect(mockAssignEmployeeService).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1', 'svc-2');
+      expect(useEmployeesStore.getState().assignedServices).toEqual(afterAssign);
+    });
+
+    it('unassignService reloads assigned services', async () => {
+      const { useEmployeesStore } = await importStore();
+      const afterUnassign = [makeSvc('svc-2')];
+      mockUnassignEmployeeService.mockResolvedValueOnce(undefined);
+      mockFetchEmployeeServices.mockResolvedValueOnce(afterUnassign);
+
+      const getToken = vi.fn().mockResolvedValue('token');
+      await useEmployeesStore.getState().unassignService(getToken, 'shop-1', 'emp-1', 'svc-1');
+
+      expect(mockUnassignEmployeeService).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1', 'svc-1');
+      expect(useEmployeesStore.getState().assignedServices).toEqual(afterUnassign);
+    });
   });
 });

@@ -1,8 +1,8 @@
 /**
  * Employees store — Zustand store for barbershop employee roster.
  *
- * OWNER-only: loads, deactivates, and reactivates employees.
- * BARBER and CLIENT are no-ops.
+ * OWNER-only: loads, creates, deactivates, reactivates employees,
+ * and manages service assignments.
  */
 import { create } from 'zustand';
 import {
@@ -11,12 +11,23 @@ import {
   reactivateEmployee as reactivateEmployeeApi,
   createEmployee as createEmployeeApi,
 } from './employees.js';
-import type { EmployeeListItem } from './types.js';
+import {
+  fetchEmployeeServices,
+  assignEmployeeService as assignEmployeeServiceApi,
+  unassignEmployeeService as unassignEmployeeServiceApi,
+} from './employeeServices.js';
+import type { EmployeeListItem, Service } from './types.js';
 
 interface EmployeesState {
   employees: EmployeeListItem[];
   isEmployeesLoading: boolean;
   employeesError: string | null;
+
+  // Service assignments
+  assignedServices: Service[];
+  isAssignmentsLoading: boolean;
+  assignmentsError: string | null;
+  selectedEmployeeIdForAssignments: string | null;
 
   loadEmployees: (
     getToken: () => Promise<string | null>,
@@ -41,6 +52,28 @@ interface EmployeesState {
     userId: string,
   ) => Promise<void>;
 
+  loadAssignments: (
+    getToken: () => Promise<string | null>,
+    barbershopId: string,
+    employeeId: string,
+  ) => Promise<void>;
+
+  assignService: (
+    getToken: () => Promise<string | null>,
+    barbershopId: string,
+    employeeId: string,
+    serviceId: string,
+  ) => Promise<void>;
+
+  unassignService: (
+    getToken: () => Promise<string | null>,
+    barbershopId: string,
+    employeeId: string,
+    serviceId: string,
+  ) => Promise<void>;
+
+  clearAssignments: () => void;
+
   clearEmployees: () => void;
 }
 
@@ -48,6 +81,11 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
   employees: [],
   isEmployeesLoading: false,
   employeesError: null,
+
+  assignedServices: [],
+  isAssignmentsLoading: false,
+  assignmentsError: null,
+  selectedEmployeeIdForAssignments: null,
 
   loadEmployees: async (getToken, barbershopId) => {
     if (!barbershopId) {
@@ -72,7 +110,6 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
 
   reactivateEmployee: async (getToken, barbershopId, employeeId) => {
     await reactivateEmployeeApi(getToken, barbershopId, employeeId);
-    // Reload the full list so the reactivated employee reappears with fresh data
     await fetchEmployees(getToken, barbershopId)
       .then((employees) => set({ employees }))
       .catch((err) => {
@@ -85,13 +122,50 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
     set({ employeesError: null });
     try {
       await createEmployeeApi(getToken, barbershopId, userId);
-      // Reload the full list for consistent ordering
       const employees = await fetchEmployees(getToken, barbershopId);
       set({ employees });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       set({ employeesError: message });
     }
+  },
+
+  loadAssignments: async (getToken, barbershopId, employeeId) => {
+    set({
+      isAssignmentsLoading: true,
+      assignmentsError: null,
+      selectedEmployeeIdForAssignments: employeeId,
+    });
+
+    try {
+      const assignedServices = await fetchEmployeeServices(getToken, barbershopId, employeeId);
+      set({ assignedServices, isAssignmentsLoading: false });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      set({ assignedServices: [], isAssignmentsLoading: false, assignmentsError: message });
+    }
+  },
+
+  assignService: async (getToken, barbershopId, employeeId, serviceId) => {
+    await assignEmployeeServiceApi(getToken, barbershopId, employeeId, serviceId);
+    // Reload assigned services to reflect the change
+    const assignedServices = await fetchEmployeeServices(getToken, barbershopId, employeeId);
+    set({ assignedServices, assignmentsError: null });
+  },
+
+  unassignService: async (getToken, barbershopId, employeeId, serviceId) => {
+    await unassignEmployeeServiceApi(getToken, barbershopId, employeeId, serviceId);
+    const assignedServices = await fetchEmployeeServices(getToken, barbershopId, employeeId);
+    set({ assignedServices, assignmentsError: null });
+  },
+
+  clearAssignments: () => {
+    set({
+      assignedServices: [],
+      isAssignmentsLoading: false,
+      assignmentsError: null,
+      selectedEmployeeIdForAssignments: null,
+    });
   },
 
   clearEmployees: () => {

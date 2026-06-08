@@ -7,6 +7,7 @@ function createMockApi() {
   return {
     get: vi.fn(),
     post: vi.fn(),
+    delete: vi.fn(),
     interceptors: {
       request: { use: vi.fn() },
       response: { use: vi.fn() },
@@ -121,5 +122,70 @@ describe('fetchMyAssignedServices', () => {
     const getToken = vi.fn().mockResolvedValue('barber-token');
 
     await expect(fetchMyAssignedServices(getToken, 'shop-1')).rejects.toThrow('Not allowed');
+  });
+});
+
+describe('assignEmployeeService', () => {
+  it('sends POST to /barbershops/:id/employees/:eid/services with serviceId', async () => {
+    const { assignEmployeeService } = await importEmployeeServices();
+
+    mockApi.post.mockResolvedValueOnce({
+      data: { success: true, data: { employeeId: 'emp-1', serviceId: 'svc-1' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    await assignEmployeeService(getToken, 'shop-1', 'emp-1', 'svc-1');
+
+    expect(getToken).toHaveBeenCalled();
+    expect(mockApi.post).toHaveBeenCalledWith(
+      '/barbershops/shop-1/employees/emp-1/services',
+      { serviceId: 'svc-1' },
+      { headers: { Authorization: 'Bearer owner-token' } },
+    );
+  });
+
+  it('throws on API error', async () => {
+    const { assignEmployeeService } = await importEmployeeServices();
+
+    mockApi.post.mockResolvedValueOnce({
+      data: { success: false, error: { code: 'CONFLICT', message: 'Already assigned' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    await expect(
+      assignEmployeeService(getToken, 'shop-1', 'emp-1', 'svc-1'),
+    ).rejects.toThrow('Already assigned');
+  });
+});
+
+describe('unassignEmployeeService', () => {
+  it('sends DELETE to /barbershops/:id/employees/:eid/services/:sid', async () => {
+    const { unassignEmployeeService } = await importEmployeeServices();
+
+    mockApi.delete.mockResolvedValueOnce({
+      data: { success: true, data: { message: 'Service unassigned' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    await unassignEmployeeService(getToken, 'shop-1', 'emp-1', 'svc-1');
+
+    expect(getToken).toHaveBeenCalled();
+    expect(mockApi.delete).toHaveBeenCalledWith(
+      '/barbershops/shop-1/employees/emp-1/services/svc-1',
+      { headers: { Authorization: 'Bearer owner-token' } },
+    );
+  });
+
+  it('throws on API error', async () => {
+    const { unassignEmployeeService } = await importEmployeeServices();
+
+    mockApi.delete.mockResolvedValueOnce({
+      data: { success: false, error: { code: 'NOT_FOUND', message: 'Assignment not found' } },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    await expect(
+      unassignEmployeeService(getToken, 'shop-1', 'emp-1', 'svc-1'),
+    ).rejects.toThrow('Assignment not found');
   });
 });

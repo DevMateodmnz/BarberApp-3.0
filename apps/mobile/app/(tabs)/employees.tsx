@@ -5,7 +5,7 @@
  * "View Employees" card on Home for OWNER users with a barbershop.
  * OWNER can view, deactivate, and reactivate employees.
  */
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { useContextStore } from '@/lib/store.js';
 import { useEmployeesStore } from '@/lib/employeesStore.js';
+import { useServicesStore } from '@/lib/servicesStore.js';
 import { useFlashStore } from '@/lib/flashStore.js';
 import type { EmployeeListItem } from '@/lib/types.js';
 
@@ -36,7 +37,16 @@ export default function EmployeesScreen() {
     deactivateEmployee,
     reactivateEmployee,
     createEmployee,
+    assignedServices,
+    isAssignmentsLoading,
+    selectedEmployeeIdForAssignments,
+    loadAssignments,
+    assignService,
+    unassignService,
+    clearAssignments,
   } = useEmployeesStore();
+
+  const { services: allServices, loadServices } = useServicesStore();
 
   useEffect(() => {
     if (!isSignedIn || !getToken || context) return;
@@ -86,6 +96,25 @@ export default function EmployeesScreen() {
       setIsCreating(false);
     }
   }
+
+  function handleToggleAssignments(employeeId: string) {
+    if (selectedEmployeeIdForAssignments === employeeId) {
+      clearAssignments();
+      return;
+    }
+    if (!context?.barbershopId || !getToken) return;
+    // Ensure all services are loaded
+    void loadServices(getToken, context.barbershopId);
+    void loadAssignments(getToken, context.barbershopId, employeeId);
+  }
+
+  const unassignedServices = useMemo(
+    () =>
+      allServices.filter(
+        (s) => s.isActive && !assignedServices.some((a) => a.id === s.id),
+      ),
+    [allServices, assignedServices],
+  );
 
   const handleRefresh = useCallback(() => {
     if (!getToken || !context?.barbershopId) return;
@@ -298,7 +327,74 @@ export default function EmployeesScreen() {
                         <Text style={styles.reactivateButtonText}>Reactivate</Text>
                       </TouchableOpacity>
                     )}
+                    <TouchableOpacity
+                      onPress={() => handleToggleAssignments(employee.id)}
+                      style={styles.manageServicesButton}
+                      testID={`employee-manage-services-${employee.id}`}
+                    >
+                      <Text style={styles.manageServicesButtonText}>
+                        {selectedEmployeeIdForAssignments === employee.id ? 'Hide Services' : 'Manage Services'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
+
+                  {/* Expanded assignment section */}
+                  {selectedEmployeeIdForAssignments === employee.id && (
+                    <View style={styles.assignmentSection} testID={`employee-assignments-${employee.id}`}>
+                      {isAssignmentsLoading && (
+                        <View style={styles.loadingRow}>
+                          <ActivityIndicator size="small" />
+                          <Text style={styles.loadingText}>Loading assignments…</Text>
+                        </View>
+                      )}
+
+                      {!isAssignmentsLoading && (
+                        <>
+                          <Text style={styles.assignmentTitle}>Assigned Services</Text>
+                          {assignedServices.length === 0 ? (
+                            <Text style={styles.emptyHint}>No services assigned.</Text>
+                          ) : (
+                            assignedServices.map((svc) => (
+                              <View key={svc.id} style={styles.assignmentRow}>
+                                <Text style={styles.assignmentName}>{svc.name}</Text>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    if (!context?.barbershopId) return;
+                                    void unassignService(getToken, context.barbershopId, employee.id, svc.id);
+                                  }}
+                                  style={styles.unassignButton}
+                                  testID={`employee-unassign-${employee.id}-${svc.id}`}
+                                >
+                                  <Text style={styles.unassignButtonText}>Remove</Text>
+                                </TouchableOpacity>
+                              </View>
+                            ))
+                          )}
+
+                          <Text style={[styles.assignmentTitle, { marginTop: 12 }]}>Available Services</Text>
+                          {unassignedServices.length === 0 ? (
+                            <Text style={styles.emptyHint}>All active services are assigned.</Text>
+                          ) : (
+                            unassignedServices.map((svc) => (
+                              <View key={svc.id} style={styles.assignmentRow}>
+                                <Text style={styles.assignmentName}>{svc.name}</Text>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    if (!context?.barbershopId) return;
+                                    void assignService(getToken, context.barbershopId, employee.id, svc.id);
+                                  }}
+                                  style={styles.assignButton}
+                                  testID={`employee-assign-${employee.id}-${svc.id}`}
+                                >
+                                  <Text style={styles.assignButtonText}>Assign</Text>
+                                </TouchableOpacity>
+                              </View>
+                            ))
+                          )}
+                        </>
+                      )}
+                    </View>
+                  )}
                 </View>
               ))}
             </View>
@@ -353,4 +449,15 @@ const styles = StyleSheet.create({
   submitButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   cancelButton: { backgroundColor: '#EEEEEE', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
   cancelButtonText: { color: '#666', fontSize: 14 },
+  manageServicesButton: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, backgroundColor: '#E3F2FD' },
+  manageServicesButtonText: { fontSize: 12, color: '#007AFF', fontWeight: '600' },
+  assignmentSection: { marginTop: 8, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDD' },
+  assignmentTitle: { fontSize: 12, fontWeight: '600', color: '#333', marginBottom: 4 },
+  assignmentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  assignmentName: { fontSize: 13, color: '#333', flex: 1 },
+  assignButton: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 4, backgroundColor: '#E8F5E9' },
+  assignButtonText: { fontSize: 11, color: '#2E7D32', fontWeight: '600' },
+  unassignButton: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 4, backgroundColor: '#FFEBEE' },
+  unassignButtonText: { fontSize: 11, color: '#D32F2F', fontWeight: '600' },
+  emptyHint: { fontSize: 12, color: '#999', fontStyle: 'italic' },
 });
