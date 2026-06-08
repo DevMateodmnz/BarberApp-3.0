@@ -216,7 +216,6 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
       setClientNameInput('');
       setNotesInput('');
       setPriceCentsInput('');
-      setFormSuccess('Service record created successfully.');
 
       await onRecordCreated();
     } catch (error) {

@@ -4,6 +4,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { ServiceRecordCreateSection } from '@/components/ServiceRecordCreateSection.js';
 import { useContextStore } from '@/lib/store.js';
+import { useFlashStore } from '@/lib/flashStore.js';
 
 export default function RecordServiceScreen() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function RecordServiceScreen() {
   }, [context, getToken, isSignedIn, loadContext]);
 
   const handleRecordCreated = useCallback(async () => {
+    useFlashStore.getState().setMessage('Service record created successfully.');
     router.back();
   }, [router]);
 

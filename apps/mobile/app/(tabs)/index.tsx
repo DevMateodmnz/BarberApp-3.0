@@ -14,6 +14,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { DailySummarySection } from '@/components/DailySummarySection.js';
 import { useContextStore } from '@/lib/store.js';
 import { useSummaryStore } from '@/lib/summaryStore.js';
+import { useFlashStore } from '@/lib/flashStore.js';
 import {
   getTodayDateString,
   addDaysToDateString,
@@ -34,6 +35,18 @@ export default function HomeScreen() {
 
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const hasFocusedOnceRef = useRef(false);
+
+  const flashMessage = useFlashStore((s) => s.message);
+  const clearFlashMessage = useFlashStore((s) => s.clearMessage);
+
+  // Auto-clear flash message after a short display period
+  useEffect(() => {
+    if (!flashMessage) return;
+    const timer = setTimeout(() => {
+      clearFlashMessage();
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [flashMessage, clearFlashMessage]);
 
   // Load context when signed in
   useEffect(() => {
@@ -101,6 +114,13 @@ export default function HomeScreen() {
       }
     >
       <Text style={styles.appName}>BarberApp</Text>
+
+      {/* Flash success message (e.g. after creating a service record) */}
+      {flashMessage && (
+        <View style={styles.flashBanner} testID="home-flash-message">
+          <Text style={styles.flashBannerText}>{flashMessage}</Text>
+        </View>
+      )}
 
       {/* Context loading */}
       {isContextLoading && (
@@ -289,6 +309,23 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 16,
+  },
+  flashBanner: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#2E7D32',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    width: '100%',
+    maxWidth: 400,
+    marginBottom: 16,
+  },
+  flashBannerText: {
+    fontSize: 14,
+    color: '#2E7D32',
+    textAlign: 'center',
+    fontWeight: '600',
   },
   loadingText: {
     fontSize: 14,
