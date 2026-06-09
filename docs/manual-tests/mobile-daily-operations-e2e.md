@@ -18,6 +18,8 @@ Relevant screens:
 
 ## Preconditions
 
+> **Setup first**: If you haven't started the stack yet, follow **[MVP QA Setup Guide](./mobile-mvp-qa-setup.md)** before continuing.
+
 Before starting, confirm:
 
 - [ ] API server is running and reachable from the device.

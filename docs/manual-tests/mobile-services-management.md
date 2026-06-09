@@ -21,6 +21,8 @@ Relevant files:
 
 ## Preconditions
 
+> **Setup first**: If you haven't started the stack yet, follow **[MVP QA Setup Guide](./mobile-mvp-qa-setup.md)** before continuing.
+
 Before testing, confirm:
 
 - [ ] API server is running and reachable from the device.
@@ -28,7 +30,6 @@ Before testing, confirm:
 - [ ] If testing on a physical phone, `EXPO_PUBLIC_API_URL` uses the LAN IP or reachable host, not `localhost`.
 - [ ] Clerk publishable key is configured in the mobile environment.
 - [ ] Test OWNER user exists with a barbershop context.
-- [ ] The barbershop has at least one active service and optionally one inactive service.
 - [ ] Test BARBER and CLIENT users exist for role-restriction tests.
 
 ## Start the app
