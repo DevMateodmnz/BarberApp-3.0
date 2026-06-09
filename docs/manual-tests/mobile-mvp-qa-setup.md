@@ -75,11 +75,12 @@ Copy and edit `apps/api/.env`:
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/barberapp
 CLERK_SECRET_KEY=sk_test_<your-real-clerk-secret-key>
+CLERK_PUBLISHABLE_KEY=pk_test_<your-real-clerk-publishable-key>
 NODE_ENV=development
 PORT=3000
 ```
 
-**Clerk secret key**: Go to Clerk Dashboard → API Keys → copy the **Secret Key** (starts with `sk_test_`).
+**Both Clerk keys are required**: The Clerk backend SDK uses `CLERK_PUBLISHABLE_KEY` for JWT verification and `CLERK_SECRET_KEY` for server-to-server operations. Go to Clerk Dashboard → API Keys to copy both.
 
 Start the API:
 
@@ -116,6 +117,17 @@ In **Clerk Dashboard → Users → Add User**, create two test accounts:
 | Barber | `barber@yourdomain.com` | `{ "role": "BARBER" }` |
 
 After creating each user, copy their **Clerk User ID** (e.g. `user_<clerk-id>…`). You'll need these for the DB insert.
+
+> **Alternative: Clerk Backend API** — If you have the secret key, you can create test users programmatically:
+> ```bash
+> curl -X POST https://api.clerk.com/v1/users \
+>   -H "Authorization: Bearer $CLERK_SECRET_KEY" \
+>   -H "Content-Type: application/json" \
+>   -d '{"email_address":["owner@test.com"],"public_metadata":{"role":"OWNER"},"skip_password_checks":true,"skip_password_requirement":true}'
+> ```
+> Then set a password: `PATCH /v1/users/{id} -d '{"password":"...yourpassword..."}'`
+>
+> This avoids the Clerk Dashboard entirely and is useful for CI/automation.
 
 > **Note about roles**: The mobile app uses Clerk's `publicMetadata.role` to determine user role. Set it in Clerk Dashboard → Users → click user → Metadata → Public.
 
@@ -295,8 +307,10 @@ Start with the **Services** checklist — as the OWNER, create `Classic Cut` ($5
 ## 8. Known Limitations
 
 - **No barbershop creation in mobile**: The barbershop must be inserted manually in the DB. There is no API endpoint or mobile screen for creating a barbershop.
-- **No user creation in mobile**: Users must be created in Clerk Dashboard. The mobile app has no sign-up flow that creates DB `User` rows — that requires the Clerk webhook or manual insert.
+- **No user creation in mobile**: Users must be created in Clerk Dashboard (or via Clerk Backend API). The mobile app has no sign-up flow that creates DB `User` rows — that requires the Clerk webhook or manual insert.
 - **Webhook needs public URL**: The Clerk→DB user sync webhook requires Clerk to reach your API. For local dev, use ngrok or insert users manually.
+- **`CLERK_PUBLISHABLE_KEY` required in API .env**: The Clerk backend SDK needs BOTH the secret key and the publishable key. Without `CLERK_PUBLISHABLE_KEY`, protected endpoints return HTTP 500 "Publishable key is missing."
+- **`tsx` does not auto-load `.env`**: The API dev script uses `tsx watch --env-file=.env` to load environment variables. This was added in PR-072A commit `2e3e232`.
 - **Clerk test mode**: Clerk's test mode allows any email/password without real email verification. Use this for QA accounts.
 - **Existing seed is test-only**: `npm run db:seed --workspace @barberapp/api` creates users with fake Clerk IDs (`owner_clerk_123`). Do not use this for real-device QA — those IDs won't match any real Clerk account.
 - **No component/E2E tests**: All mobile QA is manual. There are no automated component or end-to-end tests.
@@ -309,12 +323,14 @@ Start with the **Services** checklist — as the OWNER, create `Classic Cut` ($5
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | "Missing Clerk Key" on mobile | `.env.local` doesn't exist or has wrong key | Create it with real publishable key |
+| "Publishable key is missing" (HTTP 500) | `CLERK_PUBLISHABLE_KEY` not set in API `.env` | Add both `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` to `apps/api/.env` |
 | "User not found in database" after sign-in | No `User` row with matching `clerkUserId` | Insert row manually (section 3b) |
 | Mobile can't reach API | Wrong `EXPO_PUBLIC_API_URL` for device | Emulator → `10.0.2.2`, phone → LAN IP |
 | API won't start | Docker not running, or DB not pushed | `docker compose up -d && npm run db:push` |
 | "Employee added" but no services visible | Services not yet created, or not assigned | Create services first, then assign |
 | Expo Go can't load app | Phone not on same Wi-Fi as dev machine | Connect to same network, check firewall |
 | `prisma db push` fails | DB container not running | `docker compose up -d` and wait for healthy |
+| Clerk password rejected (pwned) | Password found in breach database | Use a stronger, unique password |
 
 ---
 
