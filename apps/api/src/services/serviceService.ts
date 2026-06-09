@@ -88,7 +88,8 @@ export async function updateService(
 
   if (!service) throw new NotFoundError('Service');
   if (service.barbershopId !== barbershopId) throw new NotFoundError('Service');
-  if (service.deletedAt) throw new NotFoundError('Service');
+  // Allow updates on soft-deleted services — reactivation (isActive:true) clears deletedAt.
+  // This is intentional: DELETE is "deactivate", PATCH can "reactivate".
 
   return prisma.service.update({
     where: { id: serviceId },
@@ -98,6 +99,8 @@ export async function updateService(
       ...(input.priceCents !== undefined && { priceCents: input.priceCents }),
       ...(input.description !== undefined && { description: input.description }),
       ...(input.isActive !== undefined && { isActive: input.isActive }),
+      // Reactivate: clear deletedAt when marking active again
+      ...(input.isActive === true && { deletedAt: null }),
     },
     select: {
       id: true,
