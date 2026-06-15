@@ -179,3 +179,52 @@ export interface ServiceRecord {
     };
   };
 }
+
+// ============================================
+// Appointment types
+// ============================================
+
+export type AppointmentStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'NO_SHOW';
+
+export interface Appointment {
+  id: string;
+  barbershopId: string;
+  employeeId: string;
+  clientId: string;
+  serviceId: string;
+  startAt: string;
+  endAt: string;
+  status: AppointmentStatus;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  barbershop: {
+    id: string;
+    name: string;
+  };
+  employee: {
+    id: string;
+    user: {
+      id: string;
+      name: string | null;
+    };
+  };
+  client: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
+  service: {
+    id: string;
+    name: string;
+    durationMinutes: number;
+    priceCents: number;
+  };
+}

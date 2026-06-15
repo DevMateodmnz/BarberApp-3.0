@@ -261,6 +261,23 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* OWNER and BARBER: Appointments entry */}
+          {(context.role === 'OWNER' || context.role === 'BARBER') && !!context.barbershopId && (
+            <View style={styles.actionCard} testID="home-appointments-card">
+              <Text style={styles.actionTitle}>Appointments</Text>
+              <Text style={styles.actionText}>
+                View and manage today's appointments.
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/appointments')}
+                style={styles.actionButton}
+                testID="home-appointments-button"
+              >
+                <Text style={styles.actionButtonText}>View Appointments</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {context.role === 'CLIENT' && (
             <View style={styles.summaryCard} testID="home-client-message">
               <Text style={styles.summaryTitle}>Dashboard</Text>
