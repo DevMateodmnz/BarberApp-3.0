@@ -5,7 +5,7 @@
  * "View Services" card on Home for OWNER users with a barbershop.
  * OWNER can view, create, and edit services.
  */
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -33,6 +33,14 @@ import type { Service } from '@/lib/types.js';
 export default function ServicesScreen() {
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
+
+  // Stabilize getToken via ref — Clerk Expo recreates getToken every render,
+  // which causes infinite useEffect re-fire loops when used as a dep.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  });
+
   const { context, isLoading: isContextLoading, error: contextError, loadContext } = useContextStore();
   const {
     services,
@@ -77,19 +85,19 @@ export default function ServicesScreen() {
   );
 
   useEffect(() => {
-    if (!isSignedIn || !getToken || context) return;
-    void loadContext(getToken);
-  }, [context, getToken, isSignedIn, loadContext]);
+    if (!isSignedIn || !getTokenRef.current || context) return;
+    void loadContext(getTokenRef.current);
+  }, [context, isSignedIn, loadContext]);
 
   useEffect(() => {
-    if (!context || !getToken) return;
-    void loadServices(getToken, context.barbershopId);
-  }, [context, getToken, loadServices]);
+    if (!context || !getTokenRef.current) return;
+    void loadServices(getTokenRef.current, context.barbershopId);
+  }, [context, loadServices]);
 
   const handleRefresh = useCallback(() => {
-    if (!getToken || !context?.barbershopId) return;
-    void loadServices(getToken, context.barbershopId);
-  }, [getToken, context?.barbershopId, loadServices]);
+    if (!getTokenRef.current || !context?.barbershopId) return;
+    void loadServices(getTokenRef.current, context.barbershopId);
+  }, [context?.barbershopId, loadServices]);
 
   function resetCreateForm() {
     setNewName('');
@@ -136,7 +144,7 @@ export default function ServicesScreen() {
     setIsCreating(true);
 
     try {
-      await createService(getToken, context.barbershopId, result.payload);
+      await createService(getTokenRef.current, context.barbershopId, result.payload);
 
       resetCreateForm();
       useFlashStore.getState().setMessage('Service created successfully.');
@@ -169,7 +177,7 @@ export default function ServicesScreen() {
     setIsUpdating(true);
 
     try {
-      await updateService(getToken, context.barbershopId, editingServiceId, result.payload);
+      await updateService(getTokenRef.current, context.barbershopId, editingServiceId, result.payload);
 
       cancelEditing();
       useFlashStore.getState().setMessage('Service updated successfully.');
@@ -183,7 +191,7 @@ export default function ServicesScreen() {
   function performToggle(service: Service, newIsActive: boolean) {
     if (!context?.barbershopId) return;
 
-    updateService(getToken, context.barbershopId, service.id, { isActive: newIsActive })
+    updateService(getTokenRef.current, context.barbershopId, service.id, { isActive: newIsActive })
       .then(() => {
         useFlashStore.getState().setMessage(
           newIsActive ? 'Service reactivated.' : 'Service deactivated.',
