@@ -138,6 +138,21 @@ export interface CreateServiceRecordInput {
   notes?: string;
 }
 
+/**
+ * Working hours day — matches the API response shape from
+ * GET/PUT /api/v1/barbershops/:id/working-hours.
+ *
+ * id is optional because pre-populated days won't have one.
+ * dayOfWeek: 0=Sunday, 1=Monday, ..., 6=Saturday.
+ */
+export interface WorkingHoursDay {
+  id?: string;
+  dayOfWeek: number;
+  openTime: string;
+  closeTime: string;
+  isActive: boolean;
+}
+
 export interface ServiceRecord {
   id: string;
   barbershopId: string;

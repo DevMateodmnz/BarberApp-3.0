@@ -244,6 +244,23 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* OWNER-only: working hours entry */}
+          {context.role === 'OWNER' && !!context.barbershopId && (
+            <View style={styles.actionCard} testID="home-working-hours-card">
+              <Text style={styles.actionTitle}>Working Hours</Text>
+              <Text style={styles.actionText}>
+                Set your barbershop weekly schedule.
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/working-hours')}
+                style={styles.actionButton}
+                testID="home-working-hours-button"
+              >
+                <Text style={styles.actionButtonText}>View Working Hours</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {context.role === 'CLIENT' && (
             <View style={styles.summaryCard} testID="home-client-message">
               <Text style={styles.summaryTitle}>Dashboard</Text>

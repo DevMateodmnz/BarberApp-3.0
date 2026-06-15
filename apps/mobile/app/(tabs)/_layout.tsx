@@ -36,6 +36,13 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="working-hours"
+        options={{
+          title: 'Working Hours',
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
