@@ -29,6 +29,15 @@ import type { BarbershopDailySummary, EmployeeDailySummary } from '@/lib/types.j
 export default function HomeScreen() {
   const router = useRouter();
   const { isSignedIn, getToken, isLoaded } = useAuth();
+
+  // Clerk Expo's useAuth creates a new getToken function on every render
+  // (unlike Clerk React which uses useCallback). Stabilize via a ref so
+  // effect dependency arrays don't cause infinite re-render loops.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  });
+
   const { context, isLoading: isContextLoading, error: contextError, loadContext } = useContextStore();
   const {
     summary,
@@ -61,16 +70,16 @@ export default function HomeScreen() {
 
   // Load context when signed in
   useEffect(() => {
-    if (!isSignedIn || !getToken) return;
-    loadContext(getToken);
-  }, [isSignedIn, getToken, loadContext]);
+    if (!isSignedIn || !getTokenRef.current) return;
+    loadContext(getTokenRef.current);
+  }, [isSignedIn, loadContext]);
 
   // Load summary and records after context is loaded, for the selected date
   useEffect(() => {
-    if (!context || !getToken) return;
-    loadSummaryForDate(getToken, context, selectedDate);
-    loadRecordsForDate(getToken, context, selectedDate);
-  }, [context, getToken, selectedDate, loadSummaryForDate, loadRecordsForDate]);
+    if (!context || !getTokenRef.current) return;
+    loadSummaryForDate(getTokenRef.current, context, selectedDate);
+    loadRecordsForDate(getTokenRef.current, context, selectedDate);
+  }, [context, selectedDate, loadSummaryForDate, loadRecordsForDate]);
 
   useFocusEffect(
     useCallback(() => {

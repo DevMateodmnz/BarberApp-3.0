@@ -28,12 +28,18 @@ interface ContextState {
  * Or outside React:
  *   useContextStore.getState().loadContext(getToken);
  */
-export const useContextStore = create<ContextState>((set) => ({
+export const useContextStore = create<ContextState>((set, get) => ({
   context: null,
   isLoading: false,
   error: null,
 
   loadContext: async (getToken) => {
+    // Re-entrancy guard: prevent concurrent duplicate calls.
+    // Clerk Expo's useAuth can trigger multiple effect runs during auth
+    // transitions, and without this guard loadContext would be called
+    // more than once concurrently.
+    if (get().isLoading) return;
+
     set({ isLoading: true, error: null });
     try {
       const context = await fetchCurrentUserContext(getToken);
