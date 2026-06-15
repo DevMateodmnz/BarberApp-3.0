@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
@@ -9,12 +9,20 @@ import { useFlashStore } from '@/lib/flashStore.js';
 export default function RecordServiceScreen() {
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
+
+  // Stabilize getToken via ref — Clerk Expo recreates getToken every render,
+  // which causes infinite useEffect re-fire loops when used as a dep.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  });
+
   const { context, isLoading, error, loadContext } = useContextStore();
 
   useEffect(() => {
-    if (!isSignedIn || !getToken || context) return;
-    void loadContext(getToken);
-  }, [context, getToken, isSignedIn, loadContext]);
+    if (!isSignedIn || !getTokenRef.current || context) return;
+    void loadContext(getTokenRef.current);
+  }, [context, isSignedIn, loadContext]);
 
   const handleRecordCreated = useCallback(async () => {
     useFlashStore.getState().setMessage('Service record created successfully.');
@@ -64,7 +72,7 @@ export default function RecordServiceScreen() {
         <ServiceRecordCreateSection
           mode="OWNER"
           barbershopId={context.barbershopId!}
-          getToken={getToken}
+          getToken={getTokenRef.current}
           onRecordCreated={handleRecordCreated}
         />
       )}
@@ -74,7 +82,7 @@ export default function RecordServiceScreen() {
           mode="BARBER"
           barbershopId={context.barbershopId!}
           employeeId={context.employeeId!}
-          getToken={getToken}
+          getToken={getTokenRef.current}
           onRecordCreated={handleRecordCreated}
         />
       )}

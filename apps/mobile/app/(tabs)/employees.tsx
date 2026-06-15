@@ -5,7 +5,7 @@
  * "View Employees" card on Home for OWNER users with a barbershop.
  * OWNER can view, deactivate, and reactivate employees.
  */
-import { useEffect, useCallback, useMemo, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +28,14 @@ import type { EmployeeListItem } from '@/lib/types.js';
 export default function EmployeesScreen() {
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
+
+  // Stabilize getToken via ref — Clerk Expo recreates getToken every render,
+  // which causes infinite useEffect re-fire loops when used as a dep.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  });
+
   const { context, isLoading: isContextLoading, error: contextError, loadContext } = useContextStore();
   const {
     employees,
@@ -49,14 +57,14 @@ export default function EmployeesScreen() {
   const { services: allServices, loadServices } = useServicesStore();
 
   useEffect(() => {
-    if (!isSignedIn || !getToken || context) return;
-    void loadContext(getToken);
-  }, [context, getToken, isSignedIn, loadContext]);
+    if (!isSignedIn || !getTokenRef.current || context) return;
+    void loadContext(getTokenRef.current);
+  }, [context, isSignedIn, loadContext]);
 
   useEffect(() => {
-    if (!context || !getToken) return;
-    void loadEmployees(getToken, context.barbershopId);
-  }, [context, getToken, loadEmployees]);
+    if (!context || !getTokenRef.current) return;
+    void loadEmployees(getTokenRef.current, context.barbershopId);
+  }, [context, loadEmployees]);
 
   // Add employee form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -87,7 +95,7 @@ export default function EmployeesScreen() {
     setIsCreating(true);
 
     try {
-      await createEmployee(getToken, context.barbershopId, identifier);
+      await createEmployee(getTokenRef.current, context.barbershopId, identifier);
       resetAddForm();
       useFlashStore.getState().setMessage('Employee added successfully.');
     } catch {
@@ -103,10 +111,10 @@ export default function EmployeesScreen() {
       clearAssignments();
       return;
     }
-    if (!context?.barbershopId || !getToken) return;
+    if (!context?.barbershopId || !getTokenRef.current) return;
     // Ensure all services are loaded
-    void loadServices(getToken, context.barbershopId);
-    void loadAssignments(getToken, context.barbershopId, employeeId);
+    void loadServices(getTokenRef.current, context.barbershopId);
+    void loadAssignments(getTokenRef.current, context.barbershopId, employeeId);
   }
 
   const unassignedServices = useMemo(
@@ -118,9 +126,9 @@ export default function EmployeesScreen() {
   );
 
   const handleRefresh = useCallback(() => {
-    if (!getToken || !context?.barbershopId) return;
-    void loadEmployees(getToken, context.barbershopId);
-  }, [getToken, context?.barbershopId, loadEmployees]);
+    if (!getTokenRef.current || !context?.barbershopId) return;
+    void loadEmployees(getTokenRef.current, context.barbershopId);
+  }, [context?.barbershopId, loadEmployees]);
 
   function handleDeactivate(employee: EmployeeListItem) {
     if (!context?.barbershopId) return;
@@ -134,7 +142,7 @@ export default function EmployeesScreen() {
           text: 'Deactivate',
           style: 'destructive',
           onPress: () => {
-            deactivateEmployee(getToken, context.barbershopId!, employee.id)
+            deactivateEmployee(getTokenRef.current, context.barbershopId!, employee.id)
               .then(() => {
                 useFlashStore.getState().setMessage('Employee deactivated.');
               })
@@ -152,7 +160,7 @@ export default function EmployeesScreen() {
   function handleReactivate(employee: EmployeeListItem) {
     if (!context?.barbershopId) return;
 
-    reactivateEmployee(getToken, context.barbershopId, employee.id)
+    reactivateEmployee(getTokenRef.current, context.barbershopId, employee.id)
       .then(() => {
         useFlashStore.getState().setMessage('Employee reactivated.');
       })
@@ -361,7 +369,7 @@ export default function EmployeesScreen() {
                                 <TouchableOpacity
                                   onPress={() => {
                                     if (!context?.barbershopId) return;
-                                    void unassignService(getToken, context.barbershopId, employee.id, svc.id);
+                                    void unassignService(getTokenRef.current, context.barbershopId, employee.id, svc.id);
                                   }}
                                   style={styles.unassignButton}
                                   testID={`employee-unassign-${employee.id}-${svc.id}`}
@@ -382,7 +390,7 @@ export default function EmployeesScreen() {
                                 <TouchableOpacity
                                   onPress={() => {
                                     if (!context?.barbershopId) return;
-                                    void assignService(getToken, context.barbershopId, employee.id, svc.id);
+                                    void assignService(getTokenRef.current, context.barbershopId, employee.id, svc.id);
                                   }}
                                   style={styles.assignButton}
                                   testID={`employee-assign-${employee.id}-${svc.id}`}

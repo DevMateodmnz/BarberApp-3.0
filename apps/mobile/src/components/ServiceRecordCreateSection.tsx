@@ -41,6 +41,14 @@ const PAYMENT_METHOD_OPTIONS: PaymentMethod[] = ['CASH', 'CARD', 'TRANSFER', 'OT
 export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProps) {
   const { barbershopId, getToken, onRecordCreated } = props;
   const isBarberMode = props.mode === 'BARBER';
+
+  // Stabilize getToken via ref — parent may pass an unstable function reference
+  // (e.g. from Clerk Expo's useAuth), which causes infinite useEffect re-fire loops.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  });
+
   const latestOwnerServicesRequestIdRef = useRef(0);
 
   const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
@@ -89,7 +97,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         setIsServicesLoading(true);
 
         try {
-          const result = await fetchMyAssignedServices(getToken, barbershopId);
+          const result = await fetchMyAssignedServices(getTokenRef.current, barbershopId);
           if (!isCancelled) {
             setServices(result);
           }
@@ -112,7 +120,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
       setIsServicesLoading(false);
 
       try {
-        const result = await fetchEmployees(getToken, barbershopId);
+        const result = await fetchEmployees(getTokenRef.current, barbershopId);
         if (!isCancelled) {
           setEmployees(result);
         }
@@ -132,7 +140,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
     return () => {
       isCancelled = true;
     };
-  }, [barbershopId, getToken, isBarberMode, isBarberMode ? props.employeeId : null]);
+  }, [barbershopId, isBarberMode, isBarberMode ? props.employeeId : null]);
 
   async function handleEmployeeSelect(employeeId: string) {
     if (isBarberMode) return;
@@ -149,7 +157,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
     setIsServicesLoading(true);
 
     try {
-      const result = await fetchEmployeeServices(getToken, barbershopId, employeeId);
+      const result = await fetchEmployeeServices(getTokenRef.current, barbershopId, employeeId);
       if (latestOwnerServicesRequestIdRef.current === requestId) {
         setServices(result);
       }
@@ -221,7 +229,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         notes: validation.notes,
       });
 
-      await createServiceRecord(getToken, barbershopId, payload);
+      await createServiceRecord(getTokenRef.current, barbershopId, payload);
 
       setSelectedServiceId(null);
       setSelectedPaymentMethod(null);
