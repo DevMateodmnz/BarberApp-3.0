@@ -30,6 +30,7 @@ vi.mock('axios', () => ({
 describe('useContextStore', () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.resetAllMocks();
   });
 
   it('has correct initial state', async () => {
@@ -120,6 +121,103 @@ describe('useContextStore', () => {
     useContextStore.getState().clearContext();
     expect(useContextStore.getState().context).toBeNull();
     expect(useContextStore.getState().error).toBeNull();
+  });
+
+  // ---- Stale-state recovery tests ----
+  // The Zustand store survives Expo Go hot reloads. If a previous render
+  // cycle left isLoading: true (set but never cleared because the promise
+  // chain was severed by a hot reload), the re-entrancy guard would
+  // permanently block all future loadContext calls.  The stale-state
+  // recovery heuristic must detect this and reset isLoading → false.
+
+  it('recovers from stale loading state (isLoading=true, ctx=null, err=null)', async () => {
+    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
+    const { useContextStore } = await import('../../src/lib/store.js');
+
+    // Simulate a stale store — set({ isLoading: true }) was called
+    // but the promise was severed before resolve/reject.
+    useContextStore.setState({ isLoading: true, context: null, error: null });
+
+    const fakeContext = {
+      userId: 'u1', role: 'OWNER' as const,
+      barbershopId: 's1', barbershopName: 'Recovered Shop',
+      employeeId: null, employeeName: null,
+    };
+    vi.mocked(fetchCurrentUserContext).mockResolvedValueOnce(fakeContext);
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useContextStore.getState().loadContext(getToken);
+
+    const state = useContextStore.getState();
+    // Should have recovered: isLoading reset, then fetch proceeded
+    expect(state.context).toEqual(fakeContext);
+    expect(state.isLoading).toBe(false);
+    expect(state.error).toBeNull();
+    expect(fetchCurrentUserContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-entrancy guard still blocks active call (isLoading=true, has error)', async () => {
+    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
+    const { useContextStore } = await import('../../src/lib/store.js');
+
+    // This is NOT stale — it has an error (a real loading cycle completed
+    // with failure).  The guard should still block.
+    useContextStore.setState({ isLoading: true, context: null, error: 'Previous failure' });
+
+    // NOTE: no mockResolvedValueOnce — the guard should block, so
+    // fetchCurrentUserContext will never be called.
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useContextStore.getState().loadContext(getToken);
+
+    const state = useContextStore.getState();
+    // Guard should have blocked — state remains unchanged
+    expect(state.context).toBeNull();
+    expect(state.isLoading).toBe(true);
+    expect(state.error).toBe('Previous failure');
+    expect(fetchCurrentUserContext).not.toHaveBeenCalled();
+  });
+
+  it('re-entrancy guard still blocks active call (isLoading=true, has context)', async () => {
+    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
+    const { useContextStore } = await import('../../src/lib/store.js');
+
+    const existingCtx = {
+      userId: 'u1', role: 'OWNER' as const,
+      barbershopId: 's1', barbershopName: 'Existing',
+      employeeId: null, employeeName: null,
+    };
+    // isLoading=true WITH context — a real concurrent call is in progress
+    useContextStore.setState({ isLoading: true, context: existingCtx, error: null });
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useContextStore.getState().loadContext(getToken);
+
+    const state = useContextStore.getState();
+    expect(state.context).toEqual(existingCtx);
+    expect(state.isLoading).toBe(true);
+    expect(fetchCurrentUserContext).not.toHaveBeenCalled();
+  });
+
+  it('stale-state recovery does not interfere with normal first load', async () => {
+    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
+    const { useContextStore } = await import('../../src/lib/store.js');
+
+    // Fresh store: everything null, isLoading false
+    const fakeContext = {
+      userId: 'u1', role: 'OWNER' as const,
+      barbershopId: 's1', barbershopName: 'Normal Load',
+      employeeId: null, employeeName: null,
+    };
+    vi.mocked(fetchCurrentUserContext).mockResolvedValueOnce(fakeContext);
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useContextStore.getState().loadContext(getToken);
+
+    const state = useContextStore.getState();
+    expect(state.context).toEqual(fakeContext);
+    expect(state.isLoading).toBe(false);
+    expect(state.error).toBeNull();
   });
 
   it('loadContext does not overwrite context on second successful call', async () => {

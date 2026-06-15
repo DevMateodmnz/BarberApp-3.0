@@ -34,10 +34,28 @@ export const useContextStore = create<ContextState>((set, get) => ({
   error: null,
 
   loadContext: async (getToken) => {
-    // Re-entrancy guard: prevent concurrent duplicate calls.
-    // Clerk Expo's useAuth can trigger multiple effect runs during auth
-    // transitions, and without this guard loadContext would be called
-    // more than once concurrently.
+    const state = get();
+
+    // ---- Stale-state recovery ----
+    // Zustand stores survive Expo Go hot reloads and tab navigations.
+    // If a previous render cycle called set({ isLoading: true }) but the
+    // promise chain was severed (hot reload, crash, unmount before resolve),
+    // the store is left with { isLoading: true, context: null, error: null }.
+    //
+    // Without this recovery, the re-entrancy guard below would see
+    // isLoading: true and return, permanently blocking all future
+    // loadContext calls — the app stays stuck on "Loading your context…".
+    //
+    // Heuristic: isLoading=true with no context AND no error means the
+    // loading promise was lost.  Reset to idle so we can retry.
+    if (state.isLoading && state.context === null && state.error === null) {
+      set({ isLoading: false });
+    }
+
+    // ---- Re-entrancy guard ----
+    // Prevent concurrent duplicate calls.  Clerk Expo's useAuth can
+    // trigger multiple effect runs during auth transitions; without this
+    // guard loadContext would initiate two parallel API requests.
     if (get().isLoading) return;
 
     set({ isLoading: true, error: null });

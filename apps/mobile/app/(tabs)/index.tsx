@@ -88,29 +88,32 @@ export default function HomeScreen() {
         return undefined;
       }
 
-      if (!context || !getToken) {
+      if (!context || !getTokenRef.current) {
         return undefined;
       }
 
-      void loadSummaryForDate(getToken, context, selectedDate);
-      void loadRecordsForDate(getToken, context, selectedDate);
+      void loadSummaryForDate(getTokenRef.current, context, selectedDate);
+      void loadRecordsForDate(getTokenRef.current, context, selectedDate);
       return undefined;
-    }, [context, getToken, loadSummaryForDate, selectedDate])
+    // getToken intentionally NOT in deps — use getTokenRef to avoid
+    // re-creating the callback every render (getToken is a new function
+    // every render in Clerk Expo, causing an infinite re-fire loop).
+    }, [context, loadSummaryForDate, selectedDate])
   );
 
   // Pull-to-refresh: reload context then summary for selectedDate
   const handleRefresh = useCallback(async () => {
-    if (!getToken) return;
-    await loadContext(getToken);
+    if (!getTokenRef.current) return;
+    await loadContext(getTokenRef.current);
     // After context reloads, the useEffect above will trigger summary reload.
     // But if context didn't change (same reference), useEffect won't re-fire,
     // so we explicitly reload here too.
     const { context: freshContext } = useContextStore.getState();
     if (freshContext) {
-      await loadSummaryForDate(getToken, freshContext, selectedDate);
-      await loadRecordsForDate(getToken, freshContext, selectedDate);
+      await loadSummaryForDate(getTokenRef.current, freshContext, selectedDate);
+      await loadRecordsForDate(getTokenRef.current, freshContext, selectedDate);
     }
-  }, [getToken, loadContext, selectedDate, loadSummaryForDate, loadRecordsForDate]);
+  }, [loadContext, selectedDate, loadSummaryForDate, loadRecordsForDate]);
 
   const canRecordService =
     !!context && (
