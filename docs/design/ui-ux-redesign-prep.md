@@ -1,136 +1,111 @@
-# UI/UX Redesign — Preparation
+# UI/UX Redesign — Final Status & QA Handoff
 
-**Date**: 2026-06-15  
-**Status**: Planning — not started  
-**Precedes**: Implementation phase
-
----
-
-## Current State
-
-The BarberApp mobile MVP is **functionally complete** for OWNER and BARBER roles. All screens work correctly, data flows are validated, and physical QA has passed.
-
-However, the UI is **visually rough and inconsistent**:
-
-- No design system or shared component library
-- Inconsistent spacing, typography, and color usage
-- Basic card layouts with minimal visual hierarchy
-- Loading states are minimal or absent
-- Empty states are not designed
-- Form inputs lack cohesive styling
-- Navigation and transitions feel utilitarian
-- No animations or micro-interactions
-- Status badges and indicators are basic
+**Date**: 2026-06-16
+**Status**: Implemented in code; physical-device regression QA still pending
+**Latest redesign commit**: `7903cb5 feat(mobile): polish auth and root loading surfaces`
 
 ---
 
-## Goals
+## Summary
 
-Build a cohesive, professional mobile UI that:
+The planned mobile visual redesign is now implemented through **PR-UI-001** to **PR-UI-008**. The shared design system is in place, the major OWNER/BARBER MVP surfaces have been redesigned, and the current automated mobile baseline is clean.
 
-1. **Feels like a polished product**, not a prototype
-2. **Is consistent** across all screens and roles
-3. **Reduces cognitive load** for barbershop staff during daily operations
-4. **Scales** to future features (CLIENT, booking, photos)
-5. **Respects platform conventions** (iOS/Android) while maintaining brand identity
+What is **not** complete yet: a documented physical-device regression pass on the redesigned UI. Functional physical QA exists for the pre-redesign MVP baseline, but redesign-specific device sign-off still needs to be run and recorded.
 
 ---
 
-## Non-Goals (Constraints)
+## Implementation Status
 
-- ❌ Do **not** change business logic
-- ❌ Do **not** modify API contracts
-- ❌ Do **not** alter auth flow (Clerk)
-- ❌ Do **not** change data models or Prisma schema
-- ❌ Do **not** add new features
-- ❌ Do **not** touch CLIENT role
+| PR | Outcome | Commit |
+|----|---------|--------|
+| PR-UI-001 → PR-UI-004 | Added design tokens and reusable UI primitives; redesigned Home, Record Service, and Services | `191f360` |
+| PR-UI-005 | Redesigned Appointments | `af10285` |
+| PR-UI-006 | Redesigned Employees | `63ff57c` |
+| PR-UI-007 | Redesigned Working Hours | `fa36f60` |
+| PR-UI-008 | Polished auth + root loading surfaces | `7903cb5` |
 
----
+### Completed redesigned areas
 
-## Scope — Screens to Redesign
+- ✅ Mobile design tokens + reusable UI primitives
+- ✅ Home dashboard
+- ✅ Record Service
+- ✅ Services
+- ✅ Appointments
+- ✅ Employees
+- ✅ Working Hours
+- ✅ Auth sign-in presentation
+- ✅ Root loading and missing-Clerk-key surfaces
 
-| Screen | Current Issues | Priority |
-|--------|---------------|----------|
-| Sign-in | Basic Clerk default UI | Medium |
-| Home (OWNER) | Card layout lacks hierarchy, summary section basic | High |
-| Home (BARBER) | Same as OWNER minus some cards | High |
-| Services list | Functional but plain list rows | High |
-| Service form (create/edit) | Basic form, no validation indicators | High |
-| Employees list | Plain rows, assignment section cramped | High |
-| Employee service assignments | Expand/collapse works but visually raw | Medium |
-| Working Hours | Table-like layout, time picker basic | High |
-| Appointments list | Card layout, filter chips, date navigation all basic | High |
-| Appointment detail/actions | Status badges and action buttons need hierarchy | High |
-| Service Record form | Service selector, price display, payment picker | High |
-| Empty states | Missing or placeholder text only | Medium |
-| Loading states | Skeleton/spinner inconsistent | Medium |
-| Error states | Toast/flash only, no inline errors | Low |
+### Out of scope / still deferred
+
+- 🚫 CLIENT UX expansion remains post-MVP
+- 🚫 Broader tab/header normalization beyond low-risk polish remains deferred
+- 🚫 Dark mode remains deferred
 
 ---
 
-## Design System — Proposed Foundations
+## Current Validation Baseline
 
-### Colors
-- Primary: barbershop brand color (warm amber/brown palette)
-- Semantic: success (green), warning (amber), error (red), info (blue)
-- Neutral: gray scale for text, borders, backgrounds
-- Dark mode: deferred
-
-### Typography
-- System font stack (San Francisco / Roboto)
-- Scale: title, heading, subheading, body, caption, label
-- Weight hierarchy: bold for emphasis, regular for body, light for captions
-
-### Spacing
-- 4px base grid (4, 8, 12, 16, 20, 24, 32, 48)
-- Consistent padding/margin across all screens
-- Safe area insets respected (notch, home indicator)
-
-### Components (to extract)
-- `AppCard` — consistent card with title, body, footer
-- `StatusBadge` — appointment status (PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW)
-- `FilterChip` — employee filter chips on appointments
-- `DateNavigator` — previous/next day with Today button
-- `ServiceSelector` — service picker with price display
-- `EmployeePicker` — dropdown for OWNER record creation
-- `EmptyState` — icon + message for empty lists
-- `LoadingSkeleton` — shimmer placeholders
-- `FormField` — consistent label, input, error pattern
-- `FlashMessage` — toast/notification component
+| Check | Result | Notes |
+|-------|--------|-------|
+| Mobile TypeScript | ✅ clean | Latest redesign baseline |
+| Mobile ESLint | ✅ clean | Latest redesign baseline |
+| Mobile tests | ✅ 460/460 | Includes presenter and UI-primitives coverage |
+| `git diff --check` | ✅ clean | Latest redesign baseline before docs-only update |
 
 ---
 
-## Approach
+## Remaining Physical-Device QA
 
-### Phase 1: Audit & Design
-1. Collect UI references (barbershop apps, scheduling apps, design inspiration)
-2. Define design system tokens (colors, spacing, typography)
-3. Create screen mockups for priority screens (Home, Appointments, Record Service)
-4. Review with stakeholders
+Use [`docs/manual-tests/mobile-mvp-final-qa.md`](../manual-tests/mobile-mvp-final-qa.md) as the active runbook for the redesign regression pass.
 
-### Phase 2: Component Extraction
-1. Extract shared components from existing screens
-2. Apply design system tokens
-3. Build component storybook/documentation
-4. Ensure all existing functionality preserved
+Required remaining checklist:
 
-### Phase 3: Screen-by-Screen Redesign
-1. Redesign one screen at a time
-2. Run full test suite after each screen
-3. Physical QA after each screen batch
-4. Commit atomically per screen
+- [ ] OWNER full flow
+- [ ] BARBER full flow
+- [ ] Auth / sign-in flow
+- [ ] Record Service flow
+- [ ] Services flow
+- [ ] Appointments flow
+- [ ] Employees flow
+- [ ] Working Hours flow
+- [ ] Loading, error, and empty states
+- [ ] Keyboard behavior
+- [ ] Safe-area behavior
+- [ ] Scroll behavior
 
-### Phase 4: Polish
-1. Add micro-interactions and transitions
-2. Implement loading skeletons
-3. Design empty states
-4. Final QA pass
+> Important: do **not** mark redesign QA as passed until that device run is actually executed and recorded.
 
 ---
 
-## References
+## Known Limitations
 
-- Mobile screens: `apps/mobile/src/app/(auth)/`
-- Components: `apps/mobile/src/components/`
-- Stores: `apps/mobile/src/stores/`
-- Type definitions: `apps/mobile/src/lib/types.ts`
+1. **Physical-device redesign QA is still pending**. Current docs can confirm clean automated validation and pre-redesign functional QA evidence, but not redesign-specific device sign-off.
+2. **CLIENT remains deferred/post-MVP**. The redesign did not expand CLIENT functionality.
+3. **Broader tab/header normalization is deferred**. PR-UI-008 intentionally stayed low-risk and did not rework all shared navigation presentation.
+4. **RN component test renderer limitations remain** under Vitest + React 19 mock-based rendering. These tests provide fast structure/behavior coverage, but they are not a replacement for physical-device verification.
+
+---
+
+## Suggested Post-Redesign Backlog
+
+1. Final visual QA fixes after the physical-device pass
+2. Accessibility-label sweep
+3. Tab/header consistency audit
+4. Dark mode / post-MVP polish
+5. CLIENT UX when CLIENT scope is scheduled
+
+---
+
+## Reference Files
+
+- `apps/mobile/src/theme/` — design tokens and theme helpers
+- `apps/mobile/src/components/ui/` — reusable UI primitives
+- `apps/mobile/app/(tabs)/index.tsx` — redesigned Home entry
+- `apps/mobile/app/(tabs)/record-service.tsx` — redesigned Record Service flow
+- `apps/mobile/app/(tabs)/services.tsx` — redesigned Services screen container
+- `apps/mobile/app/(tabs)/appointments.tsx` — redesigned Appointments screen container
+- `apps/mobile/app/(tabs)/employees.tsx` — redesigned Employees screen container
+- `apps/mobile/app/(tabs)/working-hours.tsx` — redesigned Working Hours screen container
+- `apps/mobile/app/(auth)/sign-in.tsx` — auth container using redesigned sign-in presentation
+- `apps/mobile/src/components/SignInScreenView.tsx` — sign-in presentation component
