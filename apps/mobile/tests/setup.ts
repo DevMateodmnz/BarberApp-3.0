@@ -43,6 +43,7 @@ vi.mock('react-native', async () => {
     TextInput: createMockComponent('TextInput'),
     Pressable: MockPressable,
     ScrollView: createMockComponent('ScrollView'),
+    KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
     SafeAreaView: createMockComponent('SafeAreaView'),
     ActivityIndicator: createMockComponent('ActivityIndicator'),
     RefreshControl: createMockComponent('RefreshControl'),

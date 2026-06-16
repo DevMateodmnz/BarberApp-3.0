@@ -6,14 +6,30 @@
  * - Signed out → /(auth)/sign-in
  */
 import { Redirect } from 'expo-router';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
+
+import { AppCard, Screen } from '@/components/ui/index.js';
+import { tokens } from '@/theme/index.js';
 
 export default function Index() {
   const { isSignedIn, isLoaded } = useAuth();
 
   // Show nothing while Clerk is initializing
   if (!isLoaded) {
-    return null;
+    return (
+      <Screen>
+        <View style={styles.loadingContainer}>
+          <AppCard variant="elevated" style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={tokens.colors.primary} />
+            <Text style={styles.loadingTitle}>Loading BarberApp</Text>
+            <Text style={styles.loadingMessage}>
+              Checking your authentication session…
+            </Text>
+          </AppCard>
+        </View>
+      </Screen>
+    );
   }
 
   if (isSignedIn) {
@@ -22,3 +38,26 @@ export default function Index() {
 
   return <Redirect href="/(auth)/sign-in" />;
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: tokens.spacing[4],
+  },
+  loadingCard: {
+    alignItems: 'center',
+    gap: tokens.spacing[3],
+    paddingVertical: tokens.spacing[8],
+  },
+  loadingTitle: {
+    ...tokens.typography.variant.subheading,
+    color: tokens.colors.textPrimary,
+    textAlign: 'center',
+  },
+  loadingMessage: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textSecondary,
+    textAlign: 'center',
+  },
+});

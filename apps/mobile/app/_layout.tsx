@@ -6,19 +6,26 @@
  */
 import { ClerkProvider } from '@clerk/clerk-expo';
 import { Slot } from 'expo-router';
-import { Text, View, StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { AppCard, Screen } from '@/components/ui/index.js';
+import { tokens } from '@/theme/index.js';
 
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export default function RootLayout() {
   if (!CLERK_PUBLISHABLE_KEY) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>Missing Clerk Key</Text>
-        <Text style={styles.errorMessage}>
-          Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in your .env.local file.
-        </Text>
-      </View>
+      <Screen>
+        <View style={styles.errorContainer}>
+          <AppCard variant="elevated" style={styles.errorCard}>
+            <Text style={styles.errorTitle}>Missing Clerk Key</Text>
+            <Text style={styles.errorMessage}>
+              Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in your .env.local file.
+            </Text>
+          </AppCard>
+        </View>
+      </Screen>
     );
   }
 
@@ -33,17 +40,21 @@ const styles = StyleSheet.create({
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
+    padding: tokens.spacing[4],
+  },
+  errorCard: {
     alignItems: 'center',
-    padding: 24,
+    gap: tokens.spacing[3],
+    paddingVertical: tokens.spacing[8],
   },
   errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    ...tokens.typography.variant.subheading,
+    color: tokens.colors.textPrimary,
+    textAlign: 'center',
   },
   errorMessage: {
-    fontSize: 14,
+    ...tokens.typography.variant.bodySmall,
     textAlign: 'center',
-    color: '#666',
+    color: tokens.colors.textSecondary,
   },
 });
