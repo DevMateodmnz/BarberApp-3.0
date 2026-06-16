@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
+
+import { AppButton, AppCard, EmptyState, Screen, ScreenHeader } from '@/components/ui/index.js';
 import { ServiceRecordCreateSection } from '@/components/ServiceRecordCreateSection.js';
 import { useContextStore } from '@/lib/store.js';
 import { useFlashStore } from '@/lib/flashStore.js';
+import { tokens } from '@/theme/index.js';
 
 export default function RecordServiceScreen() {
   const router = useRouter();
@@ -35,26 +38,39 @@ export default function RecordServiceScreen() {
 
   if (isLoading && !context) {
     return (
-      <View style={styles.centerContent}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Loading your context…</Text>
-      </View>
+      <Screen>
+        <View style={styles.centerContent}>
+          <AppCard variant="outlined" style={styles.stateCard}>
+            <ActivityIndicator size="large" color={tokens.colors.primary} />
+            <Text style={styles.mutedText}>Loading your context…</Text>
+          </AppCard>
+        </View>
+      </Screen>
     );
   }
 
   if (error && !context) {
     return (
-      <View style={styles.centerContent}>
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
+      <Screen>
+        <View style={styles.centerContent}>
+          <AppCard variant="outlined" style={styles.stateCard}>
+            <Text style={styles.errorText}>{error}</Text>
+          </AppCard>
+        </View>
+      </Screen>
     );
   }
 
   if (!context) {
     return (
-      <View style={styles.centerContent}>
-        <Text style={styles.emptyText}>No context available yet.</Text>
-      </View>
+      <Screen>
+        <View style={styles.centerContent}>
+          <EmptyState
+            title="No context available"
+            message="No context available yet."
+          />
+        </View>
+      </Screen>
     );
   }
 
@@ -62,11 +78,11 @@ export default function RecordServiceScreen() {
   const canBarberCreate = context.role === 'BARBER' && !!context.barbershopId && !!context.employeeId;
 
   return (
-    <ScrollView style={styles.scrollView} contentContainerStyle={styles.container}>
-      <View style={styles.headerCard}>
-        <Text style={styles.title}>Record Service</Text>
-        <Text style={styles.subtitle}>Add a completed service record from your phone.</Text>
-      </View>
+    <Screen scrollable testID="record-service-screen">
+      <ScreenHeader
+        title="Record Service"
+        subtitle="Add a completed service record"
+      />
 
       {canOwnerCreate && (
         <ServiceRecordCreateSection
@@ -88,99 +104,66 @@ export default function RecordServiceScreen() {
       )}
 
       {context.role === 'CLIENT' && (
-        <View style={styles.messageCard}>
-          <Text style={styles.emptyText}>Only owners and barbers can record completed services.</Text>
-        </View>
+        <AppCard variant="outlined" style={styles.messageCard}>
+          <Text style={styles.messageText}>
+            Only owners and barbers can record completed services.
+          </Text>
+        </AppCard>
       )}
 
       {(context.role === 'OWNER' || context.role === 'BARBER') && !canOwnerCreate && !canBarberCreate && (
-        <View style={styles.messageCard}>
-          <Text style={styles.emptyText}>
+        <AppCard variant="outlined" style={styles.messageCard}>
+          <Text style={styles.messageText}>
             {context.role === 'OWNER'
               ? 'No barbershop is linked to your account yet.'
               : 'No employee context is linked to your account yet.'}
           </Text>
-        </View>
+        </AppCard>
       )}
 
-      <TouchableOpacity onPress={() => router.back()} style={styles.backButton} testID="record-service-back">
-        <Text style={styles.backButtonText}>Back to Home</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      <AppButton
+        testID="record-service-back"
+        title="Back to Home"
+        variant="ghost"
+        size="md"
+        onPress={() => router.back()}
+        style={styles.backButton}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  container: {
-    padding: 24,
-    alignItems: 'center',
-  },
   centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#FFFFFF',
+    padding: tokens.spacing[4],
   },
-  headerCard: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    padding: 20,
-    width: '100%',
-    maxWidth: 400,
-    marginTop: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 6,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 8,
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#D32F2F',
-    textAlign: 'center',
+  stateCard: {
+    alignItems: 'center',
+    gap: tokens.spacing[3],
   },
   messageCard: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    padding: 20,
-    width: '100%',
-    maxWidth: 400,
-    marginTop: 16,
+    marginTop: tokens.spacing[4],
   },
-  emptyText: {
-    fontSize: 14,
-    color: '#666',
+  mutedText: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textSecondary,
+  },
+  errorText: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.error,
+    textAlign: 'center',
+  },
+  messageText: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textSecondary,
     textAlign: 'center',
   },
   backButton: {
-    marginTop: 16,
-    marginBottom: 24,
-    backgroundColor: '#333333',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
     width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    marginTop: tokens.spacing[4],
+    marginBottom: tokens.spacing[6],
   },
 });

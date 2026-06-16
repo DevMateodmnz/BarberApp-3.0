@@ -1,16 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+
 import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+  AppButton,
+  AppCard,
+  AppTextInput,
+  EmptyState,
+  FormSection,
+  MoneyText,
+  SectionHeader,
+} from '@/components/ui/index.js';
+import { tokens } from '@/theme/index.js';
 import type { GetToken } from '@/lib/api.js';
 import { fetchEmployeeServices, fetchMyAssignedServices } from '@/lib/employeeServices.js';
 import { fetchEmployees } from '@/lib/employees.js';
-import { formatCentsForDisplay, formatCentsForInput, formatPaymentMethodLabel, hasPriceChangedFromDefault } from '@/lib/format.js';
+import {
+  formatCentsForInput,
+  formatPaymentMethodLabel,
+  hasPriceChangedFromDefault,
+} from '@/lib/format.js';
 import {
   buildServiceRecordPayload,
   getNextServiceRecordPriceInput,
@@ -38,6 +46,251 @@ type ServiceRecordCreateSectionProps = OwnerProps | BarberProps;
 
 const PAYMENT_METHOD_OPTIONS: PaymentMethod[] = ['CASH', 'CARD', 'TRANSFER', 'OTHER'];
 
+export interface ServiceRecordCreateSectionViewProps {
+  testID: string;
+  mode: 'OWNER' | 'BARBER';
+  barbershopId: string;
+  employees: EmployeeListItem[];
+  services: Service[];
+  isEmployeesLoading: boolean;
+  isServicesLoading: boolean;
+  selectedEmployeeId: string | null;
+  selectedServiceId: string | null;
+  selectedPaymentMethod: PaymentMethod | null;
+  selectedService: Service | null;
+  priceDiffersFromDefault: boolean;
+  clientNameInput: string;
+  notesInput: string;
+  priceCentsInput: string;
+  formError: string | null;
+  formSuccess: string | null;
+  isSubmitting: boolean;
+  helpText: string;
+  servicesEmptyText: string;
+  onEmployeeSelect: (employeeId: string) => void;
+  onServiceSelect: (service: Service) => void;
+  onPaymentMethodSelect: (method: PaymentMethod | null) => void;
+  onClientNameChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
+  onPriceChange: (value: string) => void;
+  onSubmit: () => void;
+}
+
+export function ServiceRecordCreateSectionView(props: ServiceRecordCreateSectionViewProps) {
+  const {
+    testID,
+    mode,
+    employees,
+    services,
+    isEmployeesLoading,
+    isServicesLoading,
+    selectedEmployeeId,
+    selectedServiceId,
+    selectedPaymentMethod,
+    selectedService,
+    priceDiffersFromDefault,
+    clientNameInput,
+    notesInput,
+    priceCentsInput,
+    formError,
+    formSuccess,
+    isSubmitting,
+    helpText,
+    servicesEmptyText,
+    onEmployeeSelect,
+    onServiceSelect,
+    onPaymentMethodSelect,
+    onClientNameChange,
+    onNotesChange,
+    onPriceChange,
+    onSubmit,
+  } = props;
+
+  const isBarberMode = mode === 'BARBER';
+  const isFormDisabled = isSubmitting || isEmployeesLoading || isServicesLoading;
+
+  return (
+    <AppCard testID={testID} style={styles.rootCard}>
+      <SectionHeader title="Create Service Record" />
+      <Text style={styles.helpText}>{helpText}</Text>
+
+      {!isBarberMode && (
+        <FormSection>
+          <SectionHeader title="Employee" />
+          {isEmployeesLoading && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color={tokens.colors.primary} />
+              <Text style={styles.loadingText}>Loading employees…</Text>
+            </View>
+          )}
+
+          {!isEmployeesLoading && employees.length === 0 && (
+            <EmptyState
+              title="No employees available"
+              message="No employees available yet."
+            />
+          )}
+
+          {!isEmployeesLoading && employees.length > 0 && (
+            <View style={styles.optionsRow}>
+              {employees.map((employee) => (
+                <AppButton
+                  key={employee.id}
+                  testID={`employee-option-${employee.id}`}
+                  title={employee.user.name ?? employee.user.email}
+                  variant={selectedEmployeeId === employee.id ? 'primary' : 'secondary'}
+                  size="md"
+                  onPress={() => onEmployeeSelect(employee.id)}
+                />
+              ))}
+            </View>
+          )}
+        </FormSection>
+      )}
+
+      {(isBarberMode || !!selectedEmployeeId) && (
+        <FormSection>
+          <SectionHeader title="Service" />
+          {isServicesLoading && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color={tokens.colors.primary} />
+              <Text style={styles.loadingText}>Loading assigned services…</Text>
+            </View>
+          )}
+
+          {!isServicesLoading && services.length === 0 && (
+            <EmptyState title="No services available" message={servicesEmptyText} />
+          )}
+
+          {!isServicesLoading && services.length > 0 && (
+            <View style={styles.optionsRow}>
+              {services.map((service) => (
+                <AppButton
+                  key={service.id}
+                  testID={`service-option-${service.id}`}
+                  title={service.name}
+                  variant={selectedServiceId === service.id ? 'primary' : 'secondary'}
+                  size="md"
+                  onPress={() => onServiceSelect(service)}
+                />
+              ))}
+            </View>
+          )}
+        </FormSection>
+      )}
+
+      {selectedService && (
+        <AppCard
+          testID="service-record-selected-context"
+          variant="outlined"
+          style={styles.selectedContextCard}
+        >
+          <Text style={styles.selectedServiceName}>{selectedService.name}</Text>
+          <View style={styles.selectedServiceRow}>
+            <Text style={styles.selectedServiceLabel}>Default price: </Text>
+            <MoneyText priceCents={selectedService.priceCents} />
+            <Text style={styles.selectedServiceLabel}> · </Text>
+            <Text style={styles.selectedServiceLabel}>{selectedService.durationMinutes} min</Text>
+          </View>
+          {!priceDiffersFromDefault && (
+            <Text style={styles.usingDefaultText}>Using default service price.</Text>
+          )}
+        </AppCard>
+      )}
+
+      <FormSection>
+        <SectionHeader title="Price (ARS)" />
+        <AppTextInput
+          testID="service-record-price-cents"
+          label="Price (ARS)"
+          value={priceCentsInput}
+          onChangeText={onPriceChange}
+          placeholder={selectedService ? formatCentsForInput(selectedService.priceCents) : 'e.g. 5000.50'}
+          keyboardType="decimal-pad"
+        />
+        {priceDiffersFromDefault && (
+          <Text style={styles.priceDiffText} testID="service-record-price-diff">
+            Price differs from the service default.
+          </Text>
+        )}
+      </FormSection>
+
+      <FormSection>
+        <SectionHeader title="Payment Method" />
+        <View style={styles.optionsRow}>
+          <AppButton
+            testID="payment-method-unspecified"
+            title="Unspecified"
+            variant={selectedPaymentMethod === null ? 'primary' : 'secondary'}
+            size="md"
+            onPress={() => onPaymentMethodSelect(null)}
+          />
+          {PAYMENT_METHOD_OPTIONS.map((paymentMethod) => (
+            <AppButton
+              key={paymentMethod}
+              testID={`payment-method-${paymentMethod.toLowerCase()}`}
+              title={formatPaymentMethodLabel(paymentMethod)}
+              variant={selectedPaymentMethod === paymentMethod ? 'primary' : 'secondary'}
+              size="md"
+              onPress={() => onPaymentMethodSelect(paymentMethod)}
+            />
+          ))}
+        </View>
+      </FormSection>
+
+      <FormSection>
+        <SectionHeader title="Client Name" />
+        <AppTextInput
+          testID="service-record-client-name"
+          label="Client Name (optional)"
+          value={clientNameInput}
+          onChangeText={onClientNameChange}
+          placeholder="e.g. Jane Doe"
+          autoCapitalize="words"
+        />
+      </FormSection>
+
+      <FormSection>
+        <SectionHeader title="Notes" />
+        <AppTextInput
+          testID="service-record-notes"
+          label="Notes (optional)"
+          value={notesInput}
+          onChangeText={onNotesChange}
+          placeholder="Add any useful details"
+          multiline
+          textAlignVertical="top"
+          inputStyle={styles.notesInput}
+        />
+      </FormSection>
+
+      {formError && (
+        <Text style={styles.errorText} testID="service-record-error">
+          {formError}
+        </Text>
+      )}
+
+      {formSuccess && (
+        <Text style={styles.successText} testID="service-record-success">
+          {formSuccess}
+        </Text>
+      )}
+
+      <AppButton
+        testID="service-record-submit"
+        title="Create Record"
+        loadingText="Creating…"
+        variant="primary"
+        size="lg"
+        loading={isSubmitting}
+        disabled={isFormDisabled}
+        onPress={onSubmit}
+        style={styles.submitButton}
+      />
+    </AppCard>
+  );
+}
+
 export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProps) {
   const { barbershopId, getToken, onRecordCreated } = props;
   const isBarberMode = props.mode === 'BARBER';
@@ -54,7 +307,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
   const [employees, setEmployees] = useState<EmployeeListItem[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(
-    isBarberMode ? props.employeeId : null
+    isBarberMode ? props.employeeId : null,
   );
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
@@ -187,7 +440,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
 
   const selectedService = useMemo(
     () => services.find((service) => service.id === selectedServiceId) ?? null,
-    [services, selectedServiceId]
+    [services, selectedServiceId],
   );
 
   const priceDiffersFromDefault = useMemo(
@@ -246,371 +499,119 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
   }
 
   return (
-    <View style={styles.card} testID={isBarberMode ? 'barber-service-record-create' : 'owner-service-record-create'}>
-      <Text style={styles.title}>Create Service Record</Text>
-      <Text style={styles.helpText}>{helpText}</Text>
-
-      {!isBarberMode && isEmployeesLoading && (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator size="small" />
-          <Text style={styles.loadingText}>Loading employees…</Text>
-        </View>
-      )}
-
-      {!isBarberMode && !isEmployeesLoading && employees.length === 0 && (
-        <Text style={styles.emptyText}>
-          No employees available yet.
-        </Text>
-      )}
-
-      {!isBarberMode && !isEmployeesLoading && employees.length > 0 && (
-        <>
-          <Text style={styles.sectionLabel}>Employee</Text>
-          <View style={styles.optionGroup}>
-            {employees.map((employee) => (
-              <TouchableOpacity
-                key={employee.id}
-                onPress={() => void handleEmployeeSelect(employee.id)}
-                style={[
-                  styles.optionButton,
-                  selectedEmployeeId === employee.id && styles.optionButtonSelected,
-                ]}
-                testID={`employee-option-${employee.id}`}
-              >
-                <Text
-                  style={[
-                    styles.optionButtonText,
-                    selectedEmployeeId === employee.id && styles.optionButtonTextSelected,
-                  ]}
-                >
-                  {employee.user.name ?? employee.user.email}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </>
-      )}
-
-      {(isBarberMode || !!selectedEmployeeId) && (
-        <>
-          <Text style={styles.sectionLabel}>Service</Text>
-
-          {isServicesLoading && (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" />
-              <Text style={styles.loadingText}>Loading assigned services…</Text>
-            </View>
-          )}
-
-          {!isServicesLoading && services.length === 0 && (
-            <Text style={styles.emptyText}>
-              {servicesEmptyText}
-            </Text>
-          )}
-
-          {!isServicesLoading && services.length > 0 && (
-            <View style={styles.optionGroup}>
-              {services.map((service) => (
-                <TouchableOpacity
-                  key={service.id}
-                  onPress={() => handleServiceSelect(service)}
-                  style={[
-                    styles.optionButton,
-                    selectedServiceId === service.id && styles.optionButtonSelected,
-                  ]}
-                  testID={`service-option-${service.id}`}
-                >
-                  <Text
-                    style={[
-                      styles.optionButtonText,
-                      selectedServiceId === service.id && styles.optionButtonTextSelected,
-                    ]}
-                  >
-                    {service.name} · {service.priceCents}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </>
-      )}
-
-      {selectedService && (
-        <View style={styles.selectedServiceContext} testID="service-record-selected-context">
-          <Text style={styles.selectedServiceName}>
-            Selected: {selectedService.name}
-          </Text>
-          <Text style={styles.selectedServiceDefault}>
-            Default: {formatCentsForDisplay(selectedService.priceCents)} · {selectedService.durationMinutes} min
-          </Text>
-          {!priceDiffersFromDefault && (
-            <Text style={styles.selectedServiceUsingDefault}>
-              Using default service price.
-            </Text>
-          )}
-        </View>
-      )}
-
-      <Text style={styles.sectionLabel}>Price (ARS)</Text>
-      <TextInput
-        value={priceCentsInput}
-        onChangeText={(value) => {
-          setPriceCentsInput(value);
-          setFormError(null);
-          setFormSuccess(null);
-        }}
-        placeholder={selectedService ? formatCentsForInput(selectedService.priceCents) : 'e.g. 5000.50'}
-        keyboardType="decimal-pad"
-        style={styles.input}
-        testID="service-record-price-cents"
-      />
-
-      {priceDiffersFromDefault && (
-        <Text style={styles.priceDiffText} testID="service-record-price-diff">
-          Price differs from the service default.
-        </Text>
-      )}
-
-      <Text style={styles.sectionLabel}>Payment Method (optional)</Text>
-      <View style={styles.optionGroup}>
-        <TouchableOpacity
-          onPress={() => {
-            setSelectedPaymentMethod(null);
-            setFormError(null);
-            setFormSuccess(null);
-          }}
-          style={[
-            styles.optionButton,
-            selectedPaymentMethod === null && styles.optionButtonSelected,
-          ]}
-          testID="payment-method-unspecified"
-        >
-          <Text
-            style={[
-              styles.optionButtonText,
-              selectedPaymentMethod === null && styles.optionButtonTextSelected,
-            ]}
-          >
-            Unspecified
-          </Text>
-        </TouchableOpacity>
-
-        {PAYMENT_METHOD_OPTIONS.map((paymentMethod) => (
-          <TouchableOpacity
-            key={paymentMethod}
-            onPress={() => {
-              setSelectedPaymentMethod(paymentMethod);
-              setFormError(null);
-              setFormSuccess(null);
-            }}
-            style={[
-              styles.optionButton,
-              selectedPaymentMethod === paymentMethod && styles.optionButtonSelected,
-            ]}
-            testID={`payment-method-${paymentMethod.toLowerCase()}`}
-          >
-            <Text
-              style={[
-                styles.optionButtonText,
-                selectedPaymentMethod === paymentMethod && styles.optionButtonTextSelected,
-              ]}
-            >
-              {formatPaymentMethodLabel(paymentMethod)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <Text style={styles.sectionLabel}>Client Name (optional)</Text>
-      <TextInput
-        value={clientNameInput}
-        onChangeText={(value) => {
-          setClientNameInput(value);
-          setFormError(null);
-          setFormSuccess(null);
-        }}
-        placeholder="e.g. Jane Doe"
-        style={styles.input}
-        autoCapitalize="words"
-        testID="service-record-client-name"
-      />
-
-      <Text style={styles.sectionLabel}>Notes (optional)</Text>
-      <TextInput
-        value={notesInput}
-        onChangeText={(value) => {
-          setNotesInput(value);
-          setFormError(null);
-          setFormSuccess(null);
-        }}
-        placeholder="Add any useful details"
-        style={[styles.input, styles.notesInput]}
-        multiline
-        textAlignVertical="top"
-        testID="service-record-notes"
-      />
-
-      {formError && (
-        <Text style={styles.errorText} testID="service-record-error">
-          {formError}
-        </Text>
-      )}
-
-      {formSuccess && (
-        <Text style={styles.successText} testID="service-record-success">
-          {formSuccess}
-        </Text>
-      )}
-
-      <TouchableOpacity
-        onPress={() => void handleSubmit()}
-        disabled={isSubmitting || isEmployeesLoading || isServicesLoading}
-        style={[
-          styles.submitButton,
-          (isSubmitting || isEmployeesLoading || isServicesLoading) && styles.submitButtonDisabled,
-        ]}
-        testID="service-record-submit"
-      >
-        <Text style={styles.submitButtonText}>
-          {isSubmitting ? 'Creating…' : 'Create Record'}
-        </Text>
-      </TouchableOpacity>
-    </View>
+    <ServiceRecordCreateSectionView
+      testID={isBarberMode ? 'barber-service-record-create' : 'owner-service-record-create'}
+      mode={props.mode}
+      barbershopId={barbershopId}
+      employees={employees}
+      services={services}
+      isEmployeesLoading={isEmployeesLoading}
+      isServicesLoading={isServicesLoading}
+      selectedEmployeeId={selectedEmployeeId}
+      selectedServiceId={selectedServiceId}
+      selectedPaymentMethod={selectedPaymentMethod}
+      selectedService={selectedService}
+      priceDiffersFromDefault={priceDiffersFromDefault}
+      clientNameInput={clientNameInput}
+      notesInput={notesInput}
+      priceCentsInput={priceCentsInput}
+      formError={formError}
+      formSuccess={formSuccess}
+      isSubmitting={isSubmitting}
+      helpText={helpText}
+      servicesEmptyText={servicesEmptyText}
+      onEmployeeSelect={handleEmployeeSelect}
+      onServiceSelect={handleServiceSelect}
+      onPaymentMethodSelect={(method) => {
+        setSelectedPaymentMethod(method);
+        setFormError(null);
+        setFormSuccess(null);
+      }}
+      onClientNameChange={(value) => {
+        setClientNameInput(value);
+        setFormError(null);
+        setFormSuccess(null);
+      }}
+      onNotesChange={(value) => {
+        setNotesInput(value);
+        setFormError(null);
+        setFormSuccess(null);
+      }}
+      onPriceChange={(value) => {
+        setPriceCentsInput(value);
+        setFormError(null);
+        setFormSuccess(null);
+      }}
+      onSubmit={() => void handleSubmit()}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    padding: 20,
+  rootCard: {
     width: '100%',
-    maxWidth: 400,
-    marginTop: 16,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
+    marginTop: tokens.spacing[4],
   },
   helpText: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 6,
-    marginBottom: 12,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  optionGroup: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  optionButton: {
-    borderWidth: 1,
-    borderColor: '#CCCCCC',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  optionButtonSelected: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  optionButtonText: {
-    fontSize: 13,
-    color: '#333',
-    fontWeight: '500',
-  },
-  optionButtonTextSelected: {
-    color: '#FFFFFF',
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textSecondary,
+    marginBottom: tokens.spacing[4],
   },
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
+    gap: tokens.spacing[2],
   },
   loadingText: {
-    fontSize: 13,
-    color: '#666',
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textSecondary,
   },
-  emptyText: {
-    fontSize: 13,
-    color: '#999',
-    fontStyle: 'italic',
-    marginTop: 4,
+  optionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: tokens.spacing[2],
   },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CCCCCC',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#333',
-  },
-  priceDiffText: {
-    fontSize: 12,
-    color: '#E65100',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  selectedServiceContext: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 12,
+  selectedContextCard: {
+    marginBottom: tokens.spacing[4],
   },
   selectedServiceName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    ...tokens.typography.variant.label,
+    color: tokens.colors.textPrimary,
+    marginBottom: tokens.spacing[2],
   },
-  selectedServiceDefault: {
-    fontSize: 13,
-    color: '#555',
-    marginTop: 4,
+  selectedServiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: tokens.spacing[2],
   },
-  selectedServiceUsingDefault: {
-    fontSize: 12,
-    color: '#2E7D32',
-    marginTop: 4,
-    fontStyle: 'italic',
+  selectedServiceLabel: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textSecondary,
+  },
+  usingDefaultText: {
+    ...tokens.typography.variant.caption,
+    color: tokens.colors.success,
+  },
+  priceDiffText: {
+    ...tokens.typography.variant.caption,
+    color: tokens.colors.warning,
+    marginTop: tokens.spacing[2],
   },
   notesInput: {
     minHeight: 88,
   },
   errorText: {
-    fontSize: 13,
-    color: '#D32F2F',
-    marginTop: 10,
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.error,
+    marginTop: tokens.spacing[3],
   },
   successText: {
-    fontSize: 13,
-    color: '#2E7D32',
-    marginTop: 10,
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.success,
+    marginTop: tokens.spacing[3],
   },
   submitButton: {
-    marginTop: 16,
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#999999',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    width: '100%',
+    marginTop: tokens.spacing[4],
   },
 });
