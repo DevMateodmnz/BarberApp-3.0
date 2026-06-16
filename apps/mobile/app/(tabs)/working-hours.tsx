@@ -5,19 +5,14 @@
  * "View Working Hours" card on Home for OWNER users with a barbershop.
  * OWNER can view and edit weekly open/close times per day.
  */
-import { useEffect, useState, useCallback, useRef } from 'react';
-import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
+
+import {
+  WorkingHoursScreenView,
+  type WorkingHoursDayViewModel,
+} from '@/components/WorkingHoursScreenView.js';
 import { useContextStore } from '@/lib/store.js';
 import { useWorkingHoursStore } from '@/lib/workingHoursStore.js';
 import type { WorkingHoursDay } from '@/lib/types.js';
@@ -132,28 +127,32 @@ export default function WorkingHoursScreen() {
     void loadWorkingHours(getTokenRef.current, context.barbershopId);
   }, [context?.barbershopId, loadWorkingHours]);
 
-  function toggleDay(dayOfWeek: number) {
+  const handleBack = useCallback(() => {
+    router.back();
+  }, [router]);
+
+  const toggleDay = useCallback((dayOfWeek: number) => {
     setDays((prev) =>
-      prev.map((d) =>
-        d.dayOfWeek === dayOfWeek ? { ...d, isActive: !d.isActive } : d,
+      prev.map((day) =>
+        day.dayOfWeek === dayOfWeek ? { ...day, isActive: !day.isActive } : day,
       ),
     );
     // Clear any error for this day
     setDayErrors((prev) => ({ ...prev, [dayOfWeek]: null }));
     setSaveError(null);
-  }
+  }, []);
 
-  function updateTime(dayOfWeek: number, field: 'openTime' | 'closeTime', value: string) {
+  const updateTime = useCallback((dayOfWeek: number, field: 'openTime' | 'closeTime', value: string) => {
     setDays((prev) =>
-      prev.map((d) =>
-        d.dayOfWeek === dayOfWeek ? { ...d, [field]: value } : d,
+      prev.map((day) =>
+        day.dayOfWeek === dayOfWeek ? { ...day, [field]: value } : day,
       ),
     );
     setDayErrors((prev) => ({ ...prev, [dayOfWeek]: null }));
     setSaveError(null);
-  }
+  }, []);
 
-  async function handleSave() {
+  const handleSave = useCallback(async () => {
     setSaveError(null);
 
     if (!context?.barbershopId || !getTokenRef.current) {
@@ -177,10 +176,10 @@ export default function WorkingHoursScreen() {
     }
 
     // Prepare payload: closed days have openTime/closeTime cleared
-    const payload = days.map((d) => ({
-      ...d,
-      openTime: d.isActive ? d.openTime : '',
-      closeTime: d.isActive ? d.closeTime : '',
+    const payload = days.map((day) => ({
+      ...day,
+      openTime: day.isActive ? day.openTime : '',
+      closeTime: day.isActive ? day.closeTime : '',
     }));
 
     setSaving(true);
@@ -191,218 +190,43 @@ export default function WorkingHoursScreen() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [context?.barbershopId, days, saveWorkingHours]);
+
+  const dayRows = useMemo<WorkingHoursDayViewModel[]>(() => {
+    return days.map((day) => ({
+      dayOfWeek: day.dayOfWeek,
+      dayName: DAY_NAMES[day.dayOfWeek] ?? `Day ${day.dayOfWeek}`,
+      isActive: day.isActive,
+      openTime: day.openTime,
+      closeTime: day.closeTime,
+      error: dayErrors[day.dayOfWeek] ?? null,
+      onToggle: () => toggleDay(day.dayOfWeek),
+      onOpenTimeChange: (value) => updateTime(day.dayOfWeek, 'openTime', value),
+      onCloseTimeChange: (value) => updateTime(day.dayOfWeek, 'closeTime', value),
+    }));
+  }, [dayErrors, days, toggleDay, updateTime]);
 
   // --- Guards ---
   if (!isLoaded || !isSignedIn) {
     return null;
   }
 
-  if (isContextLoading && !context) {
-    return (
-      <View style={styles.centerContent}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Loading your context…</Text>
-      </View>
-    );
-  }
-
-  if (contextError && !context) {
-    return (
-      <View style={styles.centerContent}>
-        <Text style={styles.errorText}>{contextError}</Text>
-      </View>
-    );
-  }
-
-  if (!context) {
-    return (
-      <View style={styles.centerContent}>
-        <Text style={styles.emptyText}>No context available yet.</Text>
-      </View>
-    );
-  }
-
-  const isOwner = context.role === 'OWNER' && !!context.barbershopId;
+  const isOwner = context?.role === 'OWNER' && !!context.barbershopId;
 
   return (
-    <ScrollView
-      style={styles.scrollView}
-      contentContainerStyle={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={isWorkingHoursLoading}
-          onRefresh={handleRefresh}
-        />
-      }
-      testID="working-hours-screen"
-    >
-      <View style={styles.headerCard}>
-        <Text style={styles.title}>Working Hours</Text>
-        <Text style={styles.subtitle}>Set your barbershop weekly schedule.</Text>
-      </View>
-
-      {!isOwner && (
-        <View style={styles.messageCard}>
-          <Text style={styles.emptyText}>
-            Only barbershop owners can manage the weekly schedule.
-          </Text>
-        </View>
-      )}
-
-      {isOwner && (
-        <>
-          {isWorkingHoursLoading && (
-            <View style={styles.loadingRow} testID="loading">
-              <ActivityIndicator size="small" />
-              <Text style={styles.loadingText}>Loading working hours…</Text>
-            </View>
-          )}
-
-          {workingHoursError && (
-            <View style={styles.messageCard}>
-              <Text style={styles.errorText} testID="error">{workingHoursError}</Text>
-            </View>
-          )}
-
-          {!isWorkingHoursLoading && !workingHoursError && (
-            <View style={styles.listCard}>
-              {days.map((day) => (
-                <View
-                  key={day.dayOfWeek}
-                  style={styles.dayRow}
-                  testID={`day-row-${day.dayOfWeek}`}
-                >
-                  <View style={styles.dayHeader}>
-                    <Text style={styles.dayName}>{DAY_NAMES[day.dayOfWeek]}</Text>
-                    <TouchableOpacity
-                      onPress={() => toggleDay(day.dayOfWeek)}
-                      style={[
-                        styles.toggleButton,
-                        day.isActive ? styles.toggleOpen : styles.toggleClosed,
-                      ]}
-                      testID={`day-toggle-${day.dayOfWeek}`}
-                    >
-                      <Text
-                        style={[
-                          styles.toggleText,
-                          day.isActive ? styles.toggleOpenText : styles.toggleClosedText,
-                        ]}
-                      >
-                        {day.isActive ? 'Open' : 'Closed'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {day.isActive && (
-                    <View style={styles.timeRow}>
-                      <View style={styles.timeField}>
-                        <Text style={styles.timeLabel}>Open</Text>
-                        <TextInput
-                          value={day.openTime}
-                          onChangeText={(v) => updateTime(day.dayOfWeek, 'openTime', v)}
-                          placeholder="HH:mm"
-                          style={styles.timeInput}
-                          testID={`day-open-${day.dayOfWeek}`}
-                          maxLength={5}
-                          autoCorrect={false}
-                          keyboardType="numbers-and-punctuation"
-                        />
-                      </View>
-                      <Text style={styles.timeSeparator}>to</Text>
-                      <View style={styles.timeField}>
-                        <Text style={styles.timeLabel}>Close</Text>
-                        <TextInput
-                          value={day.closeTime}
-                          onChangeText={(v) => updateTime(day.dayOfWeek, 'closeTime', v)}
-                          placeholder="HH:mm"
-                          style={styles.timeInput}
-                          testID={`day-close-${day.dayOfWeek}`}
-                          maxLength={5}
-                          autoCorrect={false}
-                          keyboardType="numbers-and-punctuation"
-                        />
-                      </View>
-                    </View>
-                  )}
-
-                  {dayErrors[day.dayOfWeek] && (
-                    <Text style={styles.fieldError}>{dayErrors[day.dayOfWeek]}</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
-
-          {saveError && (
-            <View style={styles.messageCard}>
-              <Text style={styles.errorText}>{saveError}</Text>
-            </View>
-          )}
-
-          {!isWorkingHoursLoading && !workingHoursError && (
-            <TouchableOpacity
-              onPress={() => void handleSave()}
-              disabled={saving}
-              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-              testID="save-button"
-            >
-              <Text style={styles.saveButtonText}>
-                {saving ? 'Saving…' : 'Save Schedule'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </>
-      )}
-
-      <TouchableOpacity onPress={() => router.back()} style={styles.backButton} testID="working-hours-back">
-        <Text style={styles.backButtonText}>Back to Home</Text>
-      </TouchableOpacity>
-    </ScrollView>
+    <WorkingHoursScreenView
+      context={context}
+      isContextLoading={isContextLoading}
+      contextError={contextError}
+      isOwner={isOwner}
+      isWorkingHoursLoading={isWorkingHoursLoading}
+      workingHoursError={workingHoursError}
+      saveError={saveError}
+      saving={saving}
+      dayRows={dayRows}
+      onRefresh={handleRefresh}
+      onSave={() => void handleSave()}
+      onBack={handleBack}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  scrollView: { flex: 1, backgroundColor: '#FFFFFF' },
-  container: { padding: 24, alignItems: 'center' },
-  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#FFFFFF' },
-  headerCard: { backgroundColor: '#F5F5F5', borderRadius: 12, padding: 20, width: '100%', maxWidth: 400, marginTop: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: '#333' },
-  subtitle: { fontSize: 14, color: '#666', marginTop: 6 },
-  loadingText: { fontSize: 14, color: '#666', marginTop: 8 },
-  errorText: { fontSize: 14, color: '#D32F2F', textAlign: 'center', marginTop: 8 },
-  emptyText: { fontSize: 14, color: '#666', textAlign: 'center' },
-  messageCard: { backgroundColor: '#F5F5F5', borderRadius: 12, padding: 20, width: '100%', maxWidth: 400, marginTop: 16 },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
-  listCard: { backgroundColor: '#F5F5F5', borderRadius: 12, padding: 20, width: '100%', maxWidth: 400, marginTop: 16 },
-  dayRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDD', paddingVertical: 12, gap: 8 },
-  dayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  dayName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  toggleButton: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  toggleOpen: { backgroundColor: '#E8F5E9', borderWidth: 1, borderColor: '#2E7D32' },
-  toggleClosed: { backgroundColor: '#FFF3E0', borderWidth: 1, borderColor: '#E65100' },
-  toggleText: { fontSize: 12, fontWeight: '600' },
-  toggleOpenText: { color: '#2E7D32' },
-  toggleClosedText: { color: '#E65100' },
-  timeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  timeField: { flex: 1 },
-  timeLabel: { fontSize: 11, fontWeight: '600', color: '#777', marginBottom: 4 },
-  timeInput: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CCCCCC',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#333',
-    textAlign: 'center',
-  },
-  timeSeparator: { fontSize: 12, color: '#999', paddingBottom: 10 },
-  fieldError: { fontSize: 12, color: '#D32F2F', marginTop: 4 },
-  saveButton: { marginTop: 16, backgroundColor: '#007AFF', borderRadius: 8, paddingVertical: 14, paddingHorizontal: 20, width: '100%', maxWidth: 400, alignItems: 'center' },
-  saveButtonDisabled: { backgroundColor: '#999999' },
-  saveButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  backButton: { marginTop: 16, marginBottom: 24, backgroundColor: '#333333', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 20, width: '100%', maxWidth: 400, alignItems: 'center' },
-  backButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-});
