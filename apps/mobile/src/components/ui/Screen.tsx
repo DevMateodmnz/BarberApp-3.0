@@ -6,7 +6,7 @@
  */
 import type { ReactElement, ReactNode } from 'react';
 import { ScrollView, StyleSheet, type RefreshControlProps, type StyleProp, type ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tokens } from '@/theme/index.js';
 
 interface ScreenProps {
@@ -18,10 +18,15 @@ interface ScreenProps {
 }
 
 export function Screen({ testID, scrollable = false, refreshControl, children, style }: ScreenProps) {
+  const insets = useSafeAreaInsets();
+
   const content = scrollable ? (
     <ScrollView
       style={styles.scrollView}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[
+        styles.scrollContent,
+        { paddingBottom: tokens.spacing[8] + insets.bottom },
+      ]}
       testID={testID ? `${testID}-scroll` : undefined}
       refreshControl={refreshControl}
     >
