@@ -78,7 +78,11 @@ export default function RecordServiceScreen() {
   const canBarberCreate = context.role === 'BARBER' && !!context.barbershopId && !!context.employeeId;
 
   return (
-    <Screen scrollable testID="record-service-screen">
+    <Screen
+      scrollable
+      keyboardAware
+      testID="record-service-screen"
+    >
       <ScreenHeader
         title="Record Service"
         subtitle="Add a completed service record"

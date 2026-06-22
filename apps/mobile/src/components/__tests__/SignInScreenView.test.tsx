@@ -129,4 +129,15 @@ describe('SignInScreenView', () => {
     const codeTree = renderView({ phase: 'code' });
     expect(findByDisplayName(codeTree, 'TextInput')).toBeDefined();
   });
+
+  it('uses the shared keyboard-aware scroll container', () => {
+    const tree = renderView({ phase: 'email' });
+    const scrollView = findByDisplayName(tree, 'ScrollView');
+
+    expect(findByDisplayName(tree, 'KeyboardAvoidingView')).toBeDefined();
+    expect((scrollView as { props: { keyboardShouldPersistTaps?: string } }).props.keyboardShouldPersistTaps)
+      .toBe('handled');
+    expect((scrollView as { props: { keyboardDismissMode?: string } }).props.keyboardDismissMode)
+      .toBe('on-drag');
+  });
 });

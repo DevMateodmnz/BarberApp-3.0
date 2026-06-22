@@ -127,7 +127,7 @@ export function ServicesScreenView({
   // Context-level states
   if (isContextLoading && !context) {
     return (
-      <Screen scrollable refreshControl={refreshControl}>
+      <Screen scrollable keyboardAware refreshControl={refreshControl}>
         <AppCard testID="services-loading" style={styles.centeredCard}>
           <ActivityIndicator size="large" color={tokens.colors.primary} />
           <Text style={styles.helperText}>Loading your context…</Text>
@@ -138,7 +138,7 @@ export function ServicesScreenView({
 
   if (contextError && !context) {
     return (
-      <Screen scrollable refreshControl={refreshControl}>
+      <Screen scrollable keyboardAware refreshControl={refreshControl}>
         <AppCard testID="services-error" style={styles.centeredCard}>
           <Text style={styles.errorText}>{contextError}</Text>
         </AppCard>
@@ -148,7 +148,7 @@ export function ServicesScreenView({
 
   if (!context) {
     return (
-      <Screen scrollable refreshControl={refreshControl}>
+      <Screen scrollable keyboardAware refreshControl={refreshControl}>
         <EmptyState
           testID="services-no-context"
           title="No context available"
@@ -160,7 +160,7 @@ export function ServicesScreenView({
 
   if (!isOwner) {
     return (
-      <Screen scrollable refreshControl={refreshControl}>
+      <Screen scrollable keyboardAware refreshControl={refreshControl}>
         <EmptyState
           testID="services-blocked"
           title="Owner access only"
@@ -171,7 +171,7 @@ export function ServicesScreenView({
   }
 
   return (
-    <Screen scrollable refreshControl={refreshControl}>
+    <Screen scrollable keyboardAware refreshControl={refreshControl}>
       <ScreenHeader
         title="Services"
         subtitle="Your barbershop service catalog."

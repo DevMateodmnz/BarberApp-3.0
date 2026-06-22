@@ -28,6 +28,15 @@ export function getDisplayName(node: ReactElement): string | undefined {
   return type.displayName;
 }
 
+function getReactTypeSymbol(node: ReactElement): symbol | undefined {
+  const { type } = node as ElementLike;
+  if (typeof type !== 'object' || type === null || !('$$typeof' in type)) {
+    return undefined;
+  }
+
+  return (type as { $$typeof?: symbol }).$$typeof;
+}
+
 export function findAll(
   node: ReactNode,
   predicate: (el: ReactElement) => boolean,
@@ -51,6 +60,23 @@ export function findAll(
       resolvedNode = (el.type as (props: Record<string, unknown>) => ReactNode)(el.props);
     } catch {
       resolvedNode = null;
+    }
+  } else {
+    const typeSymbol = getReactTypeSymbol(node);
+
+    if (
+      typeSymbol === Symbol.for('react.consumer') &&
+      typeof el.props.children === 'function'
+    ) {
+      try {
+        resolvedNode = (
+          el.props.children as (value: unknown) => ReactNode
+        )((el.type as { _context?: { _currentValue?: unknown } })._context?._currentValue);
+      } catch {
+        resolvedNode = null;
+      }
+    } else if (typeSymbol === Symbol.for('react.context')) {
+      resolvedNode = el.props.children as ReactNode;
     }
   }
 

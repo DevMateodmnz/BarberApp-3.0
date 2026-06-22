@@ -108,7 +108,12 @@ export function WorkingHoursScreenView({
   }
 
   return (
-    <Screen testID="working-hours-screen" scrollable refreshControl={refreshControl}>
+    <Screen
+      testID="working-hours-screen"
+      scrollable
+      keyboardAware
+      refreshControl={refreshControl}
+    >
       {header}
 
       <AppCard testID="working-hours-context" variant="outlined" style={styles.contextCard}>

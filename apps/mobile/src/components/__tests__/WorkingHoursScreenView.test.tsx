@@ -223,4 +223,15 @@ describe('WorkingHoursScreenView', () => {
     const errorTree = renderView({ workingHoursError: 'Working hours failed', dayRows: makeDayRows() });
     expect(queryByTestId(errorTree, 'day-row-0')).toBeNull();
   });
+
+  it('uses the shared keyboard-aware scroll container for the editable schedule', () => {
+    const tree = renderView();
+    const scrollView = findByDisplayName(tree, 'ScrollView');
+
+    expect(findByDisplayName(tree, 'KeyboardAvoidingView')).toBeDefined();
+    expect((scrollView as { props: { keyboardShouldPersistTaps?: string } }).props.keyboardShouldPersistTaps)
+      .toBe('handled');
+    expect((scrollView as { props: { keyboardDismissMode?: string } }).props.keyboardDismissMode)
+      .toBe('on-drag');
+  });
 });

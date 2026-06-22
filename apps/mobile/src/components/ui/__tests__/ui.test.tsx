@@ -48,6 +48,15 @@ function getDisplayName(node: ReactElement): string | undefined {
   return type.displayName;
 }
 
+function getReactTypeSymbol(node: ReactElement): symbol | undefined {
+  const { type } = node as ElementLike;
+  if (typeof type !== 'object' || type === null || !('$$typeof' in type)) {
+    return undefined;
+  }
+
+  return (type as { $$typeof?: symbol }).$$typeof;
+}
+
 function findAll(
   node: ReactNode,
   predicate: (el: ReactElement) => boolean,
@@ -60,7 +69,40 @@ function findAll(
     return results;
   }
   if (predicate(node)) results.push(node);
-  const children = (node as ElementLike).props.children as ReactNode;
+
+  const el = node as ElementLike;
+  let resolvedNode: ReactNode = node;
+  if (typeof el.type === 'function') {
+    try {
+      resolvedNode = (el.type as (props: Record<string, unknown>) => ReactNode)(el.props);
+    } catch {
+      resolvedNode = null;
+    }
+  } else {
+    const typeSymbol = getReactTypeSymbol(node);
+
+    if (
+      typeSymbol === Symbol.for('react.consumer') &&
+      typeof el.props.children === 'function'
+    ) {
+      try {
+        resolvedNode = (
+          el.props.children as (value: unknown) => ReactNode
+        )((el.type as { _context?: { _currentValue?: unknown } })._context?._currentValue);
+      } catch {
+        resolvedNode = null;
+      }
+    } else if (typeSymbol === Symbol.for('react.context')) {
+      resolvedNode = el.props.children as ReactNode;
+    }
+  }
+
+  if (resolvedNode !== node) {
+    results.push(...findAll(resolvedNode, predicate));
+    return results;
+  }
+
+  const children = el.props.children as ReactNode;
   if (Array.isArray(children)) {
     for (const child of children) results.push(...findAll(child, predicate));
   } else {
@@ -133,6 +175,13 @@ function changeText(element: ReactElement, value: string): void {
   onChangeText?.(value);
 }
 
+function blur(element: ReactElement, target = 1): void {
+  const onBlur = (element as ElementLike).props.onBlur as
+    | ((event: { target: number }) => void)
+    | undefined;
+  onBlur?.({ target });
+}
+
 describe('Screen', () => {
   it('renders children with a forwarded testID', () => {
     const tree = Screen({ testID: 'screen-root',       children: <Text>Screen child</Text> });
@@ -163,6 +212,32 @@ describe('Screen', () => {
     expect(scrollView).toBeDefined();
     expect((scrollView as ElementLike).props.refreshControl).toBe(refreshControl);
     expect(findByText(tree, 'Pullable content')).toBeDefined();
+  });
+
+  it('supports keyboard-aware scrollable screens with handled taps and drag dismissal', () => {
+    const tree = Screen({
+      testID: 'keyboard-screen',
+      scrollable: true,
+      keyboardAware: true,
+      children: <Text>Keyboard content</Text>,
+    });
+    const scrollView = findByDisplayName(tree, 'ScrollView');
+    expect(findByDisplayName(tree, 'KeyboardAvoidingView')).toBeDefined();
+    expect((scrollView as ElementLike).props.keyboardShouldPersistTaps).toBe('handled');
+    expect((scrollView as ElementLike).props.keyboardDismissMode).toBe('on-drag');
+  });
+
+  it('merges custom contentContainerStyle into the scrollable content container', () => {
+    const tree = Screen({
+      testID: 'styled-screen',
+      scrollable: true,
+      contentContainerStyle: { justifyContent: 'center' },
+      children: <Text>Styled content</Text>,
+    });
+    const scrollView = findByDisplayName(tree, 'ScrollView');
+    expect((scrollView as ElementLike).props.contentContainerStyle).toEqual(
+      expect.arrayContaining([expect.objectContaining({ justifyContent: 'center' })]),
+    );
   });
 });
 
@@ -269,6 +344,13 @@ describe('AppTextInput', () => {
     const tree = AppTextInput({ testID: 'input-change', onChangeText: handleChange });
     changeText(findByDisplayName(tree, 'TextInput'), 'hello');
     expect(handleChange).toHaveBeenCalledWith('hello');
+  });
+
+  it('calls onBlur when the input loses focus', () => {
+    const handleBlur = vi.fn();
+    const tree = AppTextInput({ testID: 'input-blur', onBlur: handleBlur });
+    blur(findByDisplayName(tree, 'TextInput'));
+    expect(handleBlur).toHaveBeenCalledTimes(1);
   });
 });
 

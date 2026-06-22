@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 import { Text, TextInput, View, StyleSheet, type StyleProp, type ViewStyle, type TextStyle } from 'react-native';
 import type { TextInputProps } from 'react-native';
 import { tokens } from '@/theme/index.js';
+import { KeyboardAwareScreenContext } from './Screen.js';
 
 interface AppTextInputProps extends Omit<TextInputProps, 'style'> {
   testID?: string;
@@ -27,6 +28,8 @@ export function AppTextInput({
   style,
   inputStyle,
   placeholder,
+  onFocus,
+  onBlur,
   ...inputProps
 }: AppTextInputProps) {
   return (
@@ -39,12 +42,28 @@ export function AppTextInput({
         ]}
       >
         {icon && <View style={styles.icon}>{icon}</View>}
-        <TextInput
-          {...inputProps}
-          placeholder={placeholder}
-          placeholderTextColor={tokens.colors.textMuted}
-          style={[styles.input, inputStyle]}
-        />
+        <KeyboardAwareScreenContext.Consumer>
+          {(keyboardAwareContext) => (
+            <TextInput
+              {...inputProps}
+              onFocus={(event) => {
+                keyboardAwareContext?.onInputFocus(
+                  typeof event.target === 'number' ? event.target : null,
+                );
+                onFocus?.(event);
+              }}
+              onBlur={(event) => {
+                keyboardAwareContext?.onInputBlur(
+                  typeof event.target === 'number' ? event.target : null,
+                );
+                onBlur?.(event);
+              }}
+              placeholder={placeholder}
+              placeholderTextColor={tokens.colors.textMuted}
+              style={[styles.input, inputStyle]}
+            />
+          )}
+        </KeyboardAwareScreenContext.Consumer>
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
     </View>

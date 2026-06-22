@@ -139,7 +139,7 @@ export function EmployeesScreenView({
   }
 
   return (
-    <Screen scrollable refreshControl={refreshControl}>
+    <Screen scrollable keyboardAware refreshControl={refreshControl}>
       {header}
 
       <AppCard testID="employees-context" variant="outlined" style={styles.contextCard}>
