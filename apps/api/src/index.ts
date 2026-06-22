@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import { readApiRuntimeConfig } from './config/runtime.js';
+import { registerGracefulShutdown } from './lib/serverLifecycle.js';
 
 export async function startServer(
   env: NodeJS.ProcessEnv = process.env
@@ -26,12 +27,21 @@ const isDirectExecution =
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectExecution) {
-  startServer().catch((error: unknown) => {
-    const message =
-      error instanceof Error ? error.message : 'Unknown startup error';
+  startServer()
+    .then((server) => {
+      registerGracefulShutdown(server, {
+        onDisconnect: async () => {
+          const { prisma } = await import('./lib/prisma.js');
+          await prisma.$disconnect();
+        },
+      });
+    })
+    .catch((error: unknown) => {
+      const message =
+        error instanceof Error ? error.message : 'Unknown startup error';
 
-    // eslint-disable-next-line no-console
-    console.error(`API startup failed: ${message}`);
-    process.exit(1);
-  });
+      // eslint-disable-next-line no-console
+      console.error(`API startup failed: ${message}`);
+      process.exit(1);
+    });
 }

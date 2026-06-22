@@ -1,0 +1,23 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "watchPatterns": [
+      "/apps/api/**",
+      "/package.json",
+      "/package-lock.json",
+      "/tsconfig.base.json",
+      "/railway.json"
+    ],
+    "buildCommand": "npm run db:generate --workspace @barberapp/api && npm run build --workspace @barberapp/api"
+  },
+  "deploy": {
+    "preDeployCommand": "npm run db:migrate:deploy --workspace @barberapp/api",
+    "startCommand": "node apps/api/dist/index.js",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "drainingSeconds": 30
+  }
+}

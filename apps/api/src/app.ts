@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import type { ApiRuntimeConfig } from './config/runtime.js';
+import { applyProxyConfig } from './config/proxy.js';
 import { createCorsOptions, readApiRuntimeConfig } from './config/runtime.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { createRateLimiter } from './middleware/rateLimit.js';
@@ -13,8 +14,7 @@ export function createApp(config: ApiRuntimeConfig): express.Express {
   const app = express();
   const appointmentRateLimit = createRateLimiter(config.rateLimit);
 
-  // Trust proxy for correct client IP detection behind reverse proxy (nginx, ALB, etc.)
-  // Configure this explicitly when deploying behind a trusted proxy.
+  applyProxyConfig(app, config.nodeEnv);
 
   app.use(cors(createCorsOptions(config.corsPolicy)));
 

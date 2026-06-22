@@ -2,6 +2,8 @@
 
 Release the BarberApp API only from a clean, validated commit.
 
+For the current MVP deployment target, see the Railway-specific runbook: [`docs/releases/railway-mvp-deployment.md`](./railway-mvp-deployment.md).
+
 ## Preconditions
 
 - Working tree is clean.
@@ -43,7 +45,7 @@ Production startup fails before listening when `ALLOWED_ORIGIN` is missing, empt
 Run from the repository root:
 
 ```bash
-npm install
+npm ci
 npm run db:generate --workspace @barberapp/api
 npm run typecheck --workspace @barberapp/api
 npm run build --workspace @barberapp/api
@@ -93,6 +95,8 @@ Expected behavior:
 
 Reverse-proxy trust is **not** enabled by default in the current codebase; configure it explicitly only if your deployment topology requires it.
 
+For Railway specifically, the deployment path in this repository now trusts exactly one proxy hop in production and uses a direct `node apps/api/dist/index.js` start command so `SIGTERM` reaches the API process.
+
 ## Verification Checklist
 
 Basic smoke:
@@ -124,6 +128,7 @@ Release checklist items:
 
 - `/health` returns 200.
 - `/api/v1/ping` returns 200.
+- `/health` is process liveness only; perform a real authenticated smoke test for readiness.
 - Database connectivity is confirmed through a real authenticated API flow after startup.
 - A Clerk-authenticated smoke test succeeds with a real production user/session.
 - Allowed-origin preflight returns the exact configured origin.
