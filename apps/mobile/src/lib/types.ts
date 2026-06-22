@@ -12,6 +12,7 @@
  */
 export type UserRole = 'OWNER' | 'BARBER' | 'CLIENT';
 export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
+export type RevenueSummaryPeriod = 'today' | 'week' | 'month' | 'year';
 
 /**
  * Current user context — returned by GET /api/v1/me/context.
@@ -44,6 +45,13 @@ export interface PaymentMethodSummary {
   revenueCents: number;
 }
 
+export interface SummaryWindowMeta {
+  date?: string;
+  period?: RevenueSummaryPeriod;
+  rangeStart?: string;
+  rangeEnd?: string;
+}
+
 /**
  * Employee breakdown — appears in OWNER's barbershop daily summary.
  */
@@ -58,8 +66,7 @@ export interface EmployeeSummary {
  * OWNER barbershop daily summary — returned by
  * GET /api/v1/barbershops/:barbershopId/service-records/summary?date=
  */
-export interface BarbershopDailySummary {
-  date: string;
+export interface BarbershopDailySummary extends SummaryWindowMeta {
   totalRecords: number;
   totalRevenueCents: number;
   byEmployee: EmployeeSummary[];
@@ -70,8 +77,7 @@ export interface BarbershopDailySummary {
  * BARBER/employee daily summary — returned by
  * GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records/summary?date=
  */
-export interface EmployeeDailySummary {
-  date: string;
+export interface EmployeeDailySummary extends SummaryWindowMeta {
   employeeId: string;
   employeeName: string | null;
   totalRecords: number;
@@ -81,6 +87,12 @@ export interface EmployeeDailySummary {
 
 /** Union type — the store holds either OWNER or BARBER summary. */
 export type DailySummary = BarbershopDailySummary | EmployeeDailySummary;
+
+export interface SummaryQuery {
+  date?: string;
+  period?: RevenueSummaryPeriod;
+  employeeId?: string;
+}
 
 // ============================================
 // Employee + service types for owner record creation

@@ -73,8 +73,8 @@ describe('fetchBarbershopDailySummary', () => {
     const result = await fetchBarbershopDailySummary(getToken, 'shop-1', '2026-06-06');
     expect(getToken).toHaveBeenCalled();
     expect(mockApi.get).toHaveBeenCalledWith(
-      '/barbershops/shop-1/service-records/summary?date=2026-06-06',
-      { headers: { Authorization: 'Bearer owner-token' } }
+      '/barbershops/shop-1/service-records/summary',
+      { headers: { Authorization: 'Bearer owner-token' }, params: { date: '2026-06-06' } }
     );
     expect(result.totalRecords).toBe(5);
     expect(result.byEmployee).toHaveLength(2);
@@ -88,6 +88,25 @@ describe('fetchBarbershopDailySummary', () => {
     const getToken = vi.fn().mockResolvedValue('token');
     const result = await fetchBarbershopDailySummary(getToken, 'shop-1', '2026-06-06');
     expect(result).toEqual(FAKE_OWNER_SUMMARY);
+  });
+
+  it('supports period and employee filters for OWNER summary', async () => {
+    const { fetchBarbershopDailySummary } = await importSummary();
+    mockApi.get.mockResolvedValueOnce({
+      data: { success: true, data: FAKE_OWNER_SUMMARY },
+    });
+    const getToken = vi.fn().mockResolvedValue('token');
+    await fetchBarbershopDailySummary(getToken, 'shop-1', {
+      period: 'month',
+      employeeId: 'emp-1',
+    });
+    expect(mockApi.get).toHaveBeenCalledWith(
+      '/barbershops/shop-1/service-records/summary',
+      {
+        headers: { Authorization: 'Bearer token' },
+        params: { period: 'month', employeeId: 'emp-1' },
+      }
+    );
   });
 
   it('throws on API error', async () => {
@@ -121,10 +140,23 @@ describe('fetchEmployeeDailySummary', () => {
     const result = await fetchEmployeeDailySummary(getToken, 'shop-1', 'emp-1', '2026-06-06');
     expect(getToken).toHaveBeenCalled();
     expect(mockApi.get).toHaveBeenCalledWith(
-      '/barbershops/shop-1/employees/emp-1/service-records/summary?date=2026-06-06',
-      { headers: { Authorization: 'Bearer barber-token' } }
+      '/barbershops/shop-1/employees/emp-1/service-records/summary',
+      { headers: { Authorization: 'Bearer barber-token' }, params: { date: '2026-06-06' } }
     );
     expect(result.totalRecords).toBe(3);
+  });
+
+  it('supports period queries for employee summary', async () => {
+    const { fetchEmployeeDailySummary } = await importSummary();
+    mockApi.get.mockResolvedValueOnce({
+      data: { success: true, data: FAKE_EMPLOYEE_SUMMARY },
+    });
+    const getToken = vi.fn().mockResolvedValue('token');
+    await fetchEmployeeDailySummary(getToken, 'shop-1', 'emp-1', { period: 'year' });
+    expect(mockApi.get).toHaveBeenCalledWith(
+      '/barbershops/shop-1/employees/emp-1/service-records/summary',
+      { headers: { Authorization: 'Bearer token' }, params: { period: 'year' } }
+    );
   });
 
   it('returns full employee summary data', async () => {

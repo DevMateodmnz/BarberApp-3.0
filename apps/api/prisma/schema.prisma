@@ -227,9 +227,9 @@ model ServiceRecord {
   employeeId    String         @map("employee_id")
   serviceId     String         @map("service_id")
   appointmentId String?        @map("appointment_id")
-  clientName    String?
+  clientName    String?        @map("client_name")
   priceCents    Int            @map("price_cents")
-  paymentMethod PaymentMethod?
+  paymentMethod PaymentMethod? @map("payment_method")
   notes         String?
   performedAt   DateTime       @default(now()) @map("performed_at")
   createdAt     DateTime       @default(now()) @map("created_at")

@@ -38,6 +38,17 @@ describe('DailySummarySection', () => {
     expect(findByText(tree, 'Daily Summary — 2026-06-01')).toBeDefined();
   });
 
+  it('renders a revenue summary title when a custom period label is provided', () => {
+    const tree = DailySummarySection({
+      ...OWNER_SUMMARY,
+      titleLabel: 'This year',
+      selectedDate: today,
+      totalRecords: 5,
+      totalRevenueCents: 15000,
+    });
+    expect(findByText(tree, 'Revenue Summary — This year')).toBeDefined();
+  });
+
   it('renders records and revenue totals', () => {
     const tree = DailySummarySection({
       ...OWNER_SUMMARY,

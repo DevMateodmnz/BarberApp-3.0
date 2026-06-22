@@ -7,9 +7,102 @@
  */
 import { prisma } from '../lib/prisma.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
-import { getUtcRangeForLocalDate } from '../lib/dateUtils.js';
+import { getUtcRangeForLocalDate, getUtcRangeForLocalPeriod, type SummaryPeriod } from '../lib/dateUtils.js';
 import type { CreateServiceRecordInput } from '../schemas/serviceRecord.js';
 import type { UserRole } from '@prisma/client';
+
+interface SummaryWindowInput {
+  date?: string;
+  period?: SummaryPeriod;
+}
+
+interface SummaryWindowResolved {
+  date?: string;
+  period?: SummaryPeriod;
+  rangeStart: string;
+  rangeEnd: string;
+  startUtc: Date;
+  endUtc: Date;
+}
+
+function resolveSummaryWindow(
+  input: SummaryWindowInput,
+  timezone: string,
+): SummaryWindowResolved {
+  if (input.date) {
+    const { startUtc, endUtc } = getUtcRangeForLocalDate(input.date, timezone);
+    return {
+      date: input.date,
+      rangeStart: input.date,
+      rangeEnd: input.date,
+      startUtc,
+      endUtc,
+    };
+  }
+
+  if (!input.period) {
+    throw new BadRequestError('Either date or period query parameter is required');
+  }
+
+  const range = getUtcRangeForLocalPeriod(input.period, timezone);
+  return {
+    period: input.period,
+    rangeStart: range.rangeStart,
+    rangeEnd: range.rangeEnd,
+    startUtc: range.startUtc,
+    endUtc: range.endUtc,
+  };
+}
+
+async function validateActiveEmployeeInBarbershop(
+  employeeId: string,
+  barbershopId: string,
+) {
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    include: { user: { select: { name: true } } },
+  });
+
+  if (!employee || employee.deletedAt) {
+    throw new NotFoundError('Employee');
+  }
+  if (employee.barbershopId !== barbershopId) {
+    throw new NotFoundError('Employee');
+  }
+  if (!employee.isActive) {
+    throw new BadRequestError('Employee is not active');
+  }
+
+  return employee;
+}
+
+function buildPaymentMethodSummary(
+  records: Array<{ paymentMethod: string | null; priceCents: number }>
+) {
+  const paymentMap = new Map<string | null, { count: number; revenue: number }>();
+  for (const record of records) {
+    const key = record.paymentMethod ?? null;
+    const existing = paymentMap.get(key);
+    if (existing) {
+      existing.count++;
+      existing.revenue += record.priceCents;
+    } else {
+      paymentMap.set(key, { count: 1, revenue: record.priceCents });
+    }
+  }
+
+  return Array.from(paymentMap.entries())
+    .map(([paymentMethod, value]) => ({
+      paymentMethod,
+      recordsCount: value.count,
+      revenueCents: value.revenue,
+    }))
+    .sort((a, b) =>
+      b.revenueCents !== a.revenueCents
+        ? b.revenueCents - a.revenueCents
+        : b.recordsCount - a.recordsCount
+    );
+}
 
 /**
  * Creates a new service record for a completed service/cut.
@@ -168,20 +261,7 @@ export async function listEmployeeRecords(
   userRole: UserRole,
   date?: string
 ) {
-  // Validate employee exists, is active, belongs to barbershop, not deleted
-  const employee = await prisma.employee.findUnique({
-    where: { id: employeeId },
-  });
-
-  if (!employee || employee.deletedAt) {
-    throw new NotFoundError('Employee');
-  }
-  if (employee.barbershopId !== barbershopId) {
-    throw new NotFoundError('Employee');
-  }
-  if (!employee.isActive) {
-    throw new BadRequestError('Employee is not active');
-  }
+  const employee = await validateActiveEmployeeInBarbershop(employeeId, barbershopId);
 
   // BARBER check: can only view own records
   if (userRole === 'BARBER') {
@@ -243,7 +323,10 @@ interface PaymentMethodSummary {
 }
 
 interface DailySummary {
-  date: string;
+  date?: string;
+  period?: SummaryPeriod;
+  rangeStart?: string;
+  rangeEnd?: string;
   totalRecords: number;
   totalRevenueCents: number;
   byEmployee: EmployeeSummary[];
@@ -259,7 +342,7 @@ interface DailySummary {
 export async function getDailyServiceRecordSummary(
   barbershopId: string,
   userId: string,
-  date: string
+  input: SummaryWindowInput & { employeeId?: string }
 ): Promise<DailySummary> {
   // Validate barbershop ownership (defense-in-depth)
   const barbershop = await prisma.barbershop.findUnique({
@@ -271,18 +354,22 @@ export async function getDailyServiceRecordSummary(
     throw new NotFoundError('Barbershop');
   }
 
-  // Compute local-day UTC range
   const timezone = barbershop.timezone ?? 'America/Argentina/Tucuman';
-  const { startUtc, endUtc } = getUtcRangeForLocalDate(date, timezone);
+  const window = resolveSummaryWindow(input, timezone);
 
-  // Query all records for this barbershop on this local day
+  if (input.employeeId) {
+    await validateActiveEmployeeInBarbershop(input.employeeId, barbershopId);
+  }
+
+  // Query all records for this summary window
   const records = await prisma.serviceRecord.findMany({
     where: {
       barbershopId,
+      ...(input.employeeId ? { employeeId: input.employeeId } : {}),
       deletedAt: null,
       performedAt: {
-        gte: startUtc,
-        lt: endUtc,
+        gte: window.startUtc,
+        lt: window.endUtc,
       },
     },
     select: {
@@ -328,33 +415,13 @@ export async function getDailyServiceRecordSummary(
         : b.recordsCount - a.recordsCount
     );
 
-  // byPaymentMethod: group by paymentMethod
-  const paymentMap = new Map<string | null, { count: number; revenue: number }>();
-  for (const r of records) {
-    const key = r.paymentMethod ?? null;
-    const existing = paymentMap.get(key);
-    if (existing) {
-      existing.count++;
-      existing.revenue += r.priceCents;
-    } else {
-      paymentMap.set(key, { count: 1, revenue: r.priceCents });
-    }
-  }
-
-  const byPaymentMethod: PaymentMethodSummary[] = Array.from(paymentMap.entries())
-    .map(([paymentMethod, v]) => ({
-      paymentMethod,
-      recordsCount: v.count,
-      revenueCents: v.revenue,
-    }))
-    .sort((a, b) =>
-      b.revenueCents !== a.revenueCents
-        ? b.revenueCents - a.revenueCents
-        : b.recordsCount - a.recordsCount
-    );
+  const byPaymentMethod = buildPaymentMethodSummary(records);
 
   return {
-    date,
+    ...(window.date ? { date: window.date } : {}),
+    ...(window.period ? { period: window.period } : {}),
+    rangeStart: window.rangeStart,
+    rangeEnd: window.rangeEnd,
     totalRecords,
     totalRevenueCents,
     byEmployee,
@@ -367,7 +434,10 @@ export async function getDailyServiceRecordSummary(
 // ============================================
 
 interface EmployeeDailySummary {
-  date: string;
+  date?: string;
+  period?: SummaryPeriod;
+  rangeStart?: string;
+  rangeEnd?: string;
   employeeId: string;
   employeeName: string | null;
   totalRecords: number;
@@ -388,23 +458,9 @@ export async function getDailyEmployeeServiceRecordSummary(
   employeeId: string,
   userId: string,
   userRole: UserRole,
-  date: string
+  input: SummaryWindowInput
 ): Promise<EmployeeDailySummary> {
-  // Validate employee exists, is active, belongs to barbershop, not deleted
-  const employee = await prisma.employee.findUnique({
-    where: { id: employeeId },
-    include: { user: { select: { name: true } } },
-  });
-
-  if (!employee || employee.deletedAt) {
-    throw new NotFoundError('Employee');
-  }
-  if (employee.barbershopId !== barbershopId) {
-    throw new NotFoundError('Employee');
-  }
-  if (!employee.isActive) {
-    throw new BadRequestError('Employee is not active');
-  }
+  const employee = await validateActiveEmployeeInBarbershop(employeeId, barbershopId);
 
   const employeeName = employee.user.name;
 
@@ -426,17 +482,17 @@ export async function getDailyEmployeeServiceRecordSummary(
     select: { timezone: true },
   });
   const timezone = barbershop?.timezone ?? 'America/Argentina/Tucuman';
-  const { startUtc, endUtc } = getUtcRangeForLocalDate(date, timezone);
+  const window = resolveSummaryWindow(input, timezone);
 
-  // Query this employee's records for the local day
+  // Query this employee's records for the summary window
   const records = await prisma.serviceRecord.findMany({
     where: {
       barbershopId,
       employeeId,
       deletedAt: null,
       performedAt: {
-        gte: startUtc,
-        lt: endUtc,
+        gte: window.startUtc,
+        lt: window.endUtc,
       },
     },
     select: {
@@ -449,33 +505,13 @@ export async function getDailyEmployeeServiceRecordSummary(
   const totalRecords = records.length;
   const totalRevenueCents = records.reduce((sum, r) => sum + r.priceCents, 0);
 
-  // byPaymentMethod
-  const paymentMap = new Map<string | null, { count: number; revenue: number }>();
-  for (const r of records) {
-    const key = r.paymentMethod ?? null;
-    const existing = paymentMap.get(key);
-    if (existing) {
-      existing.count++;
-      existing.revenue += r.priceCents;
-    } else {
-      paymentMap.set(key, { count: 1, revenue: r.priceCents });
-    }
-  }
-
-  const byPaymentMethod: PaymentMethodSummary[] = Array.from(paymentMap.entries())
-    .map(([paymentMethod, v]) => ({
-      paymentMethod,
-      recordsCount: v.count,
-      revenueCents: v.revenue,
-    }))
-    .sort((a, b) =>
-      b.revenueCents !== a.revenueCents
-        ? b.revenueCents - a.revenueCents
-        : b.recordsCount - a.recordsCount
-    );
+  const byPaymentMethod = buildPaymentMethodSummary(records);
 
   return {
-    date,
+    ...(window.date ? { date: window.date } : {}),
+    ...(window.period ? { period: window.period } : {}),
+    rangeStart: window.rangeStart,
+    rangeEnd: window.rangeEnd,
     employeeId,
     employeeName,
     totalRecords,

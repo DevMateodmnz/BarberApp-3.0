@@ -89,6 +89,14 @@ function renderHomeContent(overrides: Partial<Parameters<typeof HomeContent>[0]>
     records: [RECORD],
     isRecordsLoading: false,
     recordsError: null,
+    summaryPeriod: 'today',
+    summaryPeriodLabel: 'Today',
+    onSummaryPeriodChange: vi.fn(),
+    ownerEmployeeFilters: [],
+    hasLoadedOwnerEmployeeFilters: false,
+    isOwnerEmployeeFiltersLoading: false,
+    ownerEmployeeFiltersError: null,
+    onRetryOwnerEmployeeFilters: vi.fn(),
     selectedDate: today,
     flashMessage: null,
     canRecordService: true,
@@ -184,12 +192,98 @@ describe('HomeContent', () => {
     expect(findByTestId(tree, 'date-display')).toBeDefined();
     expect(findByTestId(tree, 'date-next')).toBeDefined();
     expect(findByText(tree, today)).toBeDefined();
+    expect(findByText(tree, 'Selected date applies only to the records list below.')).toBeDefined();
     press(findByTestId(tree, 'date-prev'));
     expect(onPrevDate).toHaveBeenCalledTimes(1);
     press(findByTestId(tree, 'date-next'));
     expect(onNextDate).toHaveBeenCalledTimes(1);
     press(findByTestId(tree, 'date-today'));
     expect(onToday).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders summary period controls and triggers period changes', () => {
+    const onSummaryPeriodChange = vi.fn();
+    const tree = renderHomeContent({ onSummaryPeriodChange, summaryPeriod: 'today' });
+    expect(findByTestId(tree, 'summary-period-controls')).toBeDefined();
+    expect(findByText(tree, 'Period filters apply only to revenue totals.')).toBeDefined();
+    press(findByTestId(tree, 'summary-period-week'));
+    expect(onSummaryPeriodChange).toHaveBeenCalledWith('week');
+    press(findByTestId(tree, 'summary-period-month'));
+    expect(onSummaryPeriodChange).toHaveBeenCalledWith('month');
+  });
+
+  it('renders owner employee filter controls and triggers handlers', () => {
+    const onAll = vi.fn();
+    const onCarlos = vi.fn();
+    const tree = renderHomeContent({
+      context: OWNER_CONTEXT,
+      ownerEmployeeFilters: [
+        {
+          id: 'all',
+          label: 'All barbers',
+          selected: true,
+          testID: 'summary-employee-filter-all',
+          onPress: onAll,
+        },
+        {
+          id: 'emp-1',
+          label: 'Carlos',
+          selected: false,
+          testID: 'summary-employee-filter-emp-1',
+          onPress: onCarlos,
+        },
+      ],
+      hasLoadedOwnerEmployeeFilters: true,
+    });
+
+    expect(findByTestId(tree, 'summary-employee-filter')).toBeDefined();
+    press(findByTestId(tree, 'summary-employee-filter-all'));
+    expect(onAll).toHaveBeenCalledTimes(1);
+    press(findByTestId(tree, 'summary-employee-filter-emp-1'));
+    expect(onCarlos).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render owner employee filters for barber context', () => {
+    const tree = renderHomeContent({
+      context: BARBER_CONTEXT,
+      ownerEmployeeFilters: [
+        {
+          id: 'all',
+          label: 'All barbers',
+          selected: true,
+          testID: 'summary-employee-filter-all',
+          onPress: vi.fn(),
+        },
+      ],
+    });
+    expect(queryByTestId(tree, 'summary-employee-filter')).toBeNull();
+  });
+
+  it('renders owner employee filter loading, error, retry, and empty states', () => {
+    const onRetryOwnerEmployeeFilters = vi.fn();
+
+    const loadingTree = renderHomeContent({
+      context: OWNER_CONTEXT,
+      isOwnerEmployeeFiltersLoading: true,
+    });
+    expect(findByTestId(loadingTree, 'summary-employee-filter-loading')).toBeDefined();
+    expect(findByText(loadingTree, 'Loading barbers…')).toBeDefined();
+
+    const errorTree = renderHomeContent({
+      context: OWNER_CONTEXT,
+      ownerEmployeeFiltersError: 'Failed to load barbers.',
+      onRetryOwnerEmployeeFilters,
+    });
+    expect(findByTestId(errorTree, 'summary-employee-filter-error')).toBeDefined();
+    press(findByTestId(errorTree, 'summary-employee-filter-retry'));
+    expect(onRetryOwnerEmployeeFilters).toHaveBeenCalledTimes(1);
+
+    const emptyTree = renderHomeContent({
+      context: OWNER_CONTEXT,
+      hasLoadedOwnerEmployeeFilters: true,
+      ownerEmployeeFilters: [],
+    });
+    expect(findByTestId(emptyTree, 'summary-employee-filter-empty')).toBeDefined();
   });
 
   it('renders a summary loading state', () => {
@@ -204,15 +298,23 @@ describe('HomeContent', () => {
   });
 
   it('renders the owner summary card', () => {
-    const tree = renderHomeContent({ context: OWNER_CONTEXT, summary: OWNER_SUMMARY });
+    const tree = renderHomeContent({
+      context: OWNER_CONTEXT,
+      summary: OWNER_SUMMARY,
+      summaryPeriodLabel: 'This month',
+    });
     expect(findByTestId(tree, 'home-owner-summary')).toBeDefined();
-    expect(findByText(tree, 'Daily Summary — Today')).toBeDefined();
+    expect(findByText(tree, 'Revenue Summary — This month')).toBeDefined();
   });
 
   it('renders the barber summary card', () => {
-    const tree = renderHomeContent({ context: BARBER_CONTEXT, summary: BARBER_SUMMARY });
+    const tree = renderHomeContent({
+      context: BARBER_CONTEXT,
+      summary: BARBER_SUMMARY,
+      summaryPeriodLabel: 'This week',
+    });
     expect(findByTestId(tree, 'home-barber-summary')).toBeDefined();
-    expect(findByText(tree, 'Daily Summary — Today')).toBeDefined();
+    expect(findByText(tree, 'Revenue Summary — This week')).toBeDefined();
   });
 
   it('renders a records loading state', () => {

@@ -20,6 +20,7 @@ interface DailySummarySectionProps {
   selectedDate: string;
   totalRecords: number;
   totalRevenueCents: number;
+  titleLabel?: string;
 }
 
 export function DailySummarySection({
@@ -28,15 +29,16 @@ export function DailySummarySection({
   selectedDate,
   totalRecords,
   totalRevenueCents,
+  titleLabel,
 }: DailySummarySectionProps) {
-  const dateLabel = isTodayDateString(selectedDate) ? 'Today' : selectedDate;
+  const dateLabel = titleLabel ?? (isTodayDateString(selectedDate) ? 'Today' : selectedDate);
   const hasRecords = totalRecords > 0;
 
   return (
     <View style={styles.container}>
       <SectionHeader
         testID="summary-title"
-        title={`Daily Summary — ${dateLabel}`}
+        title={`${titleLabel ? 'Revenue Summary' : 'Daily Summary'} — ${dateLabel}`}
       />
 
       <AppCard style={styles.metricsCard}>

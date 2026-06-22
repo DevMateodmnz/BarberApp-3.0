@@ -34,7 +34,7 @@ import * as serviceService from '../services/serviceService.js';
 import * as appointmentService from '../services/appointmentService.js';
 import * as workingHoursService from '../services/workingHoursService.js';
 import * as serviceRecordService from '../services/serviceRecordService.js';
-import { CreateServiceRecordSchema, ServiceRecordDateSchema } from '../schemas/serviceRecord.js';
+import { CreateServiceRecordSchema, ServiceRecordDateSchema, SummaryPeriodSchema } from '../schemas/serviceRecord.js';
 import { UpdateWorkingHoursSchema } from '../schemas/workingHours.js';
 import { BadRequestError } from '../lib/errors.js';
 import { ValidationError } from '../lib/errors.js';
@@ -58,6 +58,39 @@ function paramServiceId(req: Request): string {
   const id = req.params.serviceId;
   if (!id) throw new BadRequestError('Service ID is required');
   return id;
+}
+
+function parseSummaryQuery(
+  req: Request,
+): { date?: string; period?: 'today' | 'week' | 'month' | 'year' } {
+  const hasDate = typeof req.query.date === 'string';
+  const hasPeriod = typeof req.query.period === 'string';
+
+  if (hasDate && hasPeriod) {
+    throw new BadRequestError('Date and period query parameters cannot be used together');
+  }
+
+  if (hasDate) {
+    const parsed = ServiceRecordDateSchema.safeParse(req.query.date);
+    if (!parsed.success) {
+      throw new ValidationError(
+        'Invalid date query parameter: Date must be in YYYY-MM-DD format (e.g. 2026-06-06)'
+      );
+    }
+    return { date: parsed.data };
+  }
+
+  if (hasPeriod) {
+    const parsed = SummaryPeriodSchema.safeParse(req.query.period);
+    if (!parsed.success) {
+      throw new ValidationError(
+        'Invalid period query parameter: period must be one of today, week, month, year'
+      );
+    }
+    return { period: parsed.data };
+  }
+
+  throw new BadRequestError('Either date or period query parameter is required');
 }
 
 const router = Router();
@@ -496,23 +529,14 @@ router.get(
   requireRole('OWNER', 'BARBER'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (typeof req.query.date !== 'string') {
-        throw new BadRequestError('Date query parameter is required (YYYY-MM-DD)');
-      }
-
-      const parsed = ServiceRecordDateSchema.safeParse(req.query.date);
-      if (!parsed.success) {
-        throw new ValidationError(
-          'Invalid date query parameter: Date must be in YYYY-MM-DD format (e.g. 2026-06-06)'
-        );
-      }
+      const query = parseSummaryQuery(req);
 
       const summary = await serviceRecordService.getDailyEmployeeServiceRecordSummary(
         paramBarbershopId(req),
         paramEmployeeId(req),
         req.userId,
         req.userRole,
-        parsed.data
+        query
       );
       res.json({ success: true, data: summary });
     } catch (error) {
@@ -531,21 +555,18 @@ router.get(
   requireRole('OWNER'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      if (typeof req.query.date !== 'string') {
-        throw new BadRequestError('Date query parameter is required (YYYY-MM-DD)');
-      }
-
-      const parsed = ServiceRecordDateSchema.safeParse(req.query.date);
-      if (!parsed.success) {
-        throw new ValidationError(
-          'Invalid date query parameter: Date must be in YYYY-MM-DD format (e.g. 2026-06-06)'
-        );
-      }
+      const query = parseSummaryQuery(req);
+      const employeeId = typeof req.query.employeeId === 'string'
+        ? req.query.employeeId
+        : undefined;
 
       const summary = await serviceRecordService.getDailyServiceRecordSummary(
         paramBarbershopId(req),
         req.userId,
-        parsed.data
+        {
+          ...query,
+          employeeId,
+        }
       );
       res.json({ success: true, data: summary });
     } catch (error) {

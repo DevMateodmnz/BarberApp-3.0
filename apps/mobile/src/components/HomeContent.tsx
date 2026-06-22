@@ -5,6 +5,7 @@ import {
   EmptyState,
   RoleBadge,
   ScreenHeader,
+  SectionHeader,
 } from '@/components/ui/index.js';
 import { DailySummarySection } from '@/components/DailySummarySection.js';
 import { tokens } from '@/theme/index.js';
@@ -14,7 +15,22 @@ import {
   formatRecordTime,
   isTodayDateString,
 } from '@/lib/format.js';
-import type { DailySummary, ServiceRecord } from '@/lib/types.js';
+import type { DailySummary, RevenueSummaryPeriod, ServiceRecord } from '@/lib/types.js';
+
+const SUMMARY_PERIOD_OPTIONS: Array<{ value: RevenueSummaryPeriod; label: string }> = [
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+  { value: 'year', label: 'Year' },
+];
+
+interface FilterOption {
+  id: string;
+  label: string;
+  selected: boolean;
+  testID: string;
+  onPress: () => void;
+}
 
 export interface HomeContentProps {
   context: {
@@ -32,6 +48,14 @@ export interface HomeContentProps {
   records: ServiceRecord[];
   isRecordsLoading: boolean;
   recordsError: string | null;
+  summaryPeriod: RevenueSummaryPeriod;
+  summaryPeriodLabel: string;
+  onSummaryPeriodChange: (period: RevenueSummaryPeriod) => void;
+  ownerEmployeeFilters: FilterOption[];
+  hasLoadedOwnerEmployeeFilters: boolean;
+  isOwnerEmployeeFiltersLoading: boolean;
+  ownerEmployeeFiltersError: string | null;
+  onRetryOwnerEmployeeFilters: () => void;
   selectedDate: string;
   flashMessage: string | null;
   canRecordService: boolean;
@@ -55,6 +79,14 @@ export function HomeContent({
   records,
   isRecordsLoading,
   recordsError,
+  summaryPeriod,
+  summaryPeriodLabel,
+  onSummaryPeriodChange,
+  ownerEmployeeFilters,
+  hasLoadedOwnerEmployeeFilters,
+  isOwnerEmployeeFiltersLoading,
+  ownerEmployeeFiltersError,
+  onRetryOwnerEmployeeFilters,
   selectedDate,
   flashMessage,
   canRecordService,
@@ -70,6 +102,15 @@ export function HomeContent({
   const role = context?.role;
   const showBarberNames = role === 'OWNER';
   const canShowDashboard = role === 'OWNER' || role === 'BARBER';
+  const showRevenueSection = canShowDashboard && !!context?.barbershopId;
+  const showRecordsSection = canShowDashboard && !!context?.barbershopId;
+  const showOwnerEmployeeFilterCard = role === 'OWNER' && !!context?.barbershopId;
+  const showOwnerEmployeeFilterEmptyState =
+    showOwnerEmployeeFilterCard &&
+    hasLoadedOwnerEmployeeFilters &&
+    !isOwnerEmployeeFiltersLoading &&
+    !ownerEmployeeFiltersError &&
+    ownerEmployeeFilters.length === 0;
 
   return (
     <>
@@ -181,78 +222,176 @@ export function HomeContent({
             </AppCard>
           )}
 
-          {canShowDashboard && (
-            <AppCard testID="date-controls">
-              <View style={styles.dateRow}>
-                <AppButton
-                  testID="date-prev"
-                  title="‹"
-                  variant="secondary"
-                  size="sm"
-                  onPress={onPrevDate}
-                />
-                <AppButton
-                  testID="date-today"
-                  title="Today"
-                  variant="secondary"
-                  size="sm"
-                  disabled={isTodayDateString(selectedDate)}
-                  onPress={onToday}
-                />
+          {showRevenueSection && (
+            <View testID="home-revenue-section" style={styles.sectionBlock}>
+              <SectionHeader title="Revenue overview" />
+              <Text style={styles.sectionHint}>
+                Period filters apply only to revenue totals.
+              </Text>
+
+              <AppCard testID="summary-period-controls" variant="outlined">
+                <SectionHeader title="Revenue period" />
+                <View style={styles.periodGrid}>
+                  {SUMMARY_PERIOD_OPTIONS.map((option) => (
+                    <AppButton
+                      key={option.value}
+                      testID={`summary-period-${option.value}`}
+                      title={option.label}
+                      variant={summaryPeriod === option.value ? 'primary' : 'ghost'}
+                      size="sm"
+                      onPress={() => onSummaryPeriodChange(option.value)}
+                      style={styles.periodButton}
+                    />
+                  ))}
+                </View>
+              </AppCard>
+
+              {showOwnerEmployeeFilterCard && (
+                <AppCard testID="summary-employee-filter" variant="outlined">
+                  <SectionHeader title="Barber filter" />
+
+                  {isOwnerEmployeeFiltersLoading && ownerEmployeeFilters.length === 0 && (
+                    <View style={styles.inlineState} testID="summary-employee-filter-loading">
+                      <ActivityIndicator size="small" />
+                      <Text style={styles.loadingText}>Loading barbers…</Text>
+                    </View>
+                  )}
+
+                  {ownerEmployeeFiltersError && (
+                    <View style={styles.filterStatusBlock}>
+                      <Text style={styles.errorText} testID="summary-employee-filter-error">
+                        {ownerEmployeeFiltersError}
+                      </Text>
+                      <AppButton
+                        testID="summary-employee-filter-retry"
+                        title="Retry"
+                        variant="secondary"
+                        size="md"
+                        onPress={onRetryOwnerEmployeeFilters}
+                        style={styles.retryButton}
+                      />
+                    </View>
+                  )}
+
+                  {ownerEmployeeFilters.length > 0 && (
+                    <>
+                      {isOwnerEmployeeFiltersLoading && (
+                        <Text
+                          style={styles.loadingText}
+                          testID="summary-employee-filter-refreshing"
+                        >
+                          Refreshing barbers…
+                        </Text>
+                      )}
+                      <View style={styles.employeeFilterList}>
+                        {ownerEmployeeFilters.map((filter) => (
+                          <AppButton
+                            key={filter.id}
+                            testID={filter.testID}
+                            title={filter.label}
+                            variant={filter.selected ? 'primary' : 'secondary'}
+                            size="md"
+                            onPress={filter.onPress}
+                            style={styles.employeeFilterButton}
+                          />
+                        ))}
+                      </View>
+                    </>
+                  )}
+
+                  {showOwnerEmployeeFilterEmptyState && (
+                    <EmptyState
+                      testID="summary-employee-filter-empty"
+                      title="No active barbers yet."
+                      message="Active barbers will appear here when they can be filtered."
+                    />
+                  )}
+                </AppCard>
+              )}
+
+              {isSummaryLoading && (
+                <AppCard style={styles.centeredCard}>
+                  <ActivityIndicator size="small" />
+                  <Text style={styles.loadingText}>Loading summary…</Text>
+                </AppCard>
+              )}
+
+              {summaryError && (
+                <AppCard>
+                  <Text style={styles.errorText} testID="home-summary-error">
+                    {summaryError}
+                  </Text>
+                </AppCard>
+              )}
+
+              {role === 'OWNER' && summary && !isSummaryLoading && !summaryError && (
+                <AppCard testID="home-owner-summary">
+                  <DailySummarySection
+                    byEmployee={'byEmployee' in summary ? summary.byEmployee : undefined}
+                    byPaymentMethod={summary.byPaymentMethod}
+                    titleLabel={summaryPeriodLabel}
+                    selectedDate={selectedDate}
+                    totalRecords={summary.totalRecords}
+                    totalRevenueCents={summary.totalRevenueCents}
+                  />
+                </AppCard>
+              )}
+
+              {role === 'BARBER' && summary && !isSummaryLoading && !summaryError && (
+                <AppCard testID="home-barber-summary">
+                  <DailySummarySection
+                    byPaymentMethod={summary.byPaymentMethod}
+                    titleLabel={summaryPeriodLabel}
+                    selectedDate={selectedDate}
+                    totalRecords={summary.totalRecords}
+                    totalRevenueCents={summary.totalRevenueCents}
+                  />
+                </AppCard>
+              )}
+            </View>
+          )}
+
+          {showRecordsSection && (
+            <View testID="home-records-block" style={styles.sectionBlock}>
+              <SectionHeader title="Service records" />
+              <Text style={styles.sectionHint}>
+                Selected date applies only to the records list below.
+              </Text>
+
+              <AppCard testID="date-controls" variant="outlined">
+                <Text style={styles.controlEyebrow}>Selected date</Text>
                 <Text style={styles.dateDisplay} testID="date-display">
                   {selectedDate}
                 </Text>
-                <AppButton
-                  testID="date-next"
-                  title="›"
-                  variant="secondary"
-                  size="sm"
-                  onPress={onNextDate}
-                />
-              </View>
-            </AppCard>
-          )}
+                <View style={styles.dateRow}>
+                  <AppButton
+                    testID="date-prev"
+                    title="Previous"
+                    variant="secondary"
+                    size="sm"
+                    onPress={onPrevDate}
+                    style={styles.dateButton}
+                  />
+                  <AppButton
+                    testID="date-today"
+                    title="Today"
+                    variant="secondary"
+                    size="sm"
+                    disabled={isTodayDateString(selectedDate)}
+                    onPress={onToday}
+                    style={styles.dateButton}
+                  />
+                  <AppButton
+                    testID="date-next"
+                    title="Next"
+                    variant="secondary"
+                    size="sm"
+                    onPress={onNextDate}
+                    style={styles.dateButton}
+                  />
+                </View>
+              </AppCard>
 
-          {isSummaryLoading && (
-            <AppCard style={styles.centeredCard}>
-              <ActivityIndicator size="small" />
-              <Text style={styles.loadingText}>Loading summary…</Text>
-            </AppCard>
-          )}
-
-          {summaryError && (
-            <AppCard>
-              <Text style={styles.errorText} testID="home-summary-error">
-                {summaryError}
-              </Text>
-            </AppCard>
-          )}
-
-          {role === 'OWNER' && summary && !isSummaryLoading && !summaryError && (
-            <AppCard testID="home-owner-summary">
-              <DailySummarySection
-                byEmployee={'byEmployee' in summary ? summary.byEmployee : undefined}
-                byPaymentMethod={summary.byPaymentMethod}
-                selectedDate={selectedDate}
-                totalRecords={summary.totalRecords}
-                totalRevenueCents={summary.totalRevenueCents}
-              />
-            </AppCard>
-          )}
-
-          {role === 'BARBER' && summary && !isSummaryLoading && !summaryError && (
-            <AppCard testID="home-barber-summary">
-              <DailySummarySection
-                byPaymentMethod={summary.byPaymentMethod}
-                selectedDate={selectedDate}
-                totalRecords={summary.totalRecords}
-                totalRevenueCents={summary.totalRevenueCents}
-              />
-            </AppCard>
-          )}
-
-          {canShowDashboard && (
-            <>
               {isRecordsLoading && (
                 <AppCard style={styles.centeredCard}>
                   <ActivityIndicator size="small" />
@@ -269,7 +408,7 @@ export function HomeContent({
               )}
 
               {!isRecordsLoading && !recordsError && (
-                <AppCard title="Service Records" testID="home-records-section">
+                <AppCard title="Records for this date" testID="home-records-section">
                   {records.length === 0 ? (
                     <EmptyState
                       testID="home-records-empty"
@@ -280,7 +419,7 @@ export function HomeContent({
                   )}
                 </AppCard>
               )}
-            </>
+            </View>
           )}
 
           {canShowDashboard && !context.barbershopId && !isSummaryLoading && !summary && (
@@ -420,16 +559,59 @@ const styles = StyleSheet.create({
   actionButtonWrapper: {
     marginTop: tokens.spacing[3],
   },
+  sectionBlock: {
+    gap: tokens.spacing[3],
+  },
+  sectionHint: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textSecondary,
+  },
+  controlEyebrow: {
+    ...tokens.typography.variant.caption,
+    color: tokens.colors.textSecondary,
+    marginBottom: tokens.spacing[2],
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   dateRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     gap: tokens.spacing[2],
   },
+  periodGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: tokens.spacing[2],
+  },
+  periodButton: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 44,
+  },
+  inlineState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: tokens.spacing[2],
+  },
+  filterStatusBlock: {
+    gap: tokens.spacing[3],
+  },
+  retryButton: {
+    minHeight: 44,
+  },
+  employeeFilterList: {
+    gap: tokens.spacing[2],
+  },
+  employeeFilterButton: {
+    width: '100%',
+    minHeight: 44,
+  },
+  dateButton: {
+    flex: 1,
+    minHeight: 44,
+  },
   dateDisplay: {
-    ...tokens.typography.variant.label,
+    ...tokens.typography.variant.subheading,
     color: tokens.colors.textPrimary,
-    fontFamily: 'monospace',
   },
   recordCard: {
     marginBottom: tokens.spacing[2],

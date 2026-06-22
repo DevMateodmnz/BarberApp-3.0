@@ -7,12 +7,21 @@
 import { create } from 'zustand';
 import { fetchBarbershopDailySummary, fetchEmployeeDailySummary } from './summary.js';
 import { getTodayDateString } from './format.js';
-import type { CurrentUserContext, DailySummary } from './types.js';
+import type { CurrentUserContext, DailySummary, SummaryQuery } from './types.js';
 
 interface SummaryState {
   summary: DailySummary | null;
   isSummaryLoading: boolean;
   summaryError: string | null;
+
+  /**
+   * Loads a revenue summary for a date or period based on the user's role/context.
+   */
+  loadSummary: (
+    getToken: () => Promise<string | null>,
+    context: CurrentUserContext,
+    query: SummaryQuery,
+  ) => Promise<void>;
 
   /**
    * Loads a daily summary for a specific date based on the user's role and context.
@@ -49,18 +58,16 @@ export const useSummaryStore = create<SummaryState>((set) => ({
   isSummaryLoading: false,
   summaryError: null,
 
-  loadSummaryForDate: async (getToken, context, date) => {
+  loadSummary: async (getToken, context, query) => {
     // CLIENT never loads summary
     if (context.role === 'CLIENT') {
       return;
     }
 
-    // Need barbershopId for both OWNER and BARBER
     if (!context.barbershopId) {
       return;
     }
 
-    // BARBER needs employeeId
     if (context.role === 'BARBER' && !context.employeeId) {
       return;
     }
@@ -71,14 +78,13 @@ export const useSummaryStore = create<SummaryState>((set) => ({
       let summary: DailySummary;
 
       if (context.role === 'OWNER') {
-        summary = await fetchBarbershopDailySummary(getToken, context.barbershopId, date);
+        summary = await fetchBarbershopDailySummary(getToken, context.barbershopId, query);
       } else {
-        // BARBER
         summary = await fetchEmployeeDailySummary(
           getToken,
           context.barbershopId,
           context.employeeId!,
-          date
+          query
         );
       }
 
@@ -87,6 +93,11 @@ export const useSummaryStore = create<SummaryState>((set) => ({
       const message = err instanceof Error ? err.message : 'Unknown error';
       set({ summary: null, isSummaryLoading: false, summaryError: message });
     }
+  },
+
+  loadSummaryForDate: async (getToken, context, date) => {
+    const state = useSummaryStore.getState();
+    await state.loadSummary(getToken, context, { date });
   },
 
   loadTodaySummary: async (getToken, context) => {

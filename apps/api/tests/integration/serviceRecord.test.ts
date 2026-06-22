@@ -10,7 +10,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { app } from '../../src/index.js';
-import type { User, Barbershop, Employee, Service, ServiceRecord } from '@prisma/client';
+import { getLocalDateStringInTimeZone, getUtcRangeForLocalDate, type SummaryPeriod } from '../../src/lib/dateUtils.js';
+import type { User, Barbershop, Employee, Service } from '@prisma/client';
 
 // ============================================
 // TEST FIXTURES
@@ -24,6 +25,8 @@ interface TestFixtures {
   clientUser: User;
   ownerB: User;
   shopB: Barbershop;
+  barberUserB: User;
+  employeeB: Employee;
   serviceA1: Service;
   serviceA2: Service;
   serviceB1: Service;
@@ -32,6 +35,7 @@ interface TestFixtures {
 }
 
 const fixtures: TestFixtures = {} as TestFixtures;
+const TEST_TIMEZONE = 'America/Argentina/Buenos_Aires';
 
 // ============================================
 // SETUP / TEARDOWN
@@ -133,6 +137,23 @@ beforeAll(async () => {
     },
   });
 
+  fixtures.barberUserB = await prisma.user.create({
+    data: {
+      clerkUserId: 'test_barberB_sr',
+      email: 'barberB_sr@test.com',
+      name: 'Barber B',
+      role: 'BARBER',
+    },
+  });
+
+  fixtures.employeeB = await prisma.employee.create({
+    data: {
+      barbershopId: fixtures.shopB.id,
+      userId: fixtures.barberUserB.id,
+      isActive: true,
+    },
+  });
+
   // Service A1 in Shop A
   fixtures.serviceA1 = await prisma.service.create({
     data: {
@@ -225,6 +246,99 @@ function getSummary(shopId: string, asClerkId: string, query?: string) {
 function getEmployeeSummary(shopId: string, empId: string, asClerkId: string, query?: string) {
   const url = `/api/v1/barbershops/${shopId}/employees/${empId}/service-records/summary${query ? '?' + query : ''}`;
   return request(app).get(url).set(authHeader(asClerkId));
+}
+
+function addDaysToDateString(dateStr: string, days: number): string {
+  const [year, month, day] = dateStr.split('-').map(Number) as [number, number, number];
+  const next = new Date(Date.UTC(year, month - 1, day + days));
+  return next.toISOString().slice(0, 10);
+}
+
+function startOfWeekMonday(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number) as [number, number, number];
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  const dayOfWeek = utcDate.getUTCDay();
+  const daysSinceMonday = (dayOfWeek + 6) % 7;
+  return addDaysToDateString(dateStr, -daysSinceMonday);
+}
+
+function findDateInCurrentMonthOutsideCurrentWeek(today: string): string {
+  const weekStart = startOfWeekMonday(today);
+  const weekEnd = addDaysToDateString(weekStart, 6);
+  const monthPrefix = today.slice(0, 7);
+
+  for (let day = 1; day <= 31; day++) {
+    const candidate = `${monthPrefix}-${String(day).padStart(2, '0')}`;
+    if (candidate < `${monthPrefix}-01` || candidate.slice(0, 7) !== monthPrefix) continue;
+    const parsed = new Date(`${candidate}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== candidate) continue;
+    if (candidate < weekStart || candidate > weekEnd) return candidate;
+  }
+
+  throw new Error('Expected to find a date in the current month outside the current week');
+}
+
+function findDateInCurrentYearOutsideCurrentMonth(today: string): string {
+  const yearPrefix = today.slice(0, 4);
+  const currentMonth = today.slice(0, 7);
+
+  for (let month = 1; month <= 12; month++) {
+    const candidate = `${yearPrefix}-${String(month).padStart(2, '0')}-15`;
+    if (candidate.slice(0, 7) === currentMonth) continue;
+    const parsed = new Date(`${candidate}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== candidate) continue;
+    return candidate;
+  }
+
+  throw new Error('Expected to find a date in the current year outside the current month');
+}
+
+function getCurrentPeriodFixtureDates() {
+  const today = getLocalDateStringInTimeZone(TEST_TIMEZONE);
+  const weekStart = startOfWeekMonday(today);
+
+  return {
+    today,
+    weekOnly: today === weekStart ? addDaysToDateString(today, 1) : weekStart,
+    monthOnly: findDateInCurrentMonthOutsideCurrentWeek(today),
+    yearOnly: findDateInCurrentYearOutsideCurrentMonth(today),
+    lastYear: `${String(Number(today.slice(0, 4)) - 1)}-12-15`,
+  };
+}
+
+function getExpectedPeriodRange(period: SummaryPeriod, today: string) {
+  if (period === 'today') {
+    return { rangeStart: today, rangeEnd: today };
+  }
+
+  if (period === 'week') {
+    const rangeStart = startOfWeekMonday(today);
+    return {
+      rangeStart,
+      rangeEnd: addDaysToDateString(rangeStart, 6),
+    };
+  }
+
+  if (period === 'month') {
+    const rangeStart = `${today.slice(0, 7)}-01`;
+    const [year, month] = rangeStart.split('-').map(Number) as [number, number, number];
+    const nextMonthStart = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+    return {
+      rangeStart,
+      rangeEnd: addDaysToDateString(nextMonthStart, -1),
+    };
+  }
+
+  const yearPrefix = today.slice(0, 4);
+  return {
+    rangeStart: `${yearPrefix}-01-01`,
+    rangeEnd: `${yearPrefix}-12-31`,
+  };
+}
+
+function performedAtForLocalDate(dateStr: string, hour = 12): Date {
+  const { startUtc } = getUtcRangeForLocalDate(dateStr, TEST_TIMEZONE);
+  return new Date(startUtc.getTime() + hour * 60 * 60_000);
 }
 
 // ============================================
@@ -1214,6 +1328,169 @@ describe('GET /api/v1/barbershops/:barbershopId/service-records/summary', () => 
     expect(res.body.data.totalRecords).toBe(1);
     expect(res.body.data.totalRevenueCents).toBe(2500);
   });
+
+  it.each([
+    ['today', 1, 1000],
+    ['week', 2, 3000],
+    ['month', 3, 6000],
+    ['year', 4, 10000],
+  ] satisfies Array<[SummaryPeriod, number, number]>)(
+    'OWNER period summary supports %s',
+    async (period, expectedRecords, expectedRevenue) => {
+      const dates = getCurrentPeriodFixtureDates();
+
+      await prisma.serviceRecord.createMany({
+        data: [
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 1000,
+            paymentMethod: 'CASH',
+            performedAt: performedAtForLocalDate(dates.today, 12),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 2000,
+            paymentMethod: 'CARD',
+            performedAt: performedAtForLocalDate(dates.weekOnly, 12),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA2.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 3000,
+            paymentMethod: 'TRANSFER',
+            performedAt: performedAtForLocalDate(dates.monthOnly, 12),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA2.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 4000,
+            paymentMethod: 'OTHER',
+            performedAt: performedAtForLocalDate(dates.yearOnly, 12),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 5000,
+            paymentMethod: 'CASH',
+            performedAt: performedAtForLocalDate(dates.lastYear, 12),
+          },
+        ],
+      });
+
+      const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, `period=${period}`);
+      const expectedRange = getExpectedPeriodRange(period, dates.today);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.period).toBe(period);
+      expect(res.body.data.rangeStart).toBe(expectedRange.rangeStart);
+      expect(res.body.data.rangeEnd).toBe(expectedRange.rangeEnd);
+      expect(res.body.data.totalRecords).toBe(expectedRecords);
+      expect(res.body.data.totalRevenueCents).toBe(expectedRevenue);
+    }
+  );
+
+  it('OWNER summary filters by employeeId for a period', async () => {
+    const dates = getCurrentPeriodFixtureDates();
+
+    await prisma.serviceRecord.createMany({
+      data: [
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.id,
+          serviceId: fixtures.serviceA1.id,
+          priceCents: 2500,
+          performedAt: performedAtForLocalDate(dates.today, 12),
+        },
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA2.id,
+          serviceId: fixtures.serviceA1.id,
+          priceCents: 3000,
+          performedAt: performedAtForLocalDate(dates.today, 13),
+        },
+      ],
+    });
+
+    const res = await getSummary(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      `period=today&employeeId=${fixtures.employeeA1.id}`
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.totalRecords).toBe(1);
+    expect(res.body.data.totalRevenueCents).toBe(2500);
+    expect(res.body.data.byEmployee).toHaveLength(1);
+    expect(res.body.data.byEmployee[0].employeeId).toBe(fixtures.employeeA1.id);
+  });
+
+  it('OWNER employee filter rejects employee from another shop — 404', async () => {
+    const res = await getSummary(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      `period=today&employeeId=${fixtures.employeeB.id}`
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it('OWNER employee filter rejects a missing employee — 404', async () => {
+    const res = await getSummary(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'period=today&employeeId=missing-employee-id'
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it('OWNER employee filter rejects an inactive employee — 400', async () => {
+    await prisma.employee.update({
+      where: { id: fixtures.employeeA2.id },
+      data: { isActive: false },
+    });
+
+    try {
+      const res = await getSummary(
+        fixtures.shopA.id,
+        fixtures.ownerA.clerkUserId,
+        `period=today&employeeId=${fixtures.employeeA2.id}`
+      );
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toContain('not active');
+    } finally {
+      await prisma.employee.update({
+        where: { id: fixtures.employeeA2.id },
+        data: { isActive: true },
+      });
+    }
+  });
+
+  it('invalid period returns 400', async () => {
+    const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, 'period=quarter');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('period');
+  });
+
+  it('sending both date and period returns 400', async () => {
+    const res = await getSummary(
+      fixtures.shopA.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-06-06&period=today'
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('cannot be used together');
+  });
 });
 
 // ============================================
@@ -1390,5 +1667,122 @@ describe('GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-re
     expect(res.status).toBe(200);
     expect(res.body.data.totalRecords).toBe(1);
     expect(res.body.data.totalRevenueCents).toBe(2500);
+  });
+
+  it.each([
+    ['today', 1, 1000],
+    ['week', 2, 3000],
+    ['month', 3, 6000],
+    ['year', 4, 10000],
+  ] satisfies Array<[SummaryPeriod, number, number]>)(
+    'BARBER own summary supports %s',
+    async (period, expectedRecords, expectedRevenue) => {
+      const dates = getCurrentPeriodFixtureDates();
+
+      await prisma.serviceRecord.createMany({
+        data: [
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 1000,
+            paymentMethod: 'CASH',
+            performedAt: performedAtForLocalDate(dates.today, 12),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 2000,
+            paymentMethod: 'CARD',
+            performedAt: performedAtForLocalDate(dates.weekOnly, 12),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 3000,
+            paymentMethod: 'TRANSFER',
+            performedAt: performedAtForLocalDate(dates.monthOnly, 12),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 4000,
+            paymentMethod: 'OTHER',
+            performedAt: performedAtForLocalDate(dates.yearOnly, 12),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 5000,
+            paymentMethod: 'CASH',
+            performedAt: performedAtForLocalDate(dates.lastYear, 12),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA2.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 9999,
+            paymentMethod: 'CASH',
+            performedAt: performedAtForLocalDate(dates.today, 13),
+          },
+        ],
+      });
+
+      const res = await getEmployeeSummary(
+        fixtures.shopA.id,
+        fixtures.employeeA1.id,
+        fixtures.barberUser.clerkUserId,
+        `period=${period}`
+      );
+      const expectedRange = getExpectedPeriodRange(period, dates.today);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.period).toBe(period);
+      expect(res.body.data.rangeStart).toBe(expectedRange.rangeStart);
+      expect(res.body.data.rangeEnd).toBe(expectedRange.rangeEnd);
+      expect(res.body.data.totalRecords).toBe(expectedRecords);
+      expect(res.body.data.totalRevenueCents).toBe(expectedRevenue);
+      expect(res.body.data.employeeId).toBe(fixtures.employeeA1.id);
+    }
+  );
+
+  it('BARBER cannot view another employee period summary — 403', async () => {
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id,
+      fixtures.employeeA2.id,
+      fixtures.barberUser.clerkUserId,
+      'period=week'
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.message).toContain('own records');
+  });
+
+  it('employee summary invalid period returns 400', async () => {
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id,
+      fixtures.employeeA1.id,
+      fixtures.ownerA.clerkUserId,
+      'period=quarter'
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('period');
+  });
+
+  it('employee summary rejects both date and period — 400', async () => {
+    const res = await getEmployeeSummary(
+      fixtures.shopA.id,
+      fixtures.employeeA1.id,
+      fixtures.ownerA.clerkUserId,
+      'date=2026-06-06&period=today'
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('cannot be used together');
   });
 });

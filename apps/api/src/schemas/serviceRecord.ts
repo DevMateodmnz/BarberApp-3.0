@@ -18,6 +18,8 @@ export const ServiceRecordDateSchema = z
     );
   }, 'Date must be a valid calendar date');
 
+export const SummaryPeriodSchema = z.enum(['today', 'week', 'month', 'year']);
+
 export const CreateServiceRecordSchema = z.object({
   employeeId: z.string().min(1, 'Employee ID is required'),
   serviceId: z.string().min(1, 'Service ID is required'),
@@ -29,3 +31,4 @@ export const CreateServiceRecordSchema = z.object({
 }).strict();
 
 export type CreateServiceRecordInput = z.infer<typeof CreateServiceRecordSchema>;
+export type SummaryPeriod = z.infer<typeof SummaryPeriodSchema>;

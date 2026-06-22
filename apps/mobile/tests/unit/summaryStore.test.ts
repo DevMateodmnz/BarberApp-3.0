@@ -75,7 +75,11 @@ describe('useSummaryStore', () => {
     expect(state.summary).toEqual(mockSummary);
     expect(state.isSummaryLoading).toBe(false);
     expect(state.summaryError).toBeNull();
-    expect(mockFetchBarbershopDailySummary).toHaveBeenCalledWith(getToken, 'shop-1', expect.any(String));
+    expect(mockFetchBarbershopDailySummary).toHaveBeenCalledWith(
+      getToken,
+      'shop-1',
+      { date: expect.any(String) }
+    );
   });
 
   it('BARBER with employeeId loads employee summary', async () => {
@@ -106,7 +110,81 @@ describe('useSummaryStore', () => {
 
     const state = useSummaryStore.getState();
     expect(state.summary).toEqual(mockSummary);
-    expect(mockFetchEmployeeDailySummary).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1', expect.any(String));
+    expect(mockFetchEmployeeDailySummary).toHaveBeenCalledWith(
+      getToken,
+      'shop-1',
+      'emp-1',
+      { date: expect.any(String) }
+    );
+  });
+
+  it('OWNER loadSummary supports period and employee filters', async () => {
+    const { useSummaryStore } = await import('../../src/lib/summaryStore.js');
+
+    const mockSummary = {
+      period: 'month',
+      rangeStart: '2026-06-01',
+      rangeEnd: '2026-06-30',
+      totalRecords: 4,
+      totalRevenueCents: 8000,
+      byEmployee: [],
+      byPaymentMethod: [],
+    };
+    mockFetchBarbershopDailySummary.mockResolvedValueOnce(mockSummary);
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    const ownerContext = {
+      userId: 'u1',
+      role: 'OWNER' as const,
+      barbershopId: 'shop-1',
+      barbershopName: 'Test Shop',
+      employeeId: null,
+      employeeName: null,
+    };
+
+    await useSummaryStore.getState().loadSummary(getToken, ownerContext, {
+      period: 'month',
+      employeeId: 'emp-2',
+    });
+
+    expect(mockFetchBarbershopDailySummary).toHaveBeenCalledWith(getToken, 'shop-1', {
+      period: 'month',
+      employeeId: 'emp-2',
+    });
+    expect(useSummaryStore.getState().summary).toEqual(mockSummary);
+  });
+
+  it('BARBER loadSummary supports period filters', async () => {
+    const { useSummaryStore } = await import('../../src/lib/summaryStore.js');
+
+    const mockSummary = {
+      period: 'year',
+      rangeStart: '2026-01-01',
+      rangeEnd: '2026-12-31',
+      employeeId: 'emp-1',
+      employeeName: 'Carlos',
+      totalRecords: 14,
+      totalRevenueCents: 32000,
+      byPaymentMethod: [],
+    };
+    mockFetchEmployeeDailySummary.mockResolvedValueOnce(mockSummary);
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    const barberContext = {
+      userId: 'u2',
+      role: 'BARBER' as const,
+      barbershopId: 'shop-1',
+      barbershopName: 'Test Shop',
+      employeeId: 'emp-1',
+      employeeName: 'Carlos',
+    };
+
+    await useSummaryStore.getState().loadSummary(getToken, barberContext, { period: 'year' });
+
+    expect(mockFetchEmployeeDailySummary).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1', {
+      period: 'year',
+    });
+    expect(useSummaryStore.getState().summary).toEqual(mockSummary);
   });
 
   it('CLIENT does not call any summary endpoint', async () => {
@@ -246,7 +324,7 @@ describe('loadSummaryForDate', () => {
     expect(state.summary).toEqual(mockSummary);
     expect(state.isSummaryLoading).toBe(false);
     expect(state.summaryError).toBeNull();
-    expect(mockFetchBarbershopDailySummary).toHaveBeenCalledWith(getToken, 'shop-1', '2026-06-05');
+    expect(mockFetchBarbershopDailySummary).toHaveBeenCalledWith(getToken, 'shop-1', { date: '2026-06-05' });
   });
 
   it('BARBER with employeeId loads employee summary for a specific date', async () => {
@@ -275,7 +353,7 @@ describe('loadSummaryForDate', () => {
 
     const state = useSummaryStore.getState();
     expect(state.summary).toEqual(mockSummary);
-    expect(mockFetchEmployeeDailySummary).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1', '2026-06-07');
+    expect(mockFetchEmployeeDailySummary).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1', { date: '2026-06-07' });
   });
 
   it('CLIENT does not call any summary endpoint', async () => {
@@ -381,6 +459,10 @@ describe('loadSummaryForDate', () => {
     const state = useSummaryStore.getState();
     expect(state.summary).toEqual(mockSummary);
     // Should pass today's date string, whatever it is
-    expect(mockFetchBarbershopDailySummary).toHaveBeenCalledWith(getToken, 'shop-1', expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(mockFetchBarbershopDailySummary).toHaveBeenCalledWith(
+      getToken,
+      'shop-1',
+      { date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }
+    );
   });
 });

@@ -5,7 +5,19 @@
  * BARBER: GET /barbershops/:id/employees/:empId/service-records/summary?date=
  */
 import { api, type ApiResponse, type GetToken } from './api.js';
-import type { BarbershopDailySummary, EmployeeDailySummary } from './types.js';
+import type { BarbershopDailySummary, EmployeeDailySummary, SummaryQuery } from './types.js';
+
+function toSummaryParams(query: string | SummaryQuery): Record<string, string> {
+  if (typeof query === 'string') {
+    return { date: query };
+  }
+
+  const params: Record<string, string> = {};
+  if (query.date) params.date = query.date;
+  if (query.period) params.period = query.period;
+  if (query.employeeId) params.employeeId = query.employeeId;
+  return params;
+}
 
 /**
  * Fetches the OWNER's barbershop daily summary.
@@ -17,12 +29,15 @@ import type { BarbershopDailySummary, EmployeeDailySummary } from './types.js';
 export async function fetchBarbershopDailySummary(
   getToken: GetToken,
   barbershopId: string,
-  date: string
+  query: string | SummaryQuery
 ): Promise<BarbershopDailySummary> {
   const token = await getToken();
   const response = await api.get<ApiResponse<BarbershopDailySummary>>(
-    `/barbershops/${barbershopId}/service-records/summary?date=${date}`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+    `/barbershops/${barbershopId}/service-records/summary`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: toSummaryParams(query),
+    }
   );
 
   const { data } = response;
@@ -44,12 +59,15 @@ export async function fetchEmployeeDailySummary(
   getToken: GetToken,
   barbershopId: string,
   employeeId: string,
-  date: string
+  query: string | SummaryQuery
 ): Promise<EmployeeDailySummary> {
   const token = await getToken();
   const response = await api.get<ApiResponse<EmployeeDailySummary>>(
-    `/barbershops/${barbershopId}/employees/${employeeId}/service-records/summary?date=${date}`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
+    `/barbershops/${barbershopId}/employees/${employeeId}/service-records/summary`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: toSummaryParams(query),
+    }
   );
 
   const { data } = response;
