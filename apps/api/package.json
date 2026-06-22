@@ -23,7 +23,9 @@
     "db:migrate:test": "prisma migrate dev --schema=./prisma/test.schema.prisma",
     "db:reset": "prisma migrate reset --force",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "qa:bootstrap": "tsx --env-file=.env src/scripts/qaBootstrap.ts",
+    "qa:verify": "tsx --env-file=.env src/scripts/qaVerify.ts"
   },
   "dependencies": {
     "@clerk/express": "^1.0.0",

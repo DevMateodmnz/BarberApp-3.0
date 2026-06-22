@@ -85,9 +85,9 @@ Detailed checklist: [`docs/manual-tests/mobile-mvp-final-qa.md`](../manual-tests
 
 - **Date executed**: 2026-06-15
 - **Device**: Physical Android phone with Expo Go
-- **Owner Clerk user**: `real OWNER QA account` (`local-only OWNER Clerk ID`)
-- **Barber Clerk user**: `real BARBER QA account` (`local-only BARBER Clerk ID`)
-- **Barbershop**: Barbería Classic
+- **Owner Clerk user**: real OWNER QA account (masked in local-only bootstrap config)
+- **Barber Clerk user**: real BARBER QA account (masked in local-only bootstrap config)
+- **Barbershop**: local QA barbershop context validated
 - **DB barber record**: active BARBER employee mapping validated
 - **Result**: All OWNER and BARBER functional phases passed. No P0/P1 blockers found for the pre-redesign baseline.
 
