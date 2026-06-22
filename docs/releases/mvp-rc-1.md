@@ -19,6 +19,11 @@
 
 > Note: the mobile redesign has a fresh automated baseline. A redesign-specific physical-device regression pass still needs to be executed and recorded.
 
+## Operational Release Notes
+
+- Production API startup and credentialed CORS now have a dedicated runbook: [`docs/releases/api-production-runbook.md`](./api-production-runbook.md)
+- Production releases should use `prisma migrate deploy` and must not rely on local QA bootstrap or demo seed workflows.
+
 ---
 
 ## Mobile Visual Redesign Status

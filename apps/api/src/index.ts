@@ -1,57 +1,37 @@
-/**
- * BarberApp API - Entry Point
- */
-import express from 'express';
-import cors from 'cors';
-import { errorHandler } from './middleware/errorHandler.js';
-import { appointmentRateLimit } from './middleware/rateLimit.js';
-import appointmentRoutes from './routes/appointments.js';
-import barbershopRoutes from './routes/barbershops.js';
-import meRoutes from './routes/me.js';
-import webhookRoutes from './routes/webhooks.js';
+import type { Server } from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createApp } from './app.js';
+import { readApiRuntimeConfig } from './config/runtime.js';
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+export async function startServer(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<Server> {
+  const config = readApiRuntimeConfig(env);
+  const app = createApp(config);
 
-// Trust proxy for correct client IP detection behind reverse proxy (nginx, ALB, etc.)
-// Uncomment and configure when deploying behind a proxy:
-//   app.set('trust proxy', 1);
-//   app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
+  return await new Promise<Server>((resolve, reject) => {
+    const server = app.listen(config.port, () => {
+      // eslint-disable-next-line no-console
+      console.log(`BarberApp API running on port ${config.port}`);
+      resolve(server);
+    });
 
-// Global middleware
-app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*', credentials: true }));
+    server.on('error', reject);
+  });
+}
 
-// Webhook route — MUST be before express.json() for raw body capture
-// express.raw() preserves the raw body Buffer for Svix signature verification
-app.use('/api/v1/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
+const isDirectExecution =
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-// JSON body parser for all other routes
-app.use(express.json());
+if (isDirectExecution) {
+  startServer().catch((error: unknown) => {
+    const message =
+      error instanceof Error ? error.message : 'Unknown startup error';
 
-// Health check (no auth required)
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Placeholder route for testing
-app.get('/api/v1/ping', (_req, res) => {
-  res.json({ success: true, data: { message: 'pong' } });
-});
-
-// API routes
-app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
-app.use('/api/v1/barbershops', barbershopRoutes);
-app.use('/api/v1/me', meRoutes);
-
-// Global error handler (must be last)
-app.use(errorHandler);
-
-export { app };
-
-// Only start server if run directly (not imported for testing)
-if (process.argv[1]?.includes('index.ts')) {
-  app.listen(PORT, () => {
     // eslint-disable-next-line no-console
-    console.log(`BarberApp API running on port ${PORT}`);
+    console.error(`API startup failed: ${message}`);
+    process.exit(1);
   });
 }

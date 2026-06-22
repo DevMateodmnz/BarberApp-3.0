@@ -89,12 +89,14 @@ Copy and edit `apps/api/.env`:
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/barberapp
 CLERK_SECRET_KEY=sk_test_<your-real-clerk-secret-key>
-CLERK_PUBLISHABLE_KEY=pk_test_<your-real-clerk-publishable-key>
+CLERK_WEBHOOK_SECRET=whsec_<real-or-placeholder-webhook-secret>
 NODE_ENV=development
 PORT=3000
+# Optional explicit browser allowlist for local web-based callers:
+# ALLOWED_ORIGIN=http://localhost:8081,http://192.168.x.x:8081
 ```
 
-**Both Clerk keys are required**: the backend SDK uses `CLERK_PUBLISHABLE_KEY` for JWT verification and `CLERK_SECRET_KEY` for server-to-server operations. Copy both from Clerk Dashboard → API Keys.
+`CLERK_SECRET_KEY` is required for authenticated backend requests. `CLERK_WEBHOOK_SECRET` is required when you want local Clerk webhook verification to succeed. The mobile publishable key belongs in `apps/mobile/.env.local`, not the API `.env`.
 
 Start the API:
 

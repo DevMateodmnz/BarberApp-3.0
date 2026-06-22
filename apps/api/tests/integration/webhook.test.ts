@@ -9,7 +9,9 @@ import { describe, it, expect, afterAll } from 'vitest';
 import { Webhook } from 'standardwebhooks';
 import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
-import { app } from '../../src/index.js';
+import { createAppFromEnv } from '../../src/app.js';
+
+const app = createAppFromEnv();
 
 const TEST_SECRET = process.env.CLERK_WEBHOOK_SECRET!;
 

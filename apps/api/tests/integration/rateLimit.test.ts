@@ -8,24 +8,20 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { createAppFromEnv } from '../../src/app.js';
+import { createRateLimiter } from '../../src/middleware/rateLimit.js';
 
 describe('Rate Limiting', () => {
   let app: express.Express;
 
-  beforeAll(async () => {
-    // Set test-specific rate limit config before importing the middleware
-    process.env.RATE_LIMIT_ENABLED = 'true';
-    process.env.RATE_LIMIT_MAX = '3';
-    process.env.RATE_LIMIT_WINDOW_MS = '60000';
-
-    // Dynamic import to pick up env vars set above
-    const { createRateLimiter } = await import(
-      '../../src/middleware/rateLimit.js'
-    );
-
+  beforeAll(() => {
     // Build an isolated Express app with the limiter applied to a test route
     app = express();
-    const limiter = createRateLimiter();
+    const limiter = createRateLimiter({
+      enabled: true,
+      max: 3,
+      windowMs: 60000,
+    });
     app.get('/test-rate-limit', limiter, (_req, res) => {
       res.json({ success: true });
     });
@@ -56,9 +52,7 @@ describe('Rate Limiting', () => {
   });
 
   it('health check is not rate-limited', async () => {
-    // Use the real app (rate limiting disabled in test env via setup.ts)
-    // Dynamic import since static import is hoisted before env vars
-    const { app: realApp } = await import('../../src/index.js');
+    const realApp = createAppFromEnv();
 
     const res = await request(realApp).get('/health');
     expect(res.status).toBe(200);

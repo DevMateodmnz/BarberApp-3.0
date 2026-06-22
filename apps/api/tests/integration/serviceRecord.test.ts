@@ -9,9 +9,11 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
-import { app } from '../../src/index.js';
+import { createAppFromEnv } from '../../src/app.js';
 import { getLocalDateStringInTimeZone, getUtcRangeForLocalDate, type SummaryPeriod } from '../../src/lib/dateUtils.js';
 import type { User, Barbershop, Employee, Service } from '@prisma/client';
+
+const app = createAppFromEnv();
 
 // ============================================
 // TEST FIXTURES

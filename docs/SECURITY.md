@@ -108,9 +108,9 @@ docker compose up -d postgres_test
 cd apps/api && npm install
 
 # 3. Apply migrations to test DB
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5433/barberapp_test"
-npx prisma generate
-npx prisma db push
+export DATABASE_URL_TEST="postgresql://postgres:postgres@localhost:5433/barberapp_test"
+npm run db:generate --workspace @barberapp/api
+npm run db:migrate:test --workspace @barberapp/api
 
 # 4. Run all tests
 npm test
@@ -137,7 +137,7 @@ npx vitest run tests/db/models.test.ts
 
 2. **Rate limiting — RESOLVED**: In-memory rate limiting is implemented for `/api/v1/appointments` routes (window: 15 min, max: 100 requests). Uses `express-rate-limit` with MemoryStore — acceptable for single-instance MVP. Production horizontal scaling should use a shared store (Redis, etc.). See `apps/api/src/middleware/rateLimit.ts`.
 
-3. **CORS**: Configured with `*` wildcard for development. Must restrict to mobile app origin in production.
+3. **CORS**: Production now requires an explicit HTTP(S) allowlist in `ALLOWED_ORIGIN`. Non-production can reflect concrete request origins dynamically for credentialed local development, but never returns `*` with credentials.
 
 4. **Clerk webhook — RESOLVED**: Webhook endpoint implemented at `POST /api/v1/webhooks/clerk` with Svix signature verification via `standardwebhooks`. Handles `user.created`, `user.updated`, `user.deleted` events. Role is now read from Clerk `public_metadata.role` (valid values: `OWNER`, `BARBER`, `CLIENT`). When metadata is absent or invalid, defaults to `CLIENT`. Webhook NEVER downgrades an existing `OWNER` or `BARBER` role via `user.updated` — privilege preservation is enforced by `resolveRole()` in `userSyncService.ts`. The DB `User.role` remains the runtime source of truth for auth middleware. `unsafe_metadata` is intentionally NOT trusted for role assignment. See `apps/api/src/services/userSyncService.ts`.
 
