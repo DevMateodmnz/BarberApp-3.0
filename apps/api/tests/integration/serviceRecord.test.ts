@@ -6,7 +6,7 @@
  * GET  /api/v1/barbershops/:barbershopId/service-records
  * GET  /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { createAppFromEnv } from '../../src/app.js';
@@ -38,6 +38,7 @@ interface TestFixtures {
 
 const fixtures: TestFixtures = {} as TestFixtures;
 const TEST_TIMEZONE = 'America/Argentina/Buenos_Aires';
+const FIXED_PERIOD_NOW = new Date('2026-06-23T00:32:00.000Z');
 
 // ============================================
 // SETUP / TEARDOWN
@@ -306,6 +307,17 @@ function getCurrentPeriodFixtureDates() {
     yearOnly: findDateInCurrentYearOutsideCurrentMonth(today),
     lastYear: `${String(Number(today.slice(0, 4)) - 1)}-12-15`,
   };
+}
+
+async function withFixedNow<T>(now: Date, fn: () => Promise<T>): Promise<T> {
+  vi.useFakeTimers();
+  vi.setSystemTime(now);
+
+  try {
+    return await fn();
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 function getExpectedPeriodRange(period: SummaryPeriod, today: string) {
@@ -701,39 +713,51 @@ describe('GET /api/v1/barbershops/:barbershopId/service-records', () => {
   });
 
   it('OWNER list filters by date', async () => {
-    // Create records with different dates
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    await withFixedNow(FIXED_PERIOD_NOW, async () => {
+      const localDate = getLocalDateStringInTimeZone(TEST_TIMEZONE);
 
-    await prisma.serviceRecord.create({
-      data: {
-        barbershopId: fixtures.shopA.id,
-        employeeId: fixtures.employeeA1.id,
-        serviceId: fixtures.serviceA1.id,
-        priceCents: 2500,
-        performedAt: yesterday,
-      },
+      expect(localDate).toBe('2026-06-22');
+
+      await prisma.serviceRecord.createMany({
+        data: [
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 2500,
+            // 2026-06-21 23:59:59.999 in Buenos Aires
+            performedAt: new Date('2026-06-22T02:59:59.999Z'),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA2.id,
+            priceCents: 4000,
+            // 2026-06-22 12:00 in Buenos Aires
+            performedAt: new Date('2026-06-22T15:00:00.000Z'),
+          },
+          {
+            barbershopId: fixtures.shopA.id,
+            employeeId: fixtures.employeeA1.id,
+            serviceId: fixtures.serviceA1.id,
+            priceCents: 5500,
+            // 2026-06-23 00:00 in Buenos Aires
+            performedAt: new Date('2026-06-23T03:00:00.000Z'),
+          },
+        ],
+      });
+
+      const res = await listBarbershopRecords(
+        fixtures.shopA.id,
+        fixtures.ownerA.clerkUserId,
+        `date=${localDate}`
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.length).toBe(1);
+      expect(res.body.data[0].priceCents).toBe(4000);
+      expect(res.body.data[0].performedAt).toBe('2026-06-22T15:00:00.000Z');
     });
-    await prisma.serviceRecord.create({
-      data: {
-        barbershopId: fixtures.shopA.id,
-        employeeId: fixtures.employeeA1.id,
-        serviceId: fixtures.serviceA2.id,
-        priceCents: 4000,
-        performedAt: today,
-      },
-    });
-
-    const dateStr = today.toISOString().slice(0, 10);
-    const res = await listBarbershopRecords(
-      fixtures.shopA.id,
-      fixtures.ownerA.clerkUserId,
-      `date=${dateStr}`
-    );
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.length).toBe(1);
   });
 
   it('BARBER cannot access barbershop records — 403', async () => {
@@ -1339,6 +1363,69 @@ describe('GET /api/v1/barbershops/:barbershopId/service-records/summary', () => 
   ] satisfies Array<[SummaryPeriod, number, number]>)(
     'OWNER period summary supports %s',
     async (period, expectedRecords, expectedRevenue) => {
+      await withFixedNow(FIXED_PERIOD_NOW, async () => {
+        const dates = getCurrentPeriodFixtureDates();
+
+        await prisma.serviceRecord.createMany({
+          data: [
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA1.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 1000,
+              paymentMethod: 'CASH',
+              performedAt: performedAtForLocalDate(dates.today, 12),
+            },
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA1.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 2000,
+              paymentMethod: 'CARD',
+              performedAt: performedAtForLocalDate(dates.weekOnly, 12),
+            },
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA2.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 3000,
+              paymentMethod: 'TRANSFER',
+              performedAt: performedAtForLocalDate(dates.monthOnly, 12),
+            },
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA2.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 4000,
+              paymentMethod: 'OTHER',
+              performedAt: performedAtForLocalDate(dates.yearOnly, 12),
+            },
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA1.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 5000,
+              paymentMethod: 'CASH',
+              performedAt: performedAtForLocalDate(dates.lastYear, 12),
+            },
+          ],
+        });
+
+        const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, `period=${period}`);
+        const expectedRange = getExpectedPeriodRange(period, dates.today);
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.period).toBe(period);
+        expect(res.body.data.rangeStart).toBe(expectedRange.rangeStart);
+        expect(res.body.data.rangeEnd).toBe(expectedRange.rangeEnd);
+        expect(res.body.data.totalRecords).toBe(expectedRecords);
+        expect(res.body.data.totalRevenueCents).toBe(expectedRevenue);
+      });
+    }
+  );
+
+  it('OWNER summary filters by employeeId for a period', async () => {
+    await withFixedNow(FIXED_PERIOD_NOW, async () => {
       const dates = getCurrentPeriodFixtureDates();
 
       await prisma.serviceRecord.createMany({
@@ -1347,90 +1434,31 @@ describe('GET /api/v1/barbershops/:barbershopId/service-records/summary', () => 
             barbershopId: fixtures.shopA.id,
             employeeId: fixtures.employeeA1.id,
             serviceId: fixtures.serviceA1.id,
-            priceCents: 1000,
-            paymentMethod: 'CASH',
+            priceCents: 2500,
             performedAt: performedAtForLocalDate(dates.today, 12),
-          },
-          {
-            barbershopId: fixtures.shopA.id,
-            employeeId: fixtures.employeeA1.id,
-            serviceId: fixtures.serviceA1.id,
-            priceCents: 2000,
-            paymentMethod: 'CARD',
-            performedAt: performedAtForLocalDate(dates.weekOnly, 12),
           },
           {
             barbershopId: fixtures.shopA.id,
             employeeId: fixtures.employeeA2.id,
             serviceId: fixtures.serviceA1.id,
             priceCents: 3000,
-            paymentMethod: 'TRANSFER',
-            performedAt: performedAtForLocalDate(dates.monthOnly, 12),
-          },
-          {
-            barbershopId: fixtures.shopA.id,
-            employeeId: fixtures.employeeA2.id,
-            serviceId: fixtures.serviceA1.id,
-            priceCents: 4000,
-            paymentMethod: 'OTHER',
-            performedAt: performedAtForLocalDate(dates.yearOnly, 12),
-          },
-          {
-            barbershopId: fixtures.shopA.id,
-            employeeId: fixtures.employeeA1.id,
-            serviceId: fixtures.serviceA1.id,
-            priceCents: 5000,
-            paymentMethod: 'CASH',
-            performedAt: performedAtForLocalDate(dates.lastYear, 12),
+            performedAt: performedAtForLocalDate(dates.today, 13),
           },
         ],
       });
 
-      const res = await getSummary(fixtures.shopA.id, fixtures.ownerA.clerkUserId, `period=${period}`);
-      const expectedRange = getExpectedPeriodRange(period, dates.today);
+      const res = await getSummary(
+        fixtures.shopA.id,
+        fixtures.ownerA.clerkUserId,
+        `period=today&employeeId=${fixtures.employeeA1.id}`
+      );
 
       expect(res.status).toBe(200);
-      expect(res.body.data.period).toBe(period);
-      expect(res.body.data.rangeStart).toBe(expectedRange.rangeStart);
-      expect(res.body.data.rangeEnd).toBe(expectedRange.rangeEnd);
-      expect(res.body.data.totalRecords).toBe(expectedRecords);
-      expect(res.body.data.totalRevenueCents).toBe(expectedRevenue);
-    }
-  );
-
-  it('OWNER summary filters by employeeId for a period', async () => {
-    const dates = getCurrentPeriodFixtureDates();
-
-    await prisma.serviceRecord.createMany({
-      data: [
-        {
-          barbershopId: fixtures.shopA.id,
-          employeeId: fixtures.employeeA1.id,
-          serviceId: fixtures.serviceA1.id,
-          priceCents: 2500,
-          performedAt: performedAtForLocalDate(dates.today, 12),
-        },
-        {
-          barbershopId: fixtures.shopA.id,
-          employeeId: fixtures.employeeA2.id,
-          serviceId: fixtures.serviceA1.id,
-          priceCents: 3000,
-          performedAt: performedAtForLocalDate(dates.today, 13),
-        },
-      ],
+      expect(res.body.data.totalRecords).toBe(1);
+      expect(res.body.data.totalRevenueCents).toBe(2500);
+      expect(res.body.data.byEmployee).toHaveLength(1);
+      expect(res.body.data.byEmployee[0].employeeId).toBe(fixtures.employeeA1.id);
     });
-
-    const res = await getSummary(
-      fixtures.shopA.id,
-      fixtures.ownerA.clerkUserId,
-      `period=today&employeeId=${fixtures.employeeA1.id}`
-    );
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.totalRecords).toBe(1);
-    expect(res.body.data.totalRevenueCents).toBe(2500);
-    expect(res.body.data.byEmployee).toHaveLength(1);
-    expect(res.body.data.byEmployee[0].employeeId).toBe(fixtures.employeeA1.id);
   });
 
   it('OWNER employee filter rejects employee from another shop — 404', async () => {
@@ -1679,76 +1707,78 @@ describe('GET /api/v1/barbershops/:barbershopId/employees/:employeeId/service-re
   ] satisfies Array<[SummaryPeriod, number, number]>)(
     'BARBER own summary supports %s',
     async (period, expectedRecords, expectedRevenue) => {
-      const dates = getCurrentPeriodFixtureDates();
+      await withFixedNow(FIXED_PERIOD_NOW, async () => {
+        const dates = getCurrentPeriodFixtureDates();
 
-      await prisma.serviceRecord.createMany({
-        data: [
-          {
-            barbershopId: fixtures.shopA.id,
-            employeeId: fixtures.employeeA1.id,
-            serviceId: fixtures.serviceA1.id,
-            priceCents: 1000,
-            paymentMethod: 'CASH',
-            performedAt: performedAtForLocalDate(dates.today, 12),
-          },
-          {
-            barbershopId: fixtures.shopA.id,
-            employeeId: fixtures.employeeA1.id,
-            serviceId: fixtures.serviceA1.id,
-            priceCents: 2000,
-            paymentMethod: 'CARD',
-            performedAt: performedAtForLocalDate(dates.weekOnly, 12),
-          },
-          {
-            barbershopId: fixtures.shopA.id,
-            employeeId: fixtures.employeeA1.id,
-            serviceId: fixtures.serviceA1.id,
-            priceCents: 3000,
-            paymentMethod: 'TRANSFER',
-            performedAt: performedAtForLocalDate(dates.monthOnly, 12),
-          },
-          {
-            barbershopId: fixtures.shopA.id,
-            employeeId: fixtures.employeeA1.id,
-            serviceId: fixtures.serviceA1.id,
-            priceCents: 4000,
-            paymentMethod: 'OTHER',
-            performedAt: performedAtForLocalDate(dates.yearOnly, 12),
-          },
-          {
-            barbershopId: fixtures.shopA.id,
-            employeeId: fixtures.employeeA1.id,
-            serviceId: fixtures.serviceA1.id,
-            priceCents: 5000,
-            paymentMethod: 'CASH',
-            performedAt: performedAtForLocalDate(dates.lastYear, 12),
-          },
-          {
-            barbershopId: fixtures.shopA.id,
-            employeeId: fixtures.employeeA2.id,
-            serviceId: fixtures.serviceA1.id,
-            priceCents: 9999,
-            paymentMethod: 'CASH',
-            performedAt: performedAtForLocalDate(dates.today, 13),
-          },
-        ],
+        await prisma.serviceRecord.createMany({
+          data: [
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA1.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 1000,
+              paymentMethod: 'CASH',
+              performedAt: performedAtForLocalDate(dates.today, 12),
+            },
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA1.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 2000,
+              paymentMethod: 'CARD',
+              performedAt: performedAtForLocalDate(dates.weekOnly, 12),
+            },
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA1.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 3000,
+              paymentMethod: 'TRANSFER',
+              performedAt: performedAtForLocalDate(dates.monthOnly, 12),
+            },
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA1.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 4000,
+              paymentMethod: 'OTHER',
+              performedAt: performedAtForLocalDate(dates.yearOnly, 12),
+            },
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA1.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 5000,
+              paymentMethod: 'CASH',
+              performedAt: performedAtForLocalDate(dates.lastYear, 12),
+            },
+            {
+              barbershopId: fixtures.shopA.id,
+              employeeId: fixtures.employeeA2.id,
+              serviceId: fixtures.serviceA1.id,
+              priceCents: 9999,
+              paymentMethod: 'CASH',
+              performedAt: performedAtForLocalDate(dates.today, 13),
+            },
+          ],
+        });
+
+        const res = await getEmployeeSummary(
+          fixtures.shopA.id,
+          fixtures.employeeA1.id,
+          fixtures.barberUser.clerkUserId,
+          `period=${period}`
+        );
+        const expectedRange = getExpectedPeriodRange(period, dates.today);
+
+        expect(res.status).toBe(200);
+        expect(res.body.data.period).toBe(period);
+        expect(res.body.data.rangeStart).toBe(expectedRange.rangeStart);
+        expect(res.body.data.rangeEnd).toBe(expectedRange.rangeEnd);
+        expect(res.body.data.totalRecords).toBe(expectedRecords);
+        expect(res.body.data.totalRevenueCents).toBe(expectedRevenue);
+        expect(res.body.data.employeeId).toBe(fixtures.employeeA1.id);
       });
-
-      const res = await getEmployeeSummary(
-        fixtures.shopA.id,
-        fixtures.employeeA1.id,
-        fixtures.barberUser.clerkUserId,
-        `period=${period}`
-      );
-      const expectedRange = getExpectedPeriodRange(period, dates.today);
-
-      expect(res.status).toBe(200);
-      expect(res.body.data.period).toBe(period);
-      expect(res.body.data.rangeStart).toBe(expectedRange.rangeStart);
-      expect(res.body.data.rangeEnd).toBe(expectedRange.rangeEnd);
-      expect(res.body.data.totalRecords).toBe(expectedRecords);
-      expect(res.body.data.totalRevenueCents).toBe(expectedRevenue);
-      expect(res.body.data.employeeId).toBe(fixtures.employeeA1.id);
     }
   );
 

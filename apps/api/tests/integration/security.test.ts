@@ -13,6 +13,7 @@ import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { createAppFromEnv } from '../../src/app.js';
 import type { User, Barbershop, Employee, Service } from '@prisma/client';
+import { getFutureOpenBusinessTime, getNextLocalWeekdayTime } from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
 
@@ -254,12 +255,7 @@ function authHeader(clerkUserId: string) {
  * Skips Sunday to ensure the resulting day is always open.
  */
 function businessHoursDate(daysFromNow = 1): string {
-  const d = new Date();
-  d.setDate(d.getDate() + daysFromNow);
-  // Skip Sunday
-  if (d.getDay() === 0) d.setDate(d.getDate() + 1);
-  d.setHours(10, 0, 0, 0);
-  return d.toISOString();
+  return getFutureOpenBusinessTime(daysFromNow).toISOString();
 }
 
 /**
@@ -1046,24 +1042,10 @@ describe('Business Hours Enforcement', () => {
     hours: number,
     minutes = 0
   ): string {
-    // Find next occurrence of the target day
-    const now = new Date();
-    // Get current day in UTC (approx — fine for test offset)
-    const utcDay = now.getUTCDay();
-    let daysAhead = dayOfWeek - utcDay;
-    if (daysAhead <= 0) daysAhead += 7;
-
-    const d = new Date(Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate() + daysAhead,
-      hours + 3, // UTC-3 offset for Argentina
-      minutes,
-      0,
-      0
-    ));
-
-    return d.toISOString();
+    return getNextLocalWeekdayTime(
+      dayOfWeek,
+      `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+    ).toISOString();
   }
 
   async function bookAt(dayOfWeek: number, hours: number, minutes = 0) {

@@ -9,6 +9,7 @@ import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { createAppFromEnv } from '../../src/app.js';
 import type { User, Barbershop, Employee, Service } from '@prisma/client';
+import { getNextLocalWeekdayTime } from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
 
@@ -747,9 +748,7 @@ describe('Appointment booking with assigned/unassigned services', () => {
       data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
     });
 
-    const nextMonday = new Date();
-    nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
-    nextMonday.setHours(13, 0, 0, 0); // 10 AM local (UTC-3 → 13 UTC)
+    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
 
     const res = await request(app)
       .post('/api/v1/appointments')
@@ -767,9 +766,7 @@ describe('Appointment booking with assigned/unassigned services', () => {
 
   it('appointment booking fails after service is unassigned', async () => {
     // No service assigned — booking should fail
-    const nextMonday = new Date();
-    nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
-    nextMonday.setHours(13, 0, 0, 0);
+    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
 
     const res = await request(app)
       .post('/api/v1/appointments')
@@ -917,9 +914,7 @@ describe('DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId', () =>
   }
 
   function bookAppointment(shopId: string, empId: string, svcId: string) {
-    const nextMonday = new Date();
-    nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
-    nextMonday.setHours(13, 0, 0, 0);
+    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
     return request(app)
       .post('/api/v1/appointments')
       .set(authHeader(fixtures.clientUser.clerkUserId))
@@ -1264,11 +1259,7 @@ describe('PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactiva
     );
 
     // Book appointment
-    const nextMonday = new Date();
-    nextMonday.setDate(
-      nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7)
-    );
-    nextMonday.setHours(13, 0, 0, 0);
+    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
 
     const res = await request(app)
       .post('/api/v1/appointments')

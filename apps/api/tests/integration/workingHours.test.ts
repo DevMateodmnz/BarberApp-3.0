@@ -57,23 +57,6 @@ async function resetWorkingHours(shopId: string) {
   });
 }
 
-/**
- * Builds a Date for the next occurrence of the given dayOfWeek
- * at the given local time (UTC-3, Argentina/Buenos_Aires).
- * dayOfWeek: 0=Sun, 1=Mon, ..., 6=Sat
- * timeStr: "HH:mm"
- */
-function makeDateForDayAndTime(dayOfWeek: number, timeStr: string): Date {
-  const [h, m] = timeStr.split(':').map(Number) as [number, number];
-  const now = new Date();
-  const target = new Date(now);
-  const daysUntil = (dayOfWeek - now.getDay() + 7) % 7 || 7;
-  target.setDate(now.getDate() + daysUntil);
-  // Convert local time (UTC-3) to UTC: add 3 hours
-  target.setUTCHours(h! + 3, m!, 0, 0);
-  return target;
-}
-
 async function setupForBooking(shopId: string) {
   // Create employee for barberUser
   const employee = await prisma.employee.create({
@@ -345,9 +328,11 @@ describe('PUT /api/v1/barbershops/:barbershopId/working-hours', () => {
   });
 
   it('narrow window — booking inside window succeeds, outside window fails', async () => {
-    // Set Monday to narrow window: 14:00-15:00
+    // Set Monday to narrow window: 21:00-22:00 in Buenos Aires.
+    // The inside instant intentionally lands on Tuesday in UTC while still
+    // being Monday locally for the barbershop.
     const narrowHours = [
-      { dayOfWeek: 1, openTime: '14:00', closeTime: '15:00' },
+      { dayOfWeek: 1, openTime: '21:00', closeTime: '22:00' },
     ];
 
     await request(app)
@@ -355,8 +340,8 @@ describe('PUT /api/v1/barbershops/:barbershopId/working-hours', () => {
       .set(authHeader(fixtures.ownerA.clerkUserId))
       .send({ workingHours: narrowHours });
 
-    // Book at 14:30 local (inside window) — should succeed
-    const insideTime = makeDateForDayAndTime(1, '14:30');
+    // Monday 21:30 local = Tuesday 00:30 UTC
+    const insideTime = new Date('2026-06-30T00:30:00.000Z');
     const insideRes = await bookAppointment(
       fixtures.shopA.id,
       fixtures.employeeA.id,
@@ -366,8 +351,8 @@ describe('PUT /api/v1/barbershops/:barbershopId/working-hours', () => {
     );
     expect(insideRes.status).toBe(201);
 
-    // Book at 13:00 local (before opening) — should fail
-    const outsideTime = makeDateForDayAndTime(1, '13:00');
+    // Monday 20:00 local = Monday 23:00 UTC
+    const outsideTime = new Date('2026-06-29T23:00:00.000Z');
     const outsideRes = await bookAppointment(
       fixtures.shopA.id,
       fixtures.employeeA.id,
@@ -394,8 +379,8 @@ describe('PUT /api/v1/barbershops/:barbershopId/working-hours', () => {
       .set(authHeader(fixtures.ownerA.clerkUserId))
       .send({ workingHours: closedMonday });
 
-    // Try booking on Monday — should fail
-    const mondayTime = makeDateForDayAndTime(1, '10:00');
+    // Monday 21:15 local = Tuesday 00:15 UTC
+    const mondayTime = new Date('2026-06-30T00:15:00.000Z');
     const res = await bookAppointment(
       fixtures.shopA.id,
       fixtures.employeeA.id,

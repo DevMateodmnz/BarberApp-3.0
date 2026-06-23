@@ -9,6 +9,7 @@ import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { createAppFromEnv } from '../../src/app.js';
 import type { User, Barbershop, Employee, Service } from '@prisma/client';
+import { getNextLocalWeekdayTime } from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
 
@@ -371,9 +372,7 @@ describe('POST /api/v1/barbershops/:barbershopId/services', () => {
     });
 
     // Book appointment
-    const nextMonday = new Date();
-    nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
-    nextMonday.setHours(13, 0, 0, 0);
+    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
 
     const bookRes = await request(app)
       .post('/api/v1/appointments')
@@ -795,9 +794,7 @@ describe('DELETE /api/v1/barbershops/:barbershopId/services/:serviceId', () => {
     await deleteService(fixtures.shopA.id, svcA.id, fixtures.ownerA.clerkUserId);
 
     // Try to book
-    const nextMonday = new Date();
-    nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
-    nextMonday.setHours(13, 0, 0, 0);
+    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
 
     const bookRes = await request(app)
       .post('/api/v1/appointments')
@@ -829,9 +826,7 @@ describe('DELETE /api/v1/barbershops/:barbershopId/services/:serviceId', () => {
     });
 
     // Book appointment FIRST
-    const nextMonday = new Date();
-    nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
-    nextMonday.setHours(13, 0, 0, 0);
+    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
 
     const bookRes = await request(app)
       .post('/api/v1/appointments')
