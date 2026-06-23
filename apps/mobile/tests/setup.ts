@@ -4,8 +4,11 @@
 import { vi } from 'vitest';
 
 // Mock environment variables
+process.env.EXPO_PUBLIC_APP_ENV = 'development';
 process.env.EXPO_PUBLIC_API_URL = 'http://localhost:3000/api/v1';
 process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY = 'pk_test_mock';
+delete process.env.EXPO_PUBLIC_CLERK_SECRET_KEY;
+delete process.env.EXPO_PUBLIC_CLERK_WEBHOOK_SECRET;
 
 // Global test timeout
 vi.setConfig({

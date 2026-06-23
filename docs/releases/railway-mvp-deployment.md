@@ -115,6 +115,7 @@ Before a real deployment:
    ```
 
 4. Confirm the mobile app is pointed at the correct production API URL during its own build/distribution flow.
+5. Follow the mobile release/distribution runbook for preview and production app builds: [`docs/releases/mobile-eas-release.md`](./mobile-eas-release.md).
 
 Do not commit Clerk production keys, webhook secrets, or domains.
 

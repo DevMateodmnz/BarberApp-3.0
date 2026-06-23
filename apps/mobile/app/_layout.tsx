@@ -1,8 +1,8 @@
 /**
  * Root layout — wraps the app in ClerkProvider for authentication.
  *
- * Reads EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY from environment.
- * Shows a clear error message if the key is missing in development.
+ * Renders a friendly setup error card when the validated mobile
+ * public runtime configuration is missing or invalid.
  */
 import { ClerkProvider } from '@clerk/clerk-expo';
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
@@ -10,10 +10,11 @@ import { StatusBar } from 'expo-status-bar';
 import { Slot } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { getMobilePublicRuntimeResult } from '@/config/publicRuntime.js';
 import { AppCard, Screen } from '@/components/ui/index.js';
 import { tokens } from '@/theme/index.js';
 
-const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const mobilePublicRuntimeResult = getMobilePublicRuntimeResult();
 const navigationTheme = {
   ...DarkTheme,
   colors: {
@@ -28,7 +29,7 @@ const navigationTheme = {
 } as const;
 
 export default function RootLayout() {
-  if (!CLERK_PUBLISHABLE_KEY) {
+  if (!mobilePublicRuntimeResult.ok) {
     return (
       <ThemeProvider value={navigationTheme}>
         <View style={styles.appShell}>
@@ -36,9 +37,9 @@ export default function RootLayout() {
           <Screen>
             <View style={styles.errorContainer}>
               <AppCard variant="elevated" style={styles.errorCard}>
-                <Text style={styles.errorTitle}>Missing Clerk Key</Text>
+                <Text style={styles.errorTitle}>Mobile Configuration Error</Text>
                 <Text style={styles.errorMessage}>
-                  Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in your .env.local file.
+                  {mobilePublicRuntimeResult.error.message}
                 </Text>
               </AppCard>
             </View>
@@ -49,7 +50,7 @@ export default function RootLayout() {
   }
 
   return (
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
+    <ClerkProvider publishableKey={mobilePublicRuntimeResult.value.clerkPublishableKey}>
       <ThemeProvider value={navigationTheme}>
         <View style={styles.appShell}>
           <StatusBar style="light" backgroundColor={tokens.colors.background} />

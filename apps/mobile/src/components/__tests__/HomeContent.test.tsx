@@ -2,10 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { HomeContent } from '@/components/HomeContent.js';
 import { findByTestId, findByText, press, queryByTestId, queryByText } from '@/testing/elementTree.js';
-import { formatRecordTime } from '@/lib/format.js';
+import { formatRecordTime, getTodayDateString } from '@/lib/format.js';
 import type { BarbershopDailySummary, EmployeeDailySummary, ServiceRecord } from '@/lib/types.js';
 
-const today = new Date().toISOString().slice(0, 10);
+const today = getTodayDateString();
 
 const OWNER_CONTEXT = {
   userId: 'u-owner',

@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 
 import { DailySummarySection } from '@/components/DailySummarySection.js';
 import { findByTestId, findByText, queryByText } from '@/testing/elementTree.js';
+import { getTodayDateString } from '@/lib/format.js';
 
-const today = new Date().toISOString().slice(0, 10);
+const today = getTodayDateString();
 
 const OWNER_SUMMARY = {
   byEmployee: [

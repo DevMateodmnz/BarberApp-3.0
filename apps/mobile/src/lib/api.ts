@@ -6,6 +6,11 @@
  */
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 
+import {
+  getInvalidApiUrlFallback,
+  getMobilePublicRuntimeResult,
+} from '@/config/publicRuntime.js';
+
 /**
  * API response envelope — mirrors @barberapp/shared ApiResponse<T>
  * until the shared package is built and properly linked.
@@ -20,7 +25,10 @@ export interface ApiResponse<T = unknown> {
   };
 }
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
+const mobilePublicRuntimeResult = getMobilePublicRuntimeResult();
+const API_BASE_URL = mobilePublicRuntimeResult.ok
+  ? mobilePublicRuntimeResult.value.apiBaseUrl
+  : getInvalidApiUrlFallback();
 
 /**
  * Structured API error — thrown by API client helpers when a response
@@ -58,6 +66,14 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  if (!mobilePublicRuntimeResult.ok) {
+    throw mobilePublicRuntimeResult.error;
+  }
+
+  return config;
 });
 
 /**

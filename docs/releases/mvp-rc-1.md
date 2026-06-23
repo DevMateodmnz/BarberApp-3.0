@@ -23,6 +23,7 @@
 
 - Production API startup and credentialed CORS now have a dedicated runbook: [`docs/releases/api-production-runbook.md`](./api-production-runbook.md)
 - Railway publication/deployment steps now have a target-specific runbook: [`docs/releases/railway-mvp-deployment.md`](./railway-mvp-deployment.md)
+- Mobile preview/production distribution now has a dedicated EAS runbook: [`docs/releases/mobile-eas-release.md`](./mobile-eas-release.md)
 - Production releases should use `prisma migrate deploy` and must not rely on local QA bootstrap or demo seed workflows.
 
 ---
