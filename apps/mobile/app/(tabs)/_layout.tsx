@@ -7,10 +7,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import { tokens } from '@/theme/index.js';
 
 export default function TabLayout() {
+  const { t } = useTranslation();
+
   return (
     <Tabs
       screenOptions={{
@@ -27,7 +30,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: t('navigation.home'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
               color={color}
@@ -40,35 +43,35 @@ export default function TabLayout() {
       <Tabs.Screen
         name="record-service"
         options={{
-          title: 'Record Service',
+          title: t('navigation.recordService'),
           href: null,
         }}
       />
       <Tabs.Screen
         name="services"
         options={{
-          title: 'Services',
+          title: t('navigation.services'),
           href: null,
         }}
       />
       <Tabs.Screen
         name="employees"
         options={{
-          title: 'Employees',
+          title: t('navigation.employees'),
           href: null,
         }}
       />
       <Tabs.Screen
         name="working-hours"
         options={{
-          title: 'Working Hours',
+          title: t('navigation.workingHours'),
           href: null,
         }}
       />
       <Tabs.Screen
         name="appointments"
         options={{
-          title: 'Appointments',
+          title: t('navigation.appointments'),
           href: null,
         }}
       />

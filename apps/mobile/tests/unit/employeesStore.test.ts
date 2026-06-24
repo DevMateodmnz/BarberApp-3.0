@@ -51,6 +51,8 @@ function makeEmployee(overrides: Partial<EmployeeListItem> = {}): EmployeeListIt
 describe('useEmployeesStore', () => {
   beforeEach(async () => {
     const { useEmployeesStore } = await importStore();
+    const { mobileLocalizationRuntime } = await import('../../src/i18n/runtime.js');
+    await mobileLocalizationRuntime.i18n.changeLanguage('en');
     useEmployeesStore.setState({ employees: [], isEmployeesLoading: false, employeesError: null });
     vi.clearAllMocks();
   });

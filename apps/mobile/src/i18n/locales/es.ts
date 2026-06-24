@@ -1,0 +1,105 @@
+import type { DeepTranslationShape } from '../schema.js';
+
+export const es = {
+  common: {
+    actions: {
+      add: 'Agregar',
+      back: 'Volver',
+      cancel: 'Cancelar',
+      clear: 'Limpiar',
+      close: 'Cerrar',
+      create: 'Crear',
+      remove: 'Quitar',
+      retry: 'Reintentar',
+      save: 'Guardar',
+      search: 'Buscar',
+      update: 'Actualizar',
+      useDeviceLanguage: 'Usar idioma del dispositivo',
+    },
+    states: {
+      comingSoon: 'Próximamente',
+      genericError: 'Ocurrió un error. Inténtalo de nuevo.',
+      genericLoading: 'Cargando…',
+      noContextMessage: 'Todavía no hay contexto disponible.',
+      noContextTitle: 'No hay contexto disponible',
+      unknown: 'Desconocido',
+      unsupported: 'No disponible',
+    },
+    periods: {
+      today: 'Hoy',
+      week: 'Esta semana',
+      month: 'Este mes',
+      year: 'Este año',
+    },
+    weekdays: {
+      sunday: 'Domingo',
+      monday: 'Lunes',
+      tuesday: 'Martes',
+      wednesday: 'Miércoles',
+      thursday: 'Jueves',
+      friday: 'Viernes',
+      saturday: 'Sábado',
+    },
+  },
+  languages: {
+    system: 'Automático (idioma del dispositivo)',
+    es: 'Español',
+    en: 'Inglés',
+    de: 'Alemán',
+    fr: 'Francés',
+    it: 'Italiano',
+    'zh-Hans': 'Chino simplificado',
+  },
+  navigation: {
+    home: 'Inicio',
+    recordService: 'Registrar servicio',
+    services: 'Servicios',
+    employees: 'Empleados',
+    workingHours: 'Horarios',
+    appointments: 'Turnos',
+  },
+  runtime: {
+    configurationErrorTitle: 'Error de configuración móvil',
+    initializationErrorTitle: 'Error de idioma',
+  },
+  roles: {
+    OWNER: 'Dueño',
+    BARBER: 'Barbero',
+    CLIENT: 'Cliente',
+    UNKNOWN: 'Desconocido',
+  },
+  paymentMethods: {
+    CASH: 'Efectivo',
+    CARD: 'Tarjeta',
+    TRANSFER: 'Transferencia',
+    OTHER: 'Otro',
+    UNSPECIFIED: 'Sin especificar',
+  },
+  appointmentStatuses: {
+    PENDING: 'Pendiente',
+    CONFIRMED: 'Confirmado',
+    IN_PROGRESS: 'En curso',
+    COMPLETED: 'Completado',
+    CANCELLED: 'Cancelado',
+    NO_SHOW: 'Ausente',
+  },
+  appointmentActions: {
+    CONFIRMED: 'Confirmar',
+    CANCELLED: 'Cancelar',
+    IN_PROGRESS: 'Iniciar',
+    COMPLETED: 'Completar',
+    NO_SHOW: 'Marcar ausente',
+  },
+  errors: {
+    unknownApi: 'Ocurrió un error inesperado. Inténtalo de nuevo.',
+    employeeNotFound: 'No se encontró una cuenta con este email o ID. Verifica que la persona haya iniciado sesión al menos una vez.',
+    employeeConflict: 'Esta persona ya es empleada de esta barbería.',
+  },
+  formatting: {
+    recordsCount_one: '{{count}} registro',
+    recordsCount_other: '{{count}} registros',
+    recordsWithRevenue: '{{countLabel}} · {{amount}}',
+  },
+} as const;
+
+export type TranslationCatalog = DeepTranslationShape<typeof es>;

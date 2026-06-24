@@ -1,4 +1,5 @@
 import { api, ApiError, type ApiResponse, type GetToken } from './api.js';
+import { localizeApiError } from '@/i18n/errors.js';
 import type { EmployeeListItem } from './types.js';
 
 export async function fetchEmployees(
@@ -31,28 +32,7 @@ export async function fetchEmployees(
  * passes through the raw message for completely unknown errors.
  */
 export function friendlyCreateEmployeeError(raw: string | ApiError): string {
-  // --- structured matching (more robust) ---
-  if (raw instanceof ApiError) {
-    if (raw.status === 404 || raw.code === 'NOT_FOUND') {
-      return 'No account found with this email or ID. Make sure the person has logged in at least once.';
-    }
-    if (raw.status === 409 || raw.code === 'CONFLICT') {
-      return 'This person is already an employee of this barbershop.';
-    }
-    // Fall through to message string matching
-    return friendlyCreateEmployeeError(raw.message);
-  }
-
-  // --- legacy string matching ---
-  if (raw === 'User not found') {
-    return 'No account found with this email or ID. Make sure the person has logged in at least once.';
-  }
-
-  if (raw === 'User is already an employee of this barbershop') {
-    return 'This person is already an employee of this barbershop.';
-  }
-
-  return raw;
+  return localizeApiError(raw);
 }
 
 /**

@@ -3,6 +3,12 @@
 
 import { vi } from 'vitest';
 
+Object.defineProperty(globalThis, '__DEV__', {
+  configurable: true,
+  value: false,
+  writable: true,
+});
+
 // Mock environment variables
 process.env.EXPO_PUBLIC_APP_ENV = 'development';
 process.env.EXPO_PUBLIC_API_URL = 'http://localhost:3000/api/v1';
@@ -15,6 +21,23 @@ vi.setConfig({
   testTimeout: 10000,
   hookTimeout: 10000
 });
+
+vi.mock('expo-localization', () => ({
+  getLocales: () => [
+    {
+      languageTag: 'es-AR',
+      languageCode: 'es',
+      languageScriptCode: null,
+      regionCode: 'AR',
+    },
+  ],
+}));
+
+vi.mock('expo-secure-store', () => ({
+  getItemAsync: vi.fn(async () => null),
+  setItemAsync: vi.fn(async () => undefined),
+  deleteItemAsync: vi.fn(async () => undefined),
+}));
 
 // React Native components cannot run in the Node test environment, so provide
 // lightweight string-tag mocks. Tests invoke primitives as functions and inspect
@@ -57,6 +80,11 @@ vi.mock('react-native', async () => {
     Platform: {
       OS: 'ios',
       select: (obj: Record<string, unknown>) => obj.ios ?? obj.default,
+    },
+    AppState: {
+      addEventListener: () => ({
+        remove: () => undefined,
+      }),
     },
     StatusBar: createMockComponent('StatusBar'),
   };

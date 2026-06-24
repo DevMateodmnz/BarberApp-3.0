@@ -24,6 +24,11 @@ beforeEach(() => {
   mockApi = createMockApi();
 });
 
+beforeEach(async () => {
+  const { mobileLocalizationRuntime } = await import('../../src/i18n/runtime.js');
+  await mobileLocalizationRuntime.i18n.changeLanguage('en');
+});
+
 async function importApi() {
   const axios = await import('axios');
   vi.spyOn(axios.default, 'create').mockReturnValue(
@@ -258,7 +263,7 @@ describe('friendlyCreateEmployeeError', () => {
   it('passes through unknown messages unchanged', async () => {
     const { friendlyCreateEmployeeError } = await importEmployees();
     const result = friendlyCreateEmployeeError('Network error');
-    expect(result).toBe('Network error');
+    expect(result).toBe('Something went wrong. Please try again. [Network error]');
   });
 
   it('passes through "Provide exactly one of: userId or email" unchanged', async () => {
@@ -266,7 +271,9 @@ describe('friendlyCreateEmployeeError', () => {
     const result = friendlyCreateEmployeeError(
       'Provide exactly one of: userId or email',
     );
-    expect(result).toBe('Provide exactly one of: userId or email');
+    expect(result).toBe(
+      'Something went wrong. Please try again. [Provide exactly one of: userId or email]',
+    );
   });
 
   // PR-068A: structured ApiError matching — robust against message rewording
@@ -315,13 +322,11 @@ describe('friendlyCreateEmployeeError', () => {
     it('falls through to message matching when status/code are unknown', async () => {
       const { friendlyCreateEmployeeError } = await importEmployees();
       const ApiError = await getApiError();
-      // status 400 with code VALIDATION_ERROR — not explicitly handled, should fall to message
+      // status 400 with code VALIDATION_ERROR — not explicitly handled, so it
+      // uses the localized generic fallback plus development diagnostics.
       const err = new ApiError('User not found', 'VALIDATION_ERROR', 400);
       const result = friendlyCreateEmployeeError(err);
-      // Falls through to string matching: "User not found" matches legacy rule
-      expect(result).toBe(
-        'No account found with this email or ID. Make sure the person has logged in at least once.',
-      );
+      expect(result).toBe('Something went wrong. Please try again. [User not found]');
     });
 
     it('passes through completely unknown ApiError unchanged', async () => {
@@ -329,7 +334,7 @@ describe('friendlyCreateEmployeeError', () => {
       const ApiError = await getApiError();
       const err = new ApiError('Something exploded', undefined, 500);
       const result = friendlyCreateEmployeeError(err);
-      expect(result).toBe('Something exploded');
+      expect(result).toBe('Something went wrong. Please try again. [Something exploded]');
     });
   });
 });
