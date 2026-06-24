@@ -1,7 +1,8 @@
 // Test setup file for Mobile
 // This runs before each test file
 
-import { vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
+import { mobileLocalizationRuntime } from '../src/i18n/runtime.js';
 
 Object.defineProperty(globalThis, '__DEV__', {
   configurable: true,
@@ -38,6 +39,20 @@ vi.mock('expo-secure-store', () => ({
   setItemAsync: vi.fn(async () => undefined),
   deleteItemAsync: vi.fn(async () => undefined),
 }));
+
+vi.mock('react-i18next', () => ({
+  I18nextProvider: ({ children }: { children: unknown }) => children,
+  useTranslation: () => ({
+    i18n: mobileLocalizationRuntime.i18n,
+    t: (key: string, options?: Record<string, unknown>) =>
+      mobileLocalizationRuntime.i18n.t(key, options),
+  }),
+}));
+
+beforeEach(async () => {
+  await mobileLocalizationRuntime.bootstrap();
+  await mobileLocalizationRuntime.setPreference('en');
+});
 
 // React Native components cannot run in the Node test environment, so provide
 // lightweight string-tag mocks. Tests invoke primitives as functions and inspect

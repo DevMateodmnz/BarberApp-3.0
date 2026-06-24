@@ -6,6 +6,7 @@ import {
   type AppointmentRowViewModel,
   type EmployeeFilterOption,
 } from '@/components/AppointmentsScreenView.js';
+import { formatBusinessDateLabel } from '@/lib/format.js';
 import {
   findAll,
   findByTestId,
@@ -140,7 +141,7 @@ describe('AppointmentsScreenView', () => {
   it('renders the client blocked state', () => {
     const tree = renderView({ context: CLIENT_CONTEXT, employeeFilters: [], appointmentRows: [] });
     expect(findByTestId(tree, 'appointments-client-blocked')).toBeDefined();
-    expect(findByText(tree, 'Appointment management is available for barbershop owners and barbers only.')).toBeDefined();
+    expect(findByText(tree, 'Appointment management is available only to barbershop owners and barbers.')).toBeDefined();
   });
 
   it('renders the context loading state', () => {
@@ -160,7 +161,7 @@ describe('AppointmentsScreenView', () => {
     expect(findByTestId(tree, 'appointments-date-today')).toBeDefined();
     expect(findByTestId(tree, 'appointments-date-next')).toBeDefined();
     expect(findByTestId(tree, 'appointments-date-display')).toBeDefined();
-    expect(findByText(tree, '2026-06-16')).toBeDefined();
+    expect(findByText(tree, formatBusinessDateLabel('2026-06-16'))).toBeDefined();
 
     press(findByTestId(tree, 'appointments-date-prev'));
     expect(onPrevDate).toHaveBeenCalledTimes(1);
@@ -233,7 +234,7 @@ describe('AppointmentsScreenView', () => {
       appointmentRows: makeAppointments([{ employeeLabel: null }]),
     });
     expect(findByText(tree, 'Barber')).toBeDefined();
-    expect(findByText(tree, 'Review and update the appointments assigned to you.')).toBeDefined();
+    expect(findByText(tree, 'Review and update the appointments assigned to your schedule.')).toBeDefined();
     expect(queryByTestId(tree, 'appointments-employee-filter')).toBeNull();
   });
 

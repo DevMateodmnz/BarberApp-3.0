@@ -14,7 +14,9 @@ interface MoneyTextProps {
 
 export function MoneyText({ testID, priceCents, style }: MoneyTextProps) {
   const display =
-    priceCents === null || priceCents === undefined ? '—' : formatCentsForDisplay(priceCents);
+    priceCents === null || priceCents === undefined
+      ? '—'
+      : formatCentsForDisplay(priceCents);
 
   return <Text testID={testID} style={style}>{display}</Text>;
 }

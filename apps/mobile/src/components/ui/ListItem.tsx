@@ -3,7 +3,16 @@
  * and optional press handler.
  */
 import type { ReactNode } from 'react';
-import { Pressable, Text, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  Pressable,
+  Text,
+  View,
+  StyleSheet,
+  type AccessibilityRole,
+  type AccessibilityState,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { tokens, minTouchTarget } from '@/theme/index.js';
 
 interface ListItemProps {
@@ -14,6 +23,9 @@ interface ListItemProps {
   trailing?: ReactNode;
   onPress?: () => void;
   disabled?: boolean;
+  accessibilityLabel?: string;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityState?: AccessibilityState;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -25,6 +37,9 @@ export function ListItem({
   trailing,
   onPress,
   disabled = false,
+  accessibilityLabel,
+  accessibilityRole,
+  accessibilityState,
   style,
 }: ListItemProps) {
   const content = (
@@ -40,7 +55,14 @@ export function ListItem({
 
   if (onPress) {
     return (
-      <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => [pressed && styles.pressed]}>
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole={accessibilityRole}
+        accessibilityState={accessibilityState}
+        style={({ pressed }) => [pressed && styles.pressed]}
+      >
         {content}
       </Pressable>
     );
@@ -67,15 +89,18 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    minWidth: 0,
   },
   title: {
     ...tokens.typography.variant.body,
     color: tokens.colors.textPrimary,
+    flexShrink: 1,
   },
   subtitle: {
     ...tokens.typography.variant.caption,
     color: tokens.colors.textSecondary,
     marginTop: tokens.spacing[1],
+    flexShrink: 1,
   },
   trailing: {
     marginLeft: tokens.spacing[2],

@@ -26,12 +26,12 @@ export type ClerkSetActiveFn = (params: { session: string }) => Promise<void>;
 export function validateEmail(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) {
-    return 'Please enter your email address.';
+    return translate('validation.emailRequired');
   }
   // Simple regex: something@something.something
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRe.test(trimmed)) {
-    return 'Please enter a valid email address.';
+    return translate('validation.emailInvalid');
   }
   return null;
 }
@@ -39,10 +39,10 @@ export function validateEmail(input: string): string | null {
 /** Validate a 6-digit code: must be exactly 6 numeric digits. */
 export function validateCode(input: string): string | null {
   if (!input || input.length === 0) {
-    return 'Please enter the 6-digit code.';
+    return translate('validation.codeRequired');
   }
   if (!/^\d{6}$/.test(input)) {
-    return 'Please enter a valid 6-digit code.';
+    return translate('validation.codeInvalid');
   }
   return null;
 }
@@ -74,11 +74,17 @@ export function extractErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     const clerkErr = error as Error & { errors?: Array<{ message: string }> };
     if (clerkErr.errors && clerkErr.errors.length > 0 && clerkErr.errors[0]) {
-      return clerkErr.errors[0].message;
+      if (process.env.NODE_ENV !== 'production') {
+        return `${translate('errors.signInGeneric')} [${clerkErr.errors[0].message}]`;
+      }
+      return translate('errors.signInGeneric');
     }
-    return error.message;
+    if (process.env.NODE_ENV !== 'production') {
+      return `${translate('errors.signInGeneric')} [${error.message}]`;
+    }
+    return translate('errors.signInGeneric');
   }
-  return 'Unable to sign in. Please try again.';
+  return translate('errors.signInGeneric');
 }
 
 /** Result of an email-code verification attempt. */
@@ -106,18 +112,21 @@ export async function verifyEmailCode(
   if (result.status !== 'complete') {
     return {
       outcome: 'error',
-      errorMessage: `Unexpected sign-in status: ${result.status}. Please try again.`,
+      errorMessage:
+        process.env.NODE_ENV !== 'production'
+          ? `${translate('errors.verificationUnexpectedStatus')} [${result.status}]`
+          : translate('errors.verificationUnexpectedStatus'),
     };
   }
 
   if (!result.createdSessionId) {
     return {
       outcome: 'error',
-      errorMessage:
-        'Verification succeeded but no session was created. Please try again.',
+      errorMessage: translate('errors.verificationMissingSession'),
     };
   }
 
   await setActive({ session: result.createdSessionId });
   return { outcome: 'success' };
 }
+import { translate } from '@/i18n/helpers.js';

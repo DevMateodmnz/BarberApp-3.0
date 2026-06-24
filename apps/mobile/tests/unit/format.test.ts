@@ -4,7 +4,12 @@
  * Tests formatCents and getTodayDateString for deterministic,
  * locale-safe behavior.
  */
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
+import { mobileLocalizationRuntime } from '../../src/i18n/runtime.js';
+
+beforeEach(async () => {
+  await mobileLocalizationRuntime.i18n.changeLanguage('en');
+});
 
 // These will be implemented in src/lib/format.ts
 // Importing here to confirm the module exists and exports correctly.
@@ -13,27 +18,62 @@ import { describe, it, expect } from 'vitest';
 describe('formatCents', () => {
   it('formats zero cents', async () => {
     const { formatCents } = await import('../../src/lib/format.js');
-    expect(formatCents(0)).toBe('$0');
+    expect(formatCents(0)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(0),
+    );
   });
 
   it('formats round thousands with dot separator', async () => {
     const { formatCents } = await import('../../src/lib/format.js');
-    expect(formatCents(2500)).toBe('$2.500');
+    expect(formatCents(2500)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(25),
+    );
   });
 
   it('formats single-digit cents', async () => {
     const { formatCents } = await import('../../src/lib/format.js');
-    expect(formatCents(5)).toBe('$5');
+    expect(formatCents(5)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(0.05),
+    );
   });
 
   it('formats non-round amounts without decimals', async () => {
     const { formatCents } = await import('../../src/lib/format.js');
-    expect(formatCents(2501)).toBe('$2.501');
+    expect(formatCents(2501)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(25.01),
+    );
   });
 
   it('formats large values with dots as thousands separator', async () => {
     const { formatCents } = await import('../../src/lib/format.js');
-    expect(formatCents(150000)).toBe('$150.000');
+    expect(formatCents(150000)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(1500),
+    );
   });
 
   it('throws on negative input', async () => {
@@ -163,27 +203,62 @@ describe('hasPriceChangedFromDefault', () => {
 describe('formatCentsForDisplay', () => {
   it('formats zero cents', async () => {
     const { formatCentsForDisplay } = await import('../../src/lib/format.js');
-    expect(formatCentsForDisplay(0)).toBe('$0.00');
+    expect(formatCentsForDisplay(0)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(0),
+    );
   });
 
   it('formats round thousands', async () => {
     const { formatCentsForDisplay } = await import('../../src/lib/format.js');
-    expect(formatCentsForDisplay(500000)).toBe('$5000.00');
+    expect(formatCentsForDisplay(500000)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(5000),
+    );
   });
 
   it('formats amount with cents', async () => {
     const { formatCentsForDisplay } = await import('../../src/lib/format.js');
-    expect(formatCentsForDisplay(500050)).toBe('$5000.50');
+    expect(formatCentsForDisplay(500050)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(5000.5),
+    );
   });
 
   it('formats sub-unit amount', async () => {
     const { formatCentsForDisplay } = await import('../../src/lib/format.js');
-    expect(formatCentsForDisplay(99)).toBe('$0.99');
+    expect(formatCentsForDisplay(99)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(0.99),
+    );
   });
 
   it('formats single cent', async () => {
     const { formatCentsForDisplay } = await import('../../src/lib/format.js');
-    expect(formatCentsForDisplay(1)).toBe('$0.01');
+    expect(formatCentsForDisplay(1)).toBe(
+      new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(0.01),
+    );
   });
 });
 

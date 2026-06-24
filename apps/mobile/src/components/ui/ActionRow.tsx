@@ -23,9 +23,8 @@ export function ActionRow({ testID, label, children, style }: ActionRowProps) {
 
 const styles = StyleSheet.create({
   root: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     paddingVertical: tokens.spacing[3],
     paddingHorizontal: tokens.spacing[4],
     backgroundColor: tokens.colors.surface,
@@ -34,12 +33,12 @@ const styles = StyleSheet.create({
   label: {
     ...tokens.typography.variant.body,
     color: tokens.colors.textPrimary,
-    flex: 1,
-    marginRight: tokens.spacing[3],
+    marginBottom: tokens.spacing[3],
   },
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: tokens.spacing[2],
   },
 });

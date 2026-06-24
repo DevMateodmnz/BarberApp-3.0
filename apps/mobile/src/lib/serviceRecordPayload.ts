@@ -1,5 +1,6 @@
 import { formatCentsForInput, parseCurrencyInputToCents } from './format.js';
 import type { CreateServiceRecordInput, PaymentMethod } from './types.js';
+import { translate } from '@/i18n/helpers.js';
 
 interface BuildServiceRecordPayloadInput {
   clientName?: string | null;
@@ -30,9 +31,9 @@ type ServiceRecordDraftValidationResult =
     }
   | { error: string; ok: false };
 
-const INVALID_PRICE_ERROR = 'Enter a valid price amount.';
-const CLIENT_NAME_TOO_LONG_ERROR = 'Client name must be 200 characters or fewer.';
-const NOTES_TOO_LONG_ERROR = 'Notes must be 1000 characters or fewer.';
+const INVALID_PRICE_ERROR = 'validation.invalidPrice';
+const CLIENT_NAME_TOO_LONG_ERROR = 'validation.clientNameTooLong';
+const NOTES_TOO_LONG_ERROR = 'validation.notesTooLong';
 
 function trimOptionalText(value?: string | null): string | undefined {
   if (typeof value !== 'string') {
@@ -81,27 +82,30 @@ export function validateServiceRecordDraft({
   if (!employeeId) {
     return {
       ok: false,
-      error: mode === 'BARBER' ? 'Employee context is missing.' : 'Select an employee.',
+      error:
+        mode === 'BARBER'
+          ? translate('validation.missingEmployeeContext')
+          : translate('validation.selectEmployee'),
     };
   }
 
   if (!serviceId) {
-    return { ok: false, error: 'Select a service.' };
+    return { ok: false, error: translate('validation.selectService') };
   }
 
   const priceCents = parseCurrencyInputToCents(priceCentsInput);
   if (priceCents === null) {
-    return { ok: false, error: INVALID_PRICE_ERROR };
+    return { ok: false, error: translate(INVALID_PRICE_ERROR) };
   }
 
   const clientName = trimOptionalText(clientNameInput);
   if (clientName && clientName.length > 200) {
-    return { ok: false, error: CLIENT_NAME_TOO_LONG_ERROR };
+    return { ok: false, error: translate(CLIENT_NAME_TOO_LONG_ERROR) };
   }
 
   const notes = trimOptionalText(notesInput);
   if (notes && notes.length > 1000) {
-    return { ok: false, error: NOTES_TOO_LONG_ERROR };
+    return { ok: false, error: translate(NOTES_TOO_LONG_ERROR) };
   }
 
   return {

@@ -6,8 +6,8 @@
  */
 import { ClerkProvider } from '@clerk/clerk-expo';
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Slot } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -52,8 +52,13 @@ function RootLayoutContent() {
             <AppCard variant="elevated" style={styles.errorCard}>
               <Text style={styles.errorTitle}>{t('runtime.configurationErrorTitle')}</Text>
               <Text style={styles.errorMessage}>
-                {mobilePublicRuntimeResult.error.message}
+                {t('runtime.configurationErrorMessage')}
               </Text>
+              {process.env.NODE_ENV !== 'production' && (
+                <Text style={styles.errorMessage}>
+                  {mobilePublicRuntimeResult.error.message}
+                </Text>
+              )}
             </AppCard>
           </View>
         </Screen>
@@ -65,7 +70,24 @@ function RootLayoutContent() {
     <ClerkProvider publishableKey={mobilePublicRuntimeResult.value.clerkPublishableKey}>
       <View style={styles.appShell}>
         <StatusBar style="light" backgroundColor={tokens.colors.background} />
-        <Slot />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: {
+              backgroundColor: tokens.colors.background,
+            },
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="language"
+            options={{
+              presentation: 'modal',
+            }}
+          />
+        </Stack>
       </View>
     </ClerkProvider>
   );

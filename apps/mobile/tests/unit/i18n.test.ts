@@ -232,8 +232,8 @@ describe('mobile i18n foundation', () => {
   it('supports interpolation and pluralization', async () => {
     await mobileLocalizationRuntime.i18n.changeLanguage('en');
 
-    expect(mobileLocalizationRuntime.i18n.t('formatting.recordsCount', { count: 1 })).toBe('1 record');
-    expect(mobileLocalizationRuntime.i18n.t('formatting.recordsCount', { count: 2 })).toBe('2 records');
+    expect(mobileLocalizationRuntime.i18n.t('formatting.recordCount', { count: 1 })).toBe('1 record');
+    expect(mobileLocalizationRuntime.i18n.t('formatting.recordCount', { count: 2 })).toBe('2 records');
     expect(
       mobileLocalizationRuntime.i18n.t('formatting.recordsWithRevenue', {
         countLabel: '2 records',
@@ -313,7 +313,7 @@ describe('mobile i18n foundation', () => {
     expect(getAppointmentStatusLabel('NO_SHOW')).toBe('Nicht erschienen');
 
     await mobileLocalizationRuntime.i18n.changeLanguage('zh-Hans');
-    expect(getRoleLabel('CLIENT')).toBe('顾客');
+    expect(getRoleLabel('CLIENT')).toBe('客户');
     expect(getPaymentMethodLabel('TRANSFER')).toBe('转账');
     expect(getAppointmentStatusLabel('COMPLETED')).toBe('已完成');
   });

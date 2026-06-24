@@ -1,4 +1,5 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import {
   AppButton,
   AppCard,
@@ -9,20 +10,15 @@ import {
 } from '@/components/ui/index.js';
 import { DailySummarySection } from '@/components/DailySummarySection.js';
 import { tokens } from '@/theme/index.js';
+import { APP_NAME } from '@/lib/constants.js';
 import {
+  formatBusinessDateLabel,
   formatCentsForDisplay,
   formatPaymentMethodLabel,
   formatRecordTime,
   isTodayDateString,
 } from '@/lib/format.js';
 import type { DailySummary, RevenueSummaryPeriod, ServiceRecord } from '@/lib/types.js';
-
-const SUMMARY_PERIOD_OPTIONS: Array<{ value: RevenueSummaryPeriod; label: string }> = [
-  { value: 'today', label: 'Today' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'year', label: 'Year' },
-];
 
 interface FilterOption {
   id: string;
@@ -67,6 +63,7 @@ export interface HomeContentProps {
   onPrevDate: () => void;
   onNextDate: () => void;
   onToday: () => void;
+  onOpenLanguageSettings?: () => void;
 }
 
 export function HomeContent({
@@ -98,7 +95,15 @@ export function HomeContent({
   onPrevDate,
   onNextDate,
   onToday,
+  onOpenLanguageSettings,
 }: HomeContentProps) {
+  const { t } = useTranslation();
+  const summaryPeriodOptions: Array<{ value: RevenueSummaryPeriod; label: string }> = [
+    { value: 'today', label: t('common.periods.today') },
+    { value: 'week', label: t('common.periods.week') },
+    { value: 'month', label: t('common.periods.month') },
+    { value: 'year', label: t('common.periods.year') },
+  ];
   const role = context?.role;
   const showBarberNames = role === 'OWNER';
   const canShowDashboard = role === 'OWNER' || role === 'BARBER';
@@ -114,7 +119,20 @@ export function HomeContent({
 
   return (
     <>
-      <ScreenHeader title="BarberApp" subtitle="Dashboard" />
+      <ScreenHeader
+        title={APP_NAME}
+        subtitle={t('home.dashboardSubtitle')}
+        rightAction={onOpenLanguageSettings ? (
+          <AppButton
+            testID="home-language-settings"
+            title={t('languageSelector.openFromApp')}
+            variant="ghost"
+            size="sm"
+            onPress={onOpenLanguageSettings}
+            accessibilityLabel={t('accessibility.languageSettings')}
+          />
+        ) : undefined}
+      />
 
       {flashMessage && (
         <AppCard testID="home-flash-message" style={styles.flashBanner}>
@@ -125,7 +143,7 @@ export function HomeContent({
       {isContextLoading && (
         <AppCard style={styles.centeredCard}>
           <ActivityIndicator testID="home-loading" size="large" />
-          <Text style={styles.loadingText}>Loading your context…</Text>
+          <Text style={styles.loadingText}>{t('runtime.loadingContext')}</Text>
         </AppCard>
       )}
 
@@ -157,7 +175,7 @@ export function HomeContent({
 
               {canShowDashboard && !context.barbershopName && (
                 <Text style={styles.emptyHint} testID="home-no-context">
-                  No barbershop assigned yet.
+                  {t('home.noBarbershopAssigned')}
                 </Text>
               )}
             </View>
@@ -166,10 +184,10 @@ export function HomeContent({
           {canRecordService && (
             <ActionCard
               testID="home-record-service-card"
-              title="Record Service"
-              description="Add a completed service record without leaving the mobile app."
+              title={t('home.actionCards.recordService.title')}
+              description={t('home.actionCards.recordService.description')}
               buttonTestID="home-record-service-button"
-              buttonTitle="Open Form"
+              buttonTitle={t('home.actionCards.recordService.action')}
               onPress={onRecordService}
             />
           )}
@@ -178,28 +196,28 @@ export function HomeContent({
             <>
               <ActionCard
                 testID="home-services-card"
-                title="Services"
-                description="View your barbershop service catalog."
+                title={t('home.actionCards.services.title')}
+                description={t('home.actionCards.services.description')}
                 buttonTestID="home-services-button"
-                buttonTitle="View Services"
+                buttonTitle={t('home.actionCards.services.action')}
                 onPress={onServices}
               />
 
               <ActionCard
                 testID="home-employees-card"
-                title="Employees"
-                description="View and manage your barbershop employee roster."
+                title={t('home.actionCards.employees.title')}
+                description={t('home.actionCards.employees.description')}
                 buttonTestID="home-employees-button"
-                buttonTitle="View Employees"
+                buttonTitle={t('home.actionCards.employees.action')}
                 onPress={onEmployees}
               />
 
               <ActionCard
                 testID="home-working-hours-card"
-                title="Working Hours"
-                description="Set your barbershop weekly schedule."
+                title={t('home.actionCards.workingHours.title')}
+                description={t('home.actionCards.workingHours.description')}
                 buttonTestID="home-working-hours-button"
-                buttonTitle="View Working Hours"
+                buttonTitle={t('home.actionCards.workingHours.action')}
                 onPress={onWorkingHours}
               />
             </>
@@ -208,31 +226,31 @@ export function HomeContent({
           {canShowDashboard && !!context.barbershopId && (
             <ActionCard
               testID="home-appointments-card"
-              title="Appointments"
-              description="View and manage today's appointments."
+              title={t('home.actionCards.appointments.title')}
+              description={t('home.actionCards.appointments.description')}
               buttonTestID="home-appointments-button"
-              buttonTitle="View Appointments"
+              buttonTitle={t('home.actionCards.appointments.action')}
               onPress={onAppointments}
             />
           )}
 
           {role === 'CLIENT' && (
-            <AppCard testID="home-client-message" title="Dashboard">
-              <Text style={styles.emptyHint}>Coming soon for clients.</Text>
+            <AppCard testID="home-client-message" title={t('home.clientMessageTitle')}>
+              <Text style={styles.emptyHint}>{t('home.clientMessageBody')}</Text>
             </AppCard>
           )}
 
           {showRevenueSection && (
             <View testID="home-revenue-section" style={styles.sectionBlock}>
-              <SectionHeader title="Revenue overview" />
+              <SectionHeader title={t('home.revenueOverviewTitle')} />
               <Text style={styles.sectionHint}>
-                Period filters apply only to revenue totals.
+                {t('home.revenueOverviewHint')}
               </Text>
 
               <AppCard testID="summary-period-controls" variant="outlined">
-                <SectionHeader title="Revenue period" />
+                <SectionHeader title={t('home.revenuePeriodTitle')} />
                 <View style={styles.periodGrid}>
-                  {SUMMARY_PERIOD_OPTIONS.map((option) => (
+                  {summaryPeriodOptions.map((option) => (
                     <AppButton
                       key={option.value}
                       testID={`summary-period-${option.value}`}
@@ -248,12 +266,12 @@ export function HomeContent({
 
               {showOwnerEmployeeFilterCard && (
                 <AppCard testID="summary-employee-filter" variant="outlined">
-                  <SectionHeader title="Barber filter" />
+                  <SectionHeader title={t('home.barberFilterTitle')} />
 
                   {isOwnerEmployeeFiltersLoading && ownerEmployeeFilters.length === 0 && (
                     <View style={styles.inlineState} testID="summary-employee-filter-loading">
                       <ActivityIndicator size="small" />
-                      <Text style={styles.loadingText}>Loading barbers…</Text>
+                      <Text style={styles.loadingText}>{t('home.noOwnerFilterEmployees')}</Text>
                     </View>
                   )}
 
@@ -264,7 +282,7 @@ export function HomeContent({
                       </Text>
                       <AppButton
                         testID="summary-employee-filter-retry"
-                        title="Retry"
+                        title={t('common.actions.retry')}
                         variant="secondary"
                         size="md"
                         onPress={onRetryOwnerEmployeeFilters}
@@ -280,7 +298,7 @@ export function HomeContent({
                           style={styles.loadingText}
                           testID="summary-employee-filter-refreshing"
                         >
-                          Refreshing barbers…
+                          {t('home.refreshingOwnerFilterEmployees')}
                         </Text>
                       )}
                       <View style={styles.employeeFilterList}>
@@ -302,8 +320,8 @@ export function HomeContent({
                   {showOwnerEmployeeFilterEmptyState && (
                     <EmptyState
                       testID="summary-employee-filter-empty"
-                      title="No active barbers yet."
-                      message="Active barbers will appear here when they can be filtered."
+                      title={t('home.noActiveBarbersTitle')}
+                      message={t('home.noActiveBarbersMessage')}
                     />
                   )}
                 </AppCard>
@@ -312,7 +330,7 @@ export function HomeContent({
               {isSummaryLoading && (
                 <AppCard style={styles.centeredCard}>
                   <ActivityIndicator size="small" />
-                  <Text style={styles.loadingText}>Loading summary…</Text>
+                  <Text style={styles.loadingText}>{t('home.loadingSummary')}</Text>
                 </AppCard>
               )}
 
@@ -353,20 +371,20 @@ export function HomeContent({
 
           {showRecordsSection && (
             <View testID="home-records-block" style={styles.sectionBlock}>
-              <SectionHeader title="Service records" />
+              <SectionHeader title={t('home.recordsSectionTitle')} />
               <Text style={styles.sectionHint}>
-                Selected date applies only to the records list below.
+                {t('home.recordsSectionHint')}
               </Text>
 
               <AppCard testID="date-controls" variant="outlined">
-                <Text style={styles.controlEyebrow}>Selected date</Text>
+                <Text style={styles.controlEyebrow}>{t('home.selectedDate')}</Text>
                 <Text style={styles.dateDisplay} testID="date-display">
-                  {selectedDate}
+                  {formatBusinessDateLabel(selectedDate)}
                 </Text>
                 <View style={styles.dateRow}>
                   <AppButton
                     testID="date-prev"
-                    title="Previous"
+                    title={t('common.actions.previous')}
                     variant="secondary"
                     size="sm"
                     onPress={onPrevDate}
@@ -374,7 +392,7 @@ export function HomeContent({
                   />
                   <AppButton
                     testID="date-today"
-                    title="Today"
+                    title={t('common.actions.today')}
                     variant="secondary"
                     size="sm"
                     disabled={isTodayDateString(selectedDate)}
@@ -383,7 +401,7 @@ export function HomeContent({
                   />
                   <AppButton
                     testID="date-next"
-                    title="Next"
+                    title={t('common.actions.next')}
                     variant="secondary"
                     size="sm"
                     onPress={onNextDate}
@@ -395,7 +413,7 @@ export function HomeContent({
               {isRecordsLoading && (
                 <AppCard style={styles.centeredCard}>
                   <ActivityIndicator size="small" />
-                  <Text style={styles.loadingText}>Loading records…</Text>
+                  <Text style={styles.loadingText}>{t('home.loadingRecords')}</Text>
                 </AppCard>
               )}
 
@@ -408,14 +426,14 @@ export function HomeContent({
               )}
 
               {!isRecordsLoading && !recordsError && (
-                <AppCard title="Records for this date" testID="home-records-section">
+                <AppCard title={t('home.recordsForDateTitle')} testID="home-records-section">
                   {records.length === 0 ? (
                     <EmptyState
                       testID="home-records-empty"
-                      title="No service records for this date."
+                      title={t('home.noRecordsForDate')}
                     />
                   ) : (
-                    records.map((record) => renderRecordCard(record, showBarberNames))
+                    records.map((record) => renderRecordCard(record, showBarberNames, t))
                   )}
                 </AppCard>
               )}
@@ -426,8 +444,8 @@ export function HomeContent({
             <AppCard>
               <Text style={styles.emptyHint}>
                 {role === 'OWNER'
-                  ? 'No barbershop assigned yet. Summary will appear when a barbershop is linked to your account.'
-                  : 'No employee record found. Summary will appear when you are linked to a barbershop.'}
+                  ? t('home.ownerSummaryUnavailable')
+                  : t('home.barberSummaryUnavailable')}
               </Text>
             </AppCard>
           )}
@@ -468,7 +486,11 @@ function ActionCard({
   );
 }
 
-function renderRecordCard(record: ServiceRecord, showBarberNames: boolean) {
+function renderRecordCard(
+  record: ServiceRecord,
+  showBarberNames: boolean,
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
   const recordTime = formatRecordTime(record.performedAt);
 
   return (
@@ -480,7 +502,7 @@ function renderRecordCard(record: ServiceRecord, showBarberNames: boolean) {
     >
       <View style={styles.recordRowMain}>
         <Text style={styles.recordServiceName}>
-          {record.service?.name ?? 'Unknown service'}
+          {record.service?.name ?? t('home.unknownService')}
         </Text>
         <Text style={styles.recordPrice}>
           {formatCentsForDisplay(record.priceCents)}
@@ -504,7 +526,7 @@ function renderRecordCard(record: ServiceRecord, showBarberNames: boolean) {
 
       {record.clientName && (
         <Text style={styles.recordDetail} numberOfLines={1}>
-          Client: {record.clientName}
+          {t('home.recordClient', { name: record.clientName })}
         </Text>
       )}
 

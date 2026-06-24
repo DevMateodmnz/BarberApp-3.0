@@ -5,6 +5,7 @@
  * and manages service assignments.
  */
 import { create } from 'zustand';
+import { localizeUnknownError } from '@/i18n/errors.js';
 import {
   fetchEmployees,
   deactivateEmployee as deactivateEmployeeApi,
@@ -100,7 +101,7 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
       const employees = await fetchEmployees(getToken, barbershopId);
       set({ employees, isEmployeesLoading: false, employeesError: null });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
       set({ employees: [], isEmployeesLoading: false, employeesError: message });
     }
   },
@@ -115,7 +116,7 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
     await fetchEmployees(getToken, barbershopId)
       .then((employees) => set({ employees }))
       .catch((err) => {
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
         set({ employeesError: message });
       });
   },
@@ -129,7 +130,7 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
     } catch (err) {
       set({
         employeesError: friendlyCreateEmployeeError(
-          err instanceof ApiError ? err : (err instanceof Error ? err.message : 'Unknown error'),
+          err instanceof ApiError ? err : (err instanceof Error ? err.message : localizeUnknownError('Unknown error')),
         ),
       });
       throw err;
@@ -147,7 +148,7 @@ export const useEmployeesStore = create<EmployeesState>((set, get) => ({
       const assignedServices = await fetchEmployeeServices(getToken, barbershopId, employeeId);
       set({ assignedServices, isAssignmentsLoading: false });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
       set({ assignedServices: [], isAssignmentsLoading: false, assignmentsError: message });
     }
   },

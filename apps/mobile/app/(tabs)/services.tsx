@@ -1,21 +1,19 @@
-/**
- * Services screen — OWNER-only barbershop service catalog.
- *
- * Hidden route (href: null in _layout.tsx). Accessible via
- * "View Services" card on Home for OWNER users with a barbershop.
- * OWNER can view, create, and edit services.
- */
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+
 import { useContextStore } from '@/lib/store.js';
 import { useServicesStore } from '@/lib/servicesStore.js';
-import {
-  formatCentsForInput,
-} from '@/lib/format.js';
+import { formatCentsForInput } from '@/lib/format.js';
 import { useFlashStore } from '@/lib/flashStore.js';
-import { filterServicesByStatus, filterServicesByName, getServiceStatusCounts, type ServiceStatusFilter } from '@/lib/serviceFilters.js';
+import {
+  filterServicesByStatus,
+  filterServicesByName,
+  getServiceStatusCounts,
+  type ServiceStatusFilter,
+} from '@/lib/serviceFilters.js';
 import { validateServiceForm } from '@/lib/serviceForm.js';
 import { ServicesScreenView } from '@/components/ServicesScreenView.js';
 import type { Service } from '@/lib/types.js';
@@ -23,9 +21,8 @@ import type { Service } from '@/lib/types.js';
 export default function ServicesScreen() {
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { t } = useTranslation();
 
-  // Stabilize getToken via ref — Clerk Expo recreates getToken every render,
-  // which causes infinite useEffect re-fire loops when used as a dep.
   const getTokenRef = useRef(getToken);
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -41,7 +38,6 @@ export default function ServicesScreen() {
     updateService,
   } = useServicesStore();
 
-  // Creation form state
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPriceInput, setNewPriceInput] = useState('');
@@ -50,7 +46,6 @@ export default function ServicesScreen() {
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Edit form state
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editPriceInput, setEditPriceInput] = useState('');
@@ -61,18 +56,12 @@ export default function ServicesScreen() {
 
   const [statusFilter, setStatusFilter] = useState<ServiceStatusFilter>('ACTIVE');
   const [searchQuery, setSearchQuery] = useState('');
-  const visibleServices = useMemo(
-    () => {
-      const byStatus = filterServicesByStatus(services, statusFilter);
-      return filterServicesByName(byStatus, searchQuery);
-    },
-    [services, statusFilter, searchQuery],
-  );
+  const visibleServices = useMemo(() => {
+    const byStatus = filterServicesByStatus(services, statusFilter);
+    return filterServicesByName(byStatus, searchQuery);
+  }, [services, statusFilter, searchQuery]);
 
-  const statusCounts = useMemo(
-    () => getServiceStatusCounts(services),
-    [services],
-  );
+  const statusCounts = useMemo(() => getServiceStatusCounts(services), [services]);
 
   useEffect(() => {
     if (!isSignedIn || !getTokenRef.current || context) return;
@@ -127,7 +116,7 @@ export default function ServicesScreen() {
     }
 
     if (!context?.barbershopId) {
-      setCreateError('No barbershop context available.');
+      setCreateError(t('services.missingBarbershop'));
       return;
     }
 
@@ -135,11 +124,10 @@ export default function ServicesScreen() {
 
     try {
       await createService(getTokenRef.current, context.barbershopId, result.payload);
-
       resetCreateForm();
-      useFlashStore.getState().setMessage('Service created successfully.');
+      useFlashStore.getState().setMessage(t('services.createSuccess'));
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to create service');
+      setCreateError(err instanceof Error ? err.message : t('errors.unknownApi'));
     } finally {
       setIsCreating(false);
     }
@@ -160,7 +148,7 @@ export default function ServicesScreen() {
     }
 
     if (!context?.barbershopId || !editingServiceId) {
-      setEditError('Missing service context.');
+      setEditError(t('services.missingServiceContext'));
       return;
     }
 
@@ -168,11 +156,10 @@ export default function ServicesScreen() {
 
     try {
       await updateService(getTokenRef.current, context.barbershopId, editingServiceId, result.payload);
-
       cancelEditing();
-      useFlashStore.getState().setMessage('Service updated successfully.');
+      useFlashStore.getState().setMessage(t('services.updateSuccess'));
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'Failed to update service');
+      setEditError(err instanceof Error ? err.message : t('errors.unknownApi'));
     } finally {
       setIsUpdating(false);
     }
@@ -184,31 +171,29 @@ export default function ServicesScreen() {
     updateService(getTokenRef.current, context.barbershopId, service.id, { isActive: newIsActive })
       .then(() => {
         useFlashStore.getState().setMessage(
-          newIsActive ? 'Service reactivated.' : 'Service deactivated.',
+          newIsActive ? t('services.reactivateSuccess') : t('services.deactivateSuccess'),
         );
       })
       .catch((err: unknown) => {
         useFlashStore.getState().setMessage(
-          err instanceof Error ? err.message : 'Failed to update service',
+          err instanceof Error ? err.message : t('errors.unknownApi'),
         );
       });
   }
 
   function handleToggleActive(service: Service) {
-    // Reactivate is immediate — no confirmation needed
     if (!service.isActive) {
       performToggle(service, true);
       return;
     }
 
-    // Deactivate requires confirmation
     Alert.alert(
-      'Deactivate service?',
-      'This service will no longer be available for new records, but past records will stay unchanged.',
+      t('services.deactivateConfirmTitle'),
+      t('services.deactivateConfirmMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.actions.cancel'), style: 'cancel' },
         {
-          text: 'Deactivate',
+          text: t('common.actions.deactivate'),
           style: 'destructive',
           onPress: () => performToggle(service, false),
         },

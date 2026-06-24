@@ -1,4 +1,5 @@
 import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import {
   ActionRow,
@@ -14,6 +15,7 @@ import {
   SectionHeader,
   StatusBadge,
 } from '@/components/ui/index.js';
+import { getRoleLabel } from '@/i18n/index.js';
 import { tokens } from '@/theme/index.js';
 import type { CurrentUserContext } from '@/lib/types.js';
 
@@ -82,6 +84,7 @@ export function EmployeesScreenView({
   onNewUserIdChange,
   onSubmitAddForm,
 }: EmployeesScreenViewProps) {
+  const { t } = useTranslation();
   const refreshControl = (
     <RefreshControl
       refreshing={isEmployeesLoading}
@@ -93,8 +96,8 @@ export function EmployeesScreenView({
   const header = (
     <ScreenHeader
       testID="employees"
-      title="Employees"
-      subtitle="Your barbershop employee roster."
+      title={t('employees.title')}
+      subtitle={t('employees.subtitle')}
       onBack={onBack}
       rightAction={context ? <RoleBadge role={context.role} /> : undefined}
     />
@@ -106,7 +109,7 @@ export function EmployeesScreenView({
         {header}
         <AppCard testID="employees-loading" style={styles.stateCard}>
           <ActivityIndicator size="large" color={tokens.colors.primary} />
-          <Text style={styles.stateText}>Loading your context…</Text>
+          <Text style={styles.stateText}>{t('runtime.loadingContext')}</Text>
         </AppCard>
       </Screen>
     );
@@ -130,8 +133,8 @@ export function EmployeesScreenView({
         <AppCard>
           <EmptyState
             testID="employees-no-context"
-            title="No context available"
-            message="No context available yet."
+            title={t('common.states.noContextTitle')}
+            message={t('common.states.noContextMessage')}
           />
         </AppCard>
       </Screen>
@@ -143,12 +146,10 @@ export function EmployeesScreenView({
       {header}
 
       <AppCard testID="employees-context" variant="outlined" style={styles.contextCard}>
-        <Text style={styles.contextEyebrow}>Staff management</Text>
-        <Text style={styles.contextTitle}>{context.barbershopName ?? 'Barbershop roster'}</Text>
+        <Text style={styles.contextEyebrow}>{t('employees.contextEyebrow')}</Text>
+        <Text style={styles.contextTitle}>{context.barbershopName ?? t('employees.contextFallbackTitle')}</Text>
         <Text style={styles.contextBody}>
-          {isOwner
-            ? 'Manage your staff roster and control service assignments from one place.'
-            : 'Only barbershop owners can manage the employee roster.'}
+          {isOwner ? t('employees.contextOwnerBody') : t('employees.contextBlockedBody')}
         </Text>
       </AppCard>
 
@@ -156,8 +157,8 @@ export function EmployeesScreenView({
         <AppCard>
           <EmptyState
             testID="employees-blocked"
-            title="Owner access only"
-            message="Only barbershop owners can manage the employee roster."
+            title={t('employees.blockedTitle')}
+            message={t('employees.blockedMessage')}
           />
         </AppCard>
       )}
@@ -167,21 +168,21 @@ export function EmployeesScreenView({
           {!showAddForm ? (
             <AppButton
               testID="employees-add-button"
-              title="+ Add Employee"
+              title={t('employees.addButton')}
               onPress={onShowAddForm}
             />
           ) : (
             <AppCard testID="employees-add-form">
               <FormSection
-                title="New Employee"
-                helper="The person must have an account (logged in at least once). Enter their email or, if you know it, their Clerk user ID."
+                title={t('employees.newEmployeeTitle')}
+                helper={t('employees.newEmployeeHelper')}
               >
                 <AppTextInput
                   testID="employees-add-userid"
-                  label="Email (or User ID)"
+                  label={t('employees.identifierLabel')}
                   value={newUserId}
                   onChangeText={onNewUserIdChange}
-                  placeholder="e.g. barber@example.com"
+                  placeholder={t('employees.identifierPlaceholder')}
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
@@ -192,14 +193,15 @@ export function EmployeesScreenView({
 
                 <AppButton
                   testID="employees-add-submit"
-                  title={isCreating ? 'Adding…' : 'Add Employee'}
+                  title={t('employees.addButton')}
                   onPress={onSubmitAddForm}
                   loading={isCreating}
+                  loadingText={t('common.states.genericLoading')}
                   disabled={isCreating}
                 />
                 <AppButton
                   testID="employees-add-cancel"
-                  title="Cancel"
+                  title={t('common.actions.cancel')}
                   variant="ghost"
                   onPress={onCancelAddForm}
                   disabled={isCreating}
@@ -211,7 +213,7 @@ export function EmployeesScreenView({
           {isEmployeesLoading && (
             <AppCard style={styles.stateCard}>
               <ActivityIndicator size="small" color={tokens.colors.primary} />
-              <Text style={styles.stateText}>Loading employees…</Text>
+              <Text style={styles.stateText}>{t('employees.loading')}</Text>
             </AppCard>
           )}
 
@@ -225,8 +227,8 @@ export function EmployeesScreenView({
             <AppCard>
               <EmptyState
                 testID="employees-empty"
-                title="No employees found."
-                message="No employees found."
+                title={t('employees.emptyTitle')}
+                message={t('employees.emptyMessage')}
               />
             </AppCard>
           )}
@@ -234,7 +236,7 @@ export function EmployeesScreenView({
           {!isEmployeesLoading && !employeesError && employeeRows.length > 0 && (
             <AppCard testID="employees-list">
               <SectionHeader
-                title="Employee roster"
+                title={t('employees.rosterTitle')}
                 action={<Text style={styles.sectionCount}>{employeeRows.length}</Text>}
               />
 
@@ -252,9 +254,9 @@ export function EmployeesScreenView({
                       trailing={<StatusBadge status={employee.isActive ? 'ACTIVE' : 'INACTIVE'} />}
                     />
 
-                    <Text style={styles.roleText}>{employee.role}</Text>
+                    <Text style={styles.roleText}>{getRoleLabel(employee.role)}</Text>
 
-                    <ActionRow label="Employee actions" style={styles.actionsRow}>
+                    <ActionRow label={t('employees.actionsLabel')} style={styles.actionsRow}>
                       <AppButton
                         testID={employee.primaryActionTestID}
                         title={employee.primaryActionLabel}
@@ -279,16 +281,16 @@ export function EmployeesScreenView({
                         {employee.isAssignmentsLoading ? (
                           <View style={styles.assignmentLoadingRow}>
                             <ActivityIndicator size="small" color={tokens.colors.primary} />
-                            <Text style={styles.stateText}>Loading assignments…</Text>
+                            <Text style={styles.stateText}>{t('employees.loadingAssignments')}</Text>
                           </View>
                         ) : (
                           <>
                             <AppCard variant="outlined" style={styles.assignmentCard}>
-                              <SectionHeader title="Assigned Services" />
+                              <SectionHeader title={t('common.labels.assignedServices')} />
                               {employee.assignedServices.length === 0 ? (
                                 <EmptyState
-                                  title="No services assigned."
-                                  message="No services assigned."
+                                  title={t('employees.noAssignedServicesTitle')}
+                                  message={t('employees.noAssignedServicesMessage')}
                                 />
                               ) : (
                                 <View style={styles.assignmentList}>
@@ -312,11 +314,11 @@ export function EmployeesScreenView({
                             </AppCard>
 
                             <AppCard variant="outlined" style={styles.assignmentCard}>
-                              <SectionHeader title="Available Services" />
+                              <SectionHeader title={t('common.labels.availableServices')} />
                               {employee.availableServices.length === 0 ? (
                                 <EmptyState
-                                  title="All active services are assigned."
-                                  message="All active services are assigned."
+                                  title={t('employees.allServicesAssignedTitle')}
+                                  message={t('employees.allServicesAssignedMessage')}
                                 />
                               ) : (
                                 <View style={styles.assignmentList}>

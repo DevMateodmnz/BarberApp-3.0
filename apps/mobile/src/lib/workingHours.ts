@@ -1,6 +1,7 @@
 /**
  * Mobile API helpers for barbershop working hours.
  */
+import { localizeUnknownError } from '@/i18n/errors.js';
 import { api, type ApiResponse, type GetToken } from './api.js';
 import type { WorkingHoursDay } from './types.js';
 
@@ -22,7 +23,7 @@ export async function fetchWorkingHours(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch working hours');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch working hours'));
   }
 
   return data.data;
@@ -51,7 +52,7 @@ export async function putWorkingHours(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to update working hours');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to update working hours'));
   }
 
   return data.data;

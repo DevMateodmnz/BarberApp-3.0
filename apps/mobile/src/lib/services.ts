@@ -1,6 +1,7 @@
 /**
  * Mobile API helpers for barbershop services.
  */
+import { localizeUnknownError } from '@/i18n/errors.js';
 import { api, type ApiResponse, type GetToken } from './api.js';
 import type { CreateServiceInput, Service, UpdateServiceInput } from './types.js';
 
@@ -38,7 +39,7 @@ export async function fetchBarbershopServices(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch services');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch services'));
   }
 
   return data.data;
@@ -63,7 +64,7 @@ export async function createBarbershopService(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to create service');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to create service'));
   }
 
   return data.data;
@@ -89,7 +90,7 @@ export async function updateBarbershopService(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to update service');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to update service'));
   }
 
   return data.data;

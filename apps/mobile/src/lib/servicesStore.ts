@@ -5,6 +5,7 @@
  * BARBER and CLIENT are no-ops.
  */
 import { create } from 'zustand';
+import { localizeUnknownError } from '@/i18n/errors.js';
 import {
   fetchBarbershopServices,
   createBarbershopService,
@@ -58,7 +59,7 @@ export const useServicesStore = create<ServicesState>((set, get) => ({
       const services = await fetchBarbershopServices(getToken, barbershopId, { includeInactive: true });
       set({ services, isServicesLoading: false, servicesError: null });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
       set({ services: [], isServicesLoading: false, servicesError: message });
     }
   },

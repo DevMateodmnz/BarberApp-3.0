@@ -1,5 +1,5 @@
 import { api, ApiError, type ApiResponse, type GetToken } from './api.js';
-import { localizeApiError } from '@/i18n/errors.js';
+import { localizeApiError, localizeUnknownError } from '@/i18n/errors.js';
 import type { EmployeeListItem } from './types.js';
 
 export async function fetchEmployees(
@@ -14,7 +14,7 @@ export async function fetchEmployees(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch employees');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch employees'));
   }
 
   return data.data;
@@ -53,7 +53,7 @@ export async function deactivateEmployee(
 
   const { data } = response;
   if (!data.success) {
-    throw new Error(data.error?.message ?? 'Failed to deactivate employee');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to deactivate employee'));
   }
 }
 
@@ -76,7 +76,7 @@ export async function reactivateEmployee(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to reactivate employee');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to reactivate employee'));
   }
 
   return data.data;
@@ -111,7 +111,7 @@ export async function createEmployee(
   const { data, status } = response;
   if (!data.success || !data.data) {
     throw new ApiError(
-      data.error?.message ?? 'Failed to create employee',
+      localizeUnknownError(data.error?.message ?? 'Failed to create employee'),
       data.error?.code,
       status,
     );

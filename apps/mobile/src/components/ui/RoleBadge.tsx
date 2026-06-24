@@ -4,6 +4,7 @@
 import { Text, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { tokens } from '@/theme/index.js';
 import type { UserRole } from '@/lib/types.js';
+import { getRoleLabel } from '@/i18n/index.js';
 
 interface RoleBadgeProps {
   testID?: string;
@@ -14,35 +15,24 @@ interface RoleBadgeProps {
 interface RoleConfig {
   background: string;
   text: string;
-  label: string;
 }
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  OWNER: 'Owner',
-  BARBER: 'Barber',
-  CLIENT: 'Client',
-};
 
 const ROLE_CONFIG: Record<UserRole | 'UNKNOWN', RoleConfig> = {
   OWNER: {
     background: tokens.colors.primary,
     text: tokens.colors.textInverse,
-    label: ROLE_LABELS.OWNER,
   },
   BARBER: {
     background: tokens.colors.info,
     text: tokens.colors.textPrimary,
-    label: ROLE_LABELS.BARBER,
   },
   CLIENT: {
     background: tokens.colors.success,
     text: tokens.colors.textInverse,
-    label: ROLE_LABELS.CLIENT,
   },
   UNKNOWN: {
     background: tokens.colors.surfaceVariant,
     text: tokens.colors.textSecondary,
-    label: 'Unknown',
   },
 };
 
@@ -63,7 +53,7 @@ export function RoleBadge({ testID, role, style }: RoleBadgeProps) {
         style,
       ]}
     >
-      <Text style={[styles.text, { color: config.text }]}>{config.label}</Text>
+      <Text style={[styles.text, { color: config.text }]}>{getRoleLabel(role)}</Text>
     </View>
   );
 }

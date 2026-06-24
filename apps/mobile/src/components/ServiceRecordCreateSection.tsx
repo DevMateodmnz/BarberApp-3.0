@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import {
   AppButton,
@@ -16,7 +17,6 @@ import { fetchEmployeeServices, fetchMyAssignedServices } from '@/lib/employeeSe
 import { fetchEmployees } from '@/lib/employees.js';
 import {
   formatCentsForInput,
-  formatPaymentMethodLabel,
   hasPriceChangedFromDefault,
 } from '@/lib/format.js';
 import {
@@ -49,7 +49,7 @@ const PAYMENT_METHOD_OPTIONS: PaymentMethod[] = ['CASH', 'CARD', 'TRANSFER', 'OT
 export interface ServiceRecordCreateSectionViewProps {
   testID: string;
   mode: 'OWNER' | 'BARBER';
-  barbershopId: string;
+  barbershopId?: string;
   employees: EmployeeListItem[];
   services: Service[];
   isEmployeesLoading: boolean;
@@ -105,29 +105,29 @@ export function ServiceRecordCreateSectionView(props: ServiceRecordCreateSection
     onPriceChange,
     onSubmit,
   } = props;
+  const { t } = useTranslation();
 
   const isBarberMode = mode === 'BARBER';
   const isFormDisabled = isSubmitting || isEmployeesLoading || isServicesLoading;
 
   return (
     <AppCard testID={testID} style={styles.rootCard}>
-      <SectionHeader title="Create Service Record" />
+      <SectionHeader title={t('recordService.createTitle')} />
       <Text style={styles.helpText}>{helpText}</Text>
 
       {!isBarberMode && (
-        <FormSection>
-          <SectionHeader title="Employee" />
+        <FormSection title={t('common.labels.employee')}>
           {isEmployeesLoading && (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={tokens.colors.primary} />
-              <Text style={styles.loadingText}>Loading employees…</Text>
+              <Text style={styles.loadingText}>{t('recordService.loadingEmployees')}</Text>
             </View>
           )}
 
           {!isEmployeesLoading && employees.length === 0 && (
             <EmptyState
-              title="No employees available"
-              message="No employees available yet."
+              title={t('recordService.noEmployeesTitle')}
+              message={t('recordService.noEmployeesMessage')}
             />
           )}
 
@@ -149,17 +149,19 @@ export function ServiceRecordCreateSectionView(props: ServiceRecordCreateSection
       )}
 
       {(isBarberMode || !!selectedEmployeeId) && (
-        <FormSection>
-          <SectionHeader title="Service" />
+        <FormSection title={t('common.labels.service')}>
           {isServicesLoading && (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={tokens.colors.primary} />
-              <Text style={styles.loadingText}>Loading assigned services…</Text>
+              <Text style={styles.loadingText}>{t('recordService.loadingAssignedServices')}</Text>
             </View>
           )}
 
           {!isServicesLoading && services.length === 0 && (
-            <EmptyState title="No services available" message={servicesEmptyText} />
+            <EmptyState
+              title={t('recordService.noServicesTitle')}
+              message={servicesEmptyText}
+            />
           )}
 
           {!isServicesLoading && services.length > 0 && (
@@ -187,40 +189,40 @@ export function ServiceRecordCreateSectionView(props: ServiceRecordCreateSection
         >
           <Text style={styles.selectedServiceName}>{selectedService.name}</Text>
           <View style={styles.selectedServiceRow}>
-            <Text style={styles.selectedServiceLabel}>Default price: </Text>
+            <Text style={styles.selectedServiceLabel}>{t('recordService.defaultPriceLabel')}: </Text>
             <MoneyText priceCents={selectedService.priceCents} />
             <Text style={styles.selectedServiceLabel}> · </Text>
-            <Text style={styles.selectedServiceLabel}>{selectedService.durationMinutes} min</Text>
+            <Text style={styles.selectedServiceLabel}>
+              {t('services.durationLabel', { count: selectedService.durationMinutes })}
+            </Text>
           </View>
           {!priceDiffersFromDefault && (
-            <Text style={styles.usingDefaultText}>Using default service price.</Text>
+            <Text style={styles.usingDefaultText}>{t('recordService.usingDefaultPrice')}</Text>
           )}
         </AppCard>
       )}
 
-      <FormSection>
-        <SectionHeader title="Price (ARS)" />
+      <FormSection title={t('common.labels.priceARS')}>
         <AppTextInput
           testID="service-record-price-cents"
-          label="Price (ARS)"
+          label={t('common.labels.priceARS')}
           value={priceCentsInput}
           onChangeText={onPriceChange}
-          placeholder={selectedService ? formatCentsForInput(selectedService.priceCents) : 'e.g. 5000.50'}
+          placeholder={selectedService ? formatCentsForInput(selectedService.priceCents) : t('recordService.pricePlaceholder')}
           keyboardType="decimal-pad"
         />
         {priceDiffersFromDefault && (
           <Text style={styles.priceDiffText} testID="service-record-price-diff">
-            Price differs from the service default.
+            {t('recordService.priceDiffers')}
           </Text>
         )}
       </FormSection>
 
-      <FormSection>
-        <SectionHeader title="Payment Method" />
+      <FormSection title={t('common.labels.paymentMethod')}>
         <View style={styles.optionsRow}>
           <AppButton
             testID="payment-method-unspecified"
-            title="Unspecified"
+            title={t('recordService.paymentUnspecified')}
             variant={selectedPaymentMethod === null ? 'primary' : 'secondary'}
             size="md"
             onPress={() => onPaymentMethodSelect(null)}
@@ -229,7 +231,7 @@ export function ServiceRecordCreateSectionView(props: ServiceRecordCreateSection
             <AppButton
               key={paymentMethod}
               testID={`payment-method-${paymentMethod.toLowerCase()}`}
-              title={formatPaymentMethodLabel(paymentMethod)}
+              title={t(`paymentMethods.${paymentMethod}`)}
               variant={selectedPaymentMethod === paymentMethod ? 'primary' : 'secondary'}
               size="md"
               onPress={() => onPaymentMethodSelect(paymentMethod)}
@@ -238,26 +240,24 @@ export function ServiceRecordCreateSectionView(props: ServiceRecordCreateSection
         </View>
       </FormSection>
 
-      <FormSection>
-        <SectionHeader title="Client Name" />
+      <FormSection title={t('common.labels.clientName')}>
         <AppTextInput
           testID="service-record-client-name"
-          label="Client Name (optional)"
+          label={t('common.labels.clientName')}
           value={clientNameInput}
           onChangeText={onClientNameChange}
-          placeholder="e.g. Jane Doe"
+          placeholder={t('recordService.clientNamePlaceholder')}
           autoCapitalize="words"
         />
       </FormSection>
 
-      <FormSection>
-        <SectionHeader title="Notes" />
+      <FormSection title={t('common.labels.notesOptional')}>
         <AppTextInput
           testID="service-record-notes"
-          label="Notes (optional)"
+          label={t('common.labels.notesOptional')}
           value={notesInput}
           onChangeText={onNotesChange}
-          placeholder="Add any useful details"
+          placeholder={t('recordService.notesPlaceholder')}
           multiline
           textAlignVertical="top"
           inputStyle={styles.notesInput}
@@ -278,8 +278,8 @@ export function ServiceRecordCreateSectionView(props: ServiceRecordCreateSection
 
       <AppButton
         testID="service-record-submit"
-        title="Create Record"
-        loadingText="Creating…"
+        title={t('recordService.submit')}
+        loadingText={t('recordService.submitting')}
         variant="primary"
         size="lg"
         loading={isSubmitting}
@@ -293,10 +293,10 @@ export function ServiceRecordCreateSectionView(props: ServiceRecordCreateSection
 
 export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProps) {
   const { barbershopId, getToken, onRecordCreated } = props;
+  const { t } = useTranslation();
   const isBarberMode = props.mode === 'BARBER';
+  const barberEmployeeId = props.mode === 'BARBER' ? props.employeeId : null;
 
-  // Stabilize getToken via ref — parent may pass an unstable function reference
-  // (e.g. from Clerk Expo's useAuth), which causes infinite useEffect re-fire loops.
   const getTokenRef = useRef(getToken);
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -323,12 +323,12 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
   const effectiveEmployeeId = isBarberMode ? props.employeeId : selectedEmployeeId;
 
   const helpText = isBarberMode
-    ? 'Choose one of your assigned services.'
-    : 'Choose an employee, then choose one of their assigned services.';
+    ? t('recordService.helpBarber')
+    : t('recordService.helpOwner');
 
   const servicesEmptyText = isBarberMode
-    ? 'No assigned active services found for you yet.'
-    : 'No assigned active services found for this employee.';
+    ? t('recordService.noServicesBarber')
+    : t('recordService.noServicesOwner');
 
   useEffect(() => {
     let isCancelled = false;
@@ -356,7 +356,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
           }
         } catch (error) {
           if (!isCancelled) {
-            setFormError(error instanceof Error ? error.message : 'Failed to load services');
+            setFormError(error instanceof Error ? error.message : t('errors.unknownApi'));
           }
         } finally {
           if (!isCancelled) {
@@ -379,7 +379,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
         }
       } catch (error) {
         if (!isCancelled) {
-          setFormError(error instanceof Error ? error.message : 'Failed to load employees');
+          setFormError(error instanceof Error ? error.message : t('errors.unknownApi'));
         }
       } finally {
         if (!isCancelled) {
@@ -393,7 +393,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
     return () => {
       isCancelled = true;
     };
-  }, [barbershopId, isBarberMode, isBarberMode ? props.employeeId : null]);
+  }, [barbershopId, barberEmployeeId, isBarberMode, t]);
 
   async function handleEmployeeSelect(employeeId: string) {
     if (isBarberMode) return;
@@ -416,7 +416,7 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
       }
     } catch (error) {
       if (latestOwnerServicesRequestIdRef.current === requestId) {
-        setFormError(error instanceof Error ? error.message : 'Failed to load services');
+        setFormError(error instanceof Error ? error.message : t('errors.unknownApi'));
       }
     } finally {
       if (latestOwnerServicesRequestIdRef.current === requestId) {
@@ -489,10 +489,11 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
       setClientNameInput('');
       setNotesInput('');
       setPriceCentsInput('');
+      setFormSuccess(t('recordService.successCreated'));
 
       await onRecordCreated();
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Failed to create service record');
+      setFormError(error instanceof Error ? error.message : t('errors.unknownApi'));
     } finally {
       setIsSubmitting(false);
     }
@@ -520,28 +521,12 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
       isSubmitting={isSubmitting}
       helpText={helpText}
       servicesEmptyText={servicesEmptyText}
-      onEmployeeSelect={handleEmployeeSelect}
+      onEmployeeSelect={(employeeId) => void handleEmployeeSelect(employeeId)}
       onServiceSelect={handleServiceSelect}
-      onPaymentMethodSelect={(method) => {
-        setSelectedPaymentMethod(method);
-        setFormError(null);
-        setFormSuccess(null);
-      }}
-      onClientNameChange={(value) => {
-        setClientNameInput(value);
-        setFormError(null);
-        setFormSuccess(null);
-      }}
-      onNotesChange={(value) => {
-        setNotesInput(value);
-        setFormError(null);
-        setFormSuccess(null);
-      }}
-      onPriceChange={(value) => {
-        setPriceCentsInput(value);
-        setFormError(null);
-        setFormSuccess(null);
-      }}
+      onPaymentMethodSelect={setSelectedPaymentMethod}
+      onClientNameChange={setClientNameInput}
+      onNotesChange={setNotesInput}
+      onPriceChange={setPriceCentsInput}
       onSubmit={() => void handleSubmit()}
     />
   );
@@ -549,13 +534,11 @@ export function ServiceRecordCreateSection(props: ServiceRecordCreateSectionProp
 
 const styles = StyleSheet.create({
   rootCard: {
-    width: '100%',
-    marginTop: tokens.spacing[4],
+    gap: tokens.spacing[4],
   },
   helpText: {
     ...tokens.typography.variant.bodySmall,
     color: tokens.colors.textSecondary,
-    marginBottom: tokens.spacing[4],
   },
   loadingRow: {
     flexDirection: 'row',
@@ -572,17 +555,16 @@ const styles = StyleSheet.create({
     gap: tokens.spacing[2],
   },
   selectedContextCard: {
-    marginBottom: tokens.spacing[4],
+    gap: tokens.spacing[2],
   },
   selectedServiceName: {
-    ...tokens.typography.variant.label,
+    ...tokens.typography.variant.subheading,
     color: tokens.colors.textPrimary,
-    marginBottom: tokens.spacing[2],
   },
   selectedServiceRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    marginBottom: tokens.spacing[2],
   },
   selectedServiceLabel: {
     ...tokens.typography.variant.bodySmall,
@@ -590,28 +572,26 @@ const styles = StyleSheet.create({
   },
   usingDefaultText: {
     ...tokens.typography.variant.caption,
-    color: tokens.colors.success,
+    color: tokens.colors.textMuted,
   },
   priceDiffText: {
     ...tokens.typography.variant.caption,
-    color: tokens.colors.warning,
-    marginTop: tokens.spacing[2],
+    color: tokens.colors.primaryLight,
   },
   notesInput: {
-    minHeight: 88,
+    minHeight: 96,
   },
   errorText: {
     ...tokens.typography.variant.bodySmall,
     color: tokens.colors.error,
-    marginTop: tokens.spacing[3],
+    textAlign: 'center',
   },
   successText: {
     ...tokens.typography.variant.bodySmall,
     color: tokens.colors.success,
-    marginTop: tokens.spacing[3],
+    textAlign: 'center',
   },
   submitButton: {
     width: '100%',
-    marginTop: tokens.spacing[4],
   },
 });

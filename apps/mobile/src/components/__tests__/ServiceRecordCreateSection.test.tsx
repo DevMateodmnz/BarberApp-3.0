@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   ServiceRecordCreateSectionView,
 } from '@/components/ServiceRecordCreateSection.js';
+import { formatCentsForDisplay } from '@/lib/format.js';
 import {
   changeText,
   findAll,
@@ -188,7 +189,7 @@ describe('ServiceRecordCreateSectionView', () => {
     const context = findByTestId(tree, 'service-record-selected-context');
     expect(context).toBeDefined();
     expect(findByText(context, 'Classic Cut')).toBeDefined();
-    expect(findByText(context, '$3000.00')).toBeDefined();
+    expect(findByText(context, formatCentsForDisplay(300000))).toBeDefined();
     expect(findByText(context, '30 min')).toBeDefined();
   });
 

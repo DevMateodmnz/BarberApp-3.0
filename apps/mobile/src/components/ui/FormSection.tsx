@@ -32,6 +32,7 @@ const styles = StyleSheet.create({
     ...tokens.typography.variant.subheading,
     color: tokens.colors.textPrimary,
     marginBottom: tokens.spacing[2],
+    flexShrink: 1,
   },
   helper: {
     ...tokens.typography.variant.bodySmall,

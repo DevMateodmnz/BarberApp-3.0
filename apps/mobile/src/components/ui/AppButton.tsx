@@ -115,6 +115,8 @@ const styles = StyleSheet.create({
   },
   text: {
     ...tokens.typography.variant.button,
+    textAlign: 'center',
+    flexShrink: 1,
   },
   spinner: {
     marginRight: tokens.spacing[2],

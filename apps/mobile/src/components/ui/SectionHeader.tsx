@@ -31,6 +31,8 @@ const styles = StyleSheet.create({
   title: {
     ...tokens.typography.variant.subheading,
     color: tokens.colors.textPrimary,
+    flex: 1,
+    flexShrink: 1,
   },
   action: {
     marginLeft: tokens.spacing[2],

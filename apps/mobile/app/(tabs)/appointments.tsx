@@ -11,6 +11,7 @@
 import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 import {
   AppointmentsScreenView,
@@ -27,6 +28,7 @@ import {
   isTodayDateString,
   formatRecordTime,
 } from '@/lib/format.js';
+import { getAppointmentTransitionLabel } from '@/i18n/index.js';
 import type { AppointmentStatus } from '@/lib/types.js';
 
 /** Allowed status transitions per role. */
@@ -48,19 +50,9 @@ const BARBER_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
   NO_SHOW: [],
 };
 
-function transitionLabel(status: AppointmentStatus): string {
-  switch (status) {
-    case 'CONFIRMED': return 'Confirm';
-    case 'CANCELLED': return 'Cancel';
-    case 'IN_PROGRESS': return 'Start';
-    case 'COMPLETED': return 'Complete';
-    case 'NO_SHOW': return 'No-show';
-    default: return status;
-  }
-}
-
 export default function AppointmentsScreen() {
   const { isSignedIn, getToken, isLoaded } = useAuth();
+  const { t } = useTranslation();
 
   const getTokenRef = useRef(getToken);
   useEffect(() => {
@@ -203,7 +195,7 @@ export default function AppointmentsScreen() {
     return [
       {
         id: 'all',
-        label: 'All',
+        label: t('common.labels.all'),
         selected: selectedEmployeeId === null,
         testID: 'appointments-filter-all',
         onPress: () => setSelectedEmployeeId(null),
@@ -222,7 +214,7 @@ export default function AppointmentsScreen() {
     return filtered.map((appointment) => {
       const actions: AppointmentActionViewModel[] = getTransitions(appointment.status).map((targetStatus) => ({
         status: targetStatus,
-        label: transitionLabel(targetStatus),
+        label: getAppointmentTransitionLabel(targetStatus),
         testID: `appointment-action-${appointment.id}-${targetStatus}`,
         onPress: () => {
           if (targetStatus === 'CANCELLED') {
@@ -241,13 +233,13 @@ export default function AppointmentsScreen() {
         clientLabel: appointment.client.name ?? appointment.client.email,
         serviceLabel: appointment.service.name,
         employeeLabel: context?.role === 'OWNER' && appointment.employee?.user?.name
-          ? `Barber: ${appointment.employee.user.name}`
+          ? t('appointments.employeeLabel', { name: appointment.employee.user.name })
           : null,
         notes: appointment.notes,
         actions,
       };
     });
-  }, [context?.role, filtered, getTransitions, handleCancel, handleTransition]);
+  }, [context?.role, filtered, getTransitions, handleCancel, handleTransition, t]);
 
   const isRefreshing = isContextLoading || isAppointmentsLoading;
 

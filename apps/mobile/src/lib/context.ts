@@ -6,6 +6,7 @@
  */
 import { api, type ApiResponse, type GetToken } from './api.js';
 import type { CurrentUserContext } from './types.js';
+import { localizeUnknownError } from '@/i18n/errors.js';
 
 /**
  * Fetches the authenticated user's app context from the backend.
@@ -35,7 +36,7 @@ export async function fetchCurrentUserContext(
 
   if (!data.success || !data.data) {
     throw new Error(
-      data.error?.message ?? 'Failed to fetch user context'
+      localizeUnknownError(data.error?.message ?? 'Failed to fetch user context')
     );
   }
 

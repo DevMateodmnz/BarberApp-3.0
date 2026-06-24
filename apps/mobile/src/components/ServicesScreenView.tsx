@@ -1,11 +1,8 @@
 /**
  * ServicesScreenView — pure presenter for the OWNER-only service catalog.
- *
- * All business logic (state, handlers, validation, store calls) lives in
- * `app/(tabs)/services.tsx`. This component only renders the screen and
- * forwards user actions via callbacks.
  */
 import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import {
   AppButton,
@@ -116,6 +113,7 @@ export function ServicesScreenView({
   onEditDescriptionChange,
   onToggleActive,
 }: ServicesScreenViewProps) {
+  const { t } = useTranslation();
   const refreshControl = (
     <RefreshControl
       refreshing={isServicesLoading}
@@ -124,13 +122,12 @@ export function ServicesScreenView({
     />
   );
 
-  // Context-level states
   if (isContextLoading && !context) {
     return (
       <Screen scrollable keyboardAware refreshControl={refreshControl}>
         <AppCard testID="services-loading" style={styles.centeredCard}>
           <ActivityIndicator size="large" color={tokens.colors.primary} />
-          <Text style={styles.helperText}>Loading your context…</Text>
+          <Text style={styles.helperText}>{t('runtime.loadingContext')}</Text>
         </AppCard>
       </Screen>
     );
@@ -151,8 +148,8 @@ export function ServicesScreenView({
       <Screen scrollable keyboardAware refreshControl={refreshControl}>
         <EmptyState
           testID="services-no-context"
-          title="No context available"
-          message="No context available yet."
+          title={t('common.states.noContextTitle')}
+          message={t('common.states.noContextMessage')}
         />
       </Screen>
     );
@@ -163,8 +160,8 @@ export function ServicesScreenView({
       <Screen scrollable keyboardAware refreshControl={refreshControl}>
         <EmptyState
           testID="services-blocked"
-          title="Owner access only"
-          message="Only barbershop owners can manage the service catalog."
+          title={t('services.blockedTitle')}
+          message={t('services.blockedMessage')}
         />
       </Screen>
     );
@@ -173,47 +170,46 @@ export function ServicesScreenView({
   return (
     <Screen scrollable keyboardAware refreshControl={refreshControl}>
       <ScreenHeader
-        title="Services"
-        subtitle="Your barbershop service catalog."
+        title={t('services.title')}
+        subtitle={t('services.subtitle')}
       />
 
-      {/* Create service */}
       {!showCreateForm ? (
         <AppButton
           testID="services-add-button"
-          title="+ Add Service"
+          title={t('services.addButton')}
           onPress={onShowCreateForm}
         />
       ) : (
         <AppCard testID="services-create-form">
-          <FormSection title="New Service">
+          <FormSection title={t('services.newServiceTitle')}>
             <AppTextInput
               testID="services-create-name"
-              label="Name"
-              placeholder="e.g. Classic Cut"
+              label={t('services.form.nameLabel')}
+              placeholder={t('services.form.namePlaceholder')}
               value={createForm.name}
               onChangeText={onCreateNameChange}
             />
             <AppTextInput
               testID="services-create-price"
-              label="Price (ARS)"
-              placeholder="e.g. 5000.50"
+              label={t('common.labels.priceARS')}
+              placeholder={t('services.form.pricePlaceholder')}
               keyboardType="decimal-pad"
               value={createForm.priceInput}
               onChangeText={onCreatePriceChange}
             />
             <AppTextInput
               testID="services-create-duration"
-              label="Duration (minutes)"
-              placeholder="e.g. 30"
+              label={t('common.labels.durationMinutes')}
+              placeholder={t('services.form.durationPlaceholder')}
               keyboardType="number-pad"
               value={createForm.durationInput}
               onChangeText={onCreateDurationChange}
             />
             <AppTextInput
               testID="services-create-description"
-              label="Description (optional)"
-              placeholder="e.g. Scissors and clippers"
+              label={t('common.labels.descriptionOptional')}
+              placeholder={t('services.form.descriptionPlaceholder')}
               value={createForm.description}
               onChangeText={onCreateDescriptionChange}
             />
@@ -226,14 +222,15 @@ export function ServicesScreenView({
 
             <AppButton
               testID="services-create-submit"
-              title={createForm.isCreating ? 'Creating…' : 'Create Service'}
+              title={t('services.form.createSubmit')}
               onPress={onCreate}
               loading={createForm.isCreating}
+              loadingText={t('services.form.creating')}
               disabled={createForm.isCreating}
             />
             <AppButton
               testID="services-create-cancel"
-              title="Cancel"
+              title={t('common.actions.cancel')}
               variant="ghost"
               onPress={onCancelCreate}
               disabled={createForm.isCreating}
@@ -242,12 +239,11 @@ export function ServicesScreenView({
         </AppCard>
       )}
 
-      {/* Search */}
       <AppCard>
         <View style={styles.searchRow}>
           <AppTextInput
             testID="services-search-input"
-            placeholder="Search services by name…"
+            placeholder={t('services.searchPlaceholder')}
             value={searchQuery}
             onChangeText={onSearchChange}
             autoCorrect={false}
@@ -256,16 +252,15 @@ export function ServicesScreenView({
           {searchQuery.trim().length > 0 && (
             <AppButton
               testID="services-search-clear"
-              title="Clear"
+              title={t('services.clearSearch')}
               variant="ghost"
               onPress={onClearSearch}
-              accessibilityLabel="Clear service search"
+              accessibilityLabel={t('accessibility.clearServiceSearch')}
             />
           )}
         </View>
       </AppCard>
 
-      {/* Filters */}
       <View testID="services-filter-bar" style={styles.filterBar}>
         {SERVICE_STATUS_FILTERS.map((filter) => (
           <AppButton
@@ -273,10 +268,10 @@ export function ServicesScreenView({
             testID={`services-filter-${filter.toLowerCase()}`}
             title={
               filter === 'ACTIVE'
-                ? `Active (${statusCounts.ACTIVE})`
+                ? t('services.filters.active', { count: statusCounts.ACTIVE })
                 : filter === 'INACTIVE'
-                  ? `Inactive (${statusCounts.INACTIVE})`
-                  : `All (${statusCounts.ALL})`
+                  ? t('services.filters.inactive', { count: statusCounts.INACTIVE })
+                  : t('services.filters.all', { count: statusCounts.ALL })
             }
             variant={statusFilter === filter ? 'primary' : 'secondary'}
             onPress={() => onFilterChange(filter)}
@@ -284,11 +279,10 @@ export function ServicesScreenView({
         ))}
       </View>
 
-      {/* Service list states */}
       {isServicesLoading && (
         <AppCard style={styles.centeredCard}>
           <ActivityIndicator size="small" color={tokens.colors.primary} />
-          <Text style={styles.helperText}>Loading services…</Text>
+          <Text style={styles.helperText}>{t('services.loading')}</Text>
         </AppCard>
       )}
 
@@ -301,15 +295,15 @@ export function ServicesScreenView({
       {!isServicesLoading && !servicesError && visibleServices.length === 0 && (
         <EmptyState
           testID="services-empty"
-          title="No services found"
+          title={t('services.emptyTitle')}
           message={
             searchQuery.trim().length > 0
-              ? 'No services match your search.'
+              ? t('services.emptySearchMessage')
               : statusFilter === 'ACTIVE'
-                ? 'No active services.'
+                ? t('services.emptyActiveMessage')
                 : statusFilter === 'INACTIVE'
-                  ? 'No inactive services.'
-                  : 'No services yet.'
+                  ? t('services.emptyInactiveMessage')
+                  : t('services.emptyAllMessage')
           }
         />
       )}
@@ -323,30 +317,30 @@ export function ServicesScreenView({
                 testID={`service-edit-${service.id}`}
                 style={styles.editCard}
               >
-                <FormSection title="Edit Service">
+                <FormSection title={t('services.editServiceTitle')}>
                   <AppTextInput
                     testID={`service-edit-name-${service.id}`}
-                    label="Name"
+                    label={t('services.form.nameLabel')}
                     value={editForm.name}
                     onChangeText={onEditNameChange}
                   />
                   <AppTextInput
                     testID={`service-edit-price-${service.id}`}
-                    label="Price (ARS)"
+                    label={t('common.labels.priceARS')}
                     keyboardType="decimal-pad"
                     value={editForm.priceInput}
                     onChangeText={onEditPriceChange}
                   />
                   <AppTextInput
                     testID={`service-edit-duration-${service.id}`}
-                    label="Duration (minutes)"
+                    label={t('common.labels.durationMinutes')}
                     keyboardType="number-pad"
                     value={editForm.durationInput}
                     onChangeText={onEditDurationChange}
                   />
                   <AppTextInput
                     testID={`service-edit-description-${service.id}`}
-                    label="Description (optional)"
+                    label={t('common.labels.descriptionOptional')}
                     value={editForm.description}
                     onChangeText={onEditDescriptionChange}
                   />
@@ -362,14 +356,15 @@ export function ServicesScreenView({
 
                   <AppButton
                     testID={`service-edit-submit-${service.id}`}
-                    title={editForm.isUpdating ? 'Saving…' : 'Save Changes'}
+                    title={t('services.form.editSubmit')}
                     onPress={onUpdate}
                     loading={editForm.isUpdating}
+                    loadingText={t('services.form.saving')}
                     disabled={editForm.isUpdating}
                   />
                   <AppButton
                     testID={`service-edit-cancel-${service.id}`}
-                    title="Cancel"
+                    title={t('common.actions.cancel')}
                     variant="ghost"
                     onPress={onCancelEditing}
                     disabled={editForm.isUpdating}
@@ -388,7 +383,7 @@ export function ServicesScreenView({
                 </View>
                 <View style={styles.serviceRowMeta}>
                   <Text style={styles.serviceDuration}>
-                    {service.durationMinutes} min
+                    {t('services.durationLabel', { count: service.durationMinutes })}
                   </Text>
                   <StatusBadge
                     status={service.isActive ? 'ACTIVE' : 'INACTIVE'}
@@ -402,13 +397,13 @@ export function ServicesScreenView({
                 <View style={styles.serviceRowActions}>
                   <AppButton
                     testID={`service-edit-button-${service.id}`}
-                    title="Edit"
+                    title={t('common.actions.edit')}
                     variant="ghost"
                     onPress={() => onStartEditing(service)}
                   />
                   <AppButton
                     testID={`service-toggle-${service.id}`}
-                    title={service.isActive ? 'Deactivate' : 'Reactivate'}
+                    title={service.isActive ? t('common.actions.deactivate') : t('common.actions.reactivate')}
                     variant={service.isActive ? 'danger' : 'secondary'}
                     onPress={() => onToggleActive(service)}
                   />
@@ -421,7 +416,7 @@ export function ServicesScreenView({
 
       <AppButton
         testID="services-back"
-        title="Back to Home"
+        title={t('common.actions.backToHome')}
         variant="ghost"
         onPress={onBack}
       />
@@ -455,6 +450,7 @@ const styles = StyleSheet.create({
   },
   filterBar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: tokens.spacing[2],
   },
   editCard: {
@@ -467,6 +463,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: tokens.spacing[3],
   },
   serviceName: {
     ...tokens.typography.variant.body,
@@ -477,6 +474,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: tokens.spacing[3],
+    flexWrap: 'wrap',
   },
   serviceDuration: {
     ...tokens.typography.variant.caption,
@@ -489,6 +487,7 @@ const styles = StyleSheet.create({
   },
   serviceRowActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: tokens.spacing[2],
   },
 });

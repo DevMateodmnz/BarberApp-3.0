@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { HomeContent } from '@/components/HomeContent.js';
 import { findByTestId, findByText, press, queryByTestId, queryByText } from '@/testing/elementTree.js';
-import { formatRecordTime, getTodayDateString } from '@/lib/format.js';
+import { formatBusinessDateLabel, formatCentsForDisplay, formatRecordTime, getTodayDateString } from '@/lib/format.js';
 import type { BarbershopDailySummary, EmployeeDailySummary, ServiceRecord } from '@/lib/types.js';
 
 const today = getTodayDateString();
@@ -145,7 +145,7 @@ describe('HomeContent', () => {
       canRecordService: false,
     });
     expect(findByTestId(tree, 'home-no-context')).toBeDefined();
-    expect(findByText(tree, 'No barbershop assigned yet.')).toBeDefined();
+    expect(findByText(tree, 'No barbershop is linked to your account yet.')).toBeDefined();
   });
 
   it('renders owner action cards and navigation buttons', () => {
@@ -191,8 +191,8 @@ describe('HomeContent', () => {
     expect(findByTestId(tree, 'date-today')).toBeDefined();
     expect(findByTestId(tree, 'date-display')).toBeDefined();
     expect(findByTestId(tree, 'date-next')).toBeDefined();
-    expect(findByText(tree, today)).toBeDefined();
-    expect(findByText(tree, 'Selected date applies only to the records list below.')).toBeDefined();
+    expect(findByText(tree, formatBusinessDateLabel(today))).toBeDefined();
+    expect(findByText(tree, 'The selected date only affects the records list below.')).toBeDefined();
     press(findByTestId(tree, 'date-prev'));
     expect(onPrevDate).toHaveBeenCalledTimes(1);
     press(findByTestId(tree, 'date-next'));
@@ -205,7 +205,7 @@ describe('HomeContent', () => {
     const onSummaryPeriodChange = vi.fn();
     const tree = renderHomeContent({ onSummaryPeriodChange, summaryPeriod: 'today' });
     expect(findByTestId(tree, 'summary-period-controls')).toBeDefined();
-    expect(findByText(tree, 'Period filters apply only to revenue totals.')).toBeDefined();
+    expect(findByText(tree, 'Period filters only affect revenue totals.')).toBeDefined();
     press(findByTestId(tree, 'summary-period-week'));
     expect(onSummaryPeriodChange).toHaveBeenCalledWith('week');
     press(findByTestId(tree, 'summary-period-month'));
@@ -339,7 +339,7 @@ describe('HomeContent', () => {
     const recordCard = findByTestId(tree, 'record-rec-1');
     expect(recordCard).toBeDefined();
     expect(findByText(recordCard, 'Haircut')).toBeDefined();
-    expect(findByText(recordCard, '$30.00')).toBeDefined();
+    expect(findByText(recordCard, formatCentsForDisplay(3000))).toBeDefined();
     expect(findByText(recordCard, 'Cash')).toBeDefined();
     const recordTime = formatRecordTime(RECORD.performedAt);
     if (recordTime) {

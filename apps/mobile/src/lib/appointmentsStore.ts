@@ -7,6 +7,7 @@
  * - CLIENT: no-op.
  */
 import { create } from 'zustand';
+import { localizeUnknownError } from '@/i18n/errors.js';
 import {
   fetchAppointments,
   fetchEmployeeAppointments,
@@ -95,7 +96,7 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
       const appointments = await doLoadAppointments(getToken, context);
       set({ appointments, isAppointmentsLoading: false, appointmentsError: null });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
       set({ appointments: [], isAppointmentsLoading: false, appointmentsError: message });
     }
   },

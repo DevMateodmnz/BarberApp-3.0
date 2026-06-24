@@ -367,7 +367,7 @@ describe('createEmployee ApiError (defense-in-depth)', () => {
 
     expect(caught).toBeInstanceOf(ApiError);
     const apiErr = caught as InstanceType<typeof ApiError>;
-    expect(apiErr.message).toBe('User not found');
+    expect(apiErr.message).toBe('Something went wrong. Please try again. [User not found]');
     expect(apiErr.code).toBe('NOT_FOUND');
     expect(apiErr.status).toBe(200);
   });
@@ -393,7 +393,9 @@ describe('createEmployee ApiError (defense-in-depth)', () => {
 
     expect(caught).toBeInstanceOf(ApiError);
     const apiErr = caught as InstanceType<typeof ApiError>;
-    expect(apiErr.message).toBe('User is already an employee of this barbershop');
+    expect(apiErr.message).toBe(
+      'Something went wrong. Please try again. [User is already an employee of this barbershop]',
+    );
     expect(apiErr.code).toBe('CONFLICT');
     expect(apiErr.status).toBe(200);
   });

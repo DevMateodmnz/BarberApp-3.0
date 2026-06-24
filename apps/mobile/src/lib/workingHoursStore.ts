@@ -5,6 +5,7 @@
  * BARBER and CLIENT are no-ops.
  */
 import { create } from 'zustand';
+import { localizeUnknownError } from '@/i18n/errors.js';
 import {
   fetchWorkingHours,
   putWorkingHours,
@@ -46,7 +47,7 @@ export const useWorkingHoursStore = create<WorkingHoursState>((set) => ({
       const workingHours = await fetchWorkingHours(getToken, barbershopId);
       set({ workingHours, isWorkingHoursLoading: false, workingHoursError: null });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load working hours';
+      const message = err instanceof Error ? err.message : localizeUnknownError('Failed to load working hours');
       set({ workingHours: [], isWorkingHoursLoading: false, workingHoursError: message });
     }
   },

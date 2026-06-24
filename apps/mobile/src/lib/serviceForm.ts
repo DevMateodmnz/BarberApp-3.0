@@ -5,6 +5,7 @@
  * share the same validation logic. No API calls — pure function.
  */
 import { parseCurrencyInputToCents } from './format.js';
+import { translate } from '@/i18n/helpers.js';
 
 export interface ServiceFormInput {
   name: string;
@@ -38,19 +39,19 @@ export function validateServiceForm(
   // Name
   const name = input.name.trim();
   if (name.length === 0) {
-    return { ok: false, error: 'Service name is required.' };
+    return { ok: false, error: translate('services.form.nameRequired') };
   }
 
   // Price
   const priceCents = parseCurrencyInputToCents(input.priceInput);
   if (priceCents === null) {
-    return { ok: false, error: 'Enter a valid price amount.' };
+    return { ok: false, error: translate('services.form.priceInvalid') };
   }
 
   // Duration
   const durationMinutes = Number(input.durationInput);
   if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-    return { ok: false, error: 'Enter a valid positive duration in minutes.' };
+    return { ok: false, error: translate('services.form.durationInvalid') };
   }
 
   // Description

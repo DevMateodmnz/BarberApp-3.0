@@ -4,6 +4,8 @@
 import { Text, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { tokens } from '@/theme/index.js';
 import type { AppointmentStatus } from '@/lib/types.js';
+import { getAppointmentStatusLabel } from '@/i18n/index.js';
+import { getStatusLabel } from '@/i18n/helpers.js';
 
 interface StatusBadgeProps {
   testID?: string;
@@ -14,34 +16,23 @@ interface StatusBadgeProps {
 interface StatusConfig {
   background: string;
   text: string;
-  label: string;
 }
-
-const STATUS_LABELS: Record<AppointmentStatus, string> = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  IN_PROGRESS: 'In Progress',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-  NO_SHOW: 'No Show',
-};
 
 const STATUS_CONFIG: Record<
   AppointmentStatus | 'ACTIVE' | 'INACTIVE' | 'UNKNOWN',
   StatusConfig
 > = {
-  PENDING: { ...tokens.states.pending, label: STATUS_LABELS.PENDING },
-  CONFIRMED: { ...tokens.states.confirmed, label: STATUS_LABELS.CONFIRMED },
-  IN_PROGRESS: { ...tokens.states.inProgress, label: STATUS_LABELS.IN_PROGRESS },
-  COMPLETED: { ...tokens.states.completed, label: STATUS_LABELS.COMPLETED },
-  CANCELLED: { ...tokens.states.cancelled, label: STATUS_LABELS.CANCELLED },
-  NO_SHOW: { ...tokens.states.noShow, label: STATUS_LABELS.NO_SHOW },
-  ACTIVE: { ...tokens.states.active, label: 'Active' },
-  INACTIVE: { ...tokens.states.inactive, label: 'Inactive' },
+  PENDING: { ...tokens.states.pending },
+  CONFIRMED: { ...tokens.states.confirmed },
+  IN_PROGRESS: { ...tokens.states.inProgress },
+  COMPLETED: { ...tokens.states.completed },
+  CANCELLED: { ...tokens.states.cancelled },
+  NO_SHOW: { ...tokens.states.noShow },
+  ACTIVE: { ...tokens.states.active },
+  INACTIVE: { ...tokens.states.inactive },
   UNKNOWN: {
     background: tokens.colors.surfaceVariant,
     text: tokens.colors.textSecondary,
-    label: 'Unknown',
   },
 };
 
@@ -56,6 +47,11 @@ function resolveStatusConfig(status: string): StatusConfig {
 
 export function StatusBadge({ testID, status, style }: StatusBadgeProps) {
   const config = resolveStatusConfig(status);
+  const normalized = status.trim().toUpperCase();
+  const label =
+    normalized === 'ACTIVE' || normalized === 'INACTIVE'
+      ? getStatusLabel(normalized)
+      : getAppointmentStatusLabel(normalized);
 
   return (
     <View
@@ -67,7 +63,7 @@ export function StatusBadge({ testID, status, style }: StatusBadgeProps) {
       ]}
     >
       <Text style={[styles.text, { color: config.text }]}>
-        {config.label}
+        {label}
       </Text>
     </View>
   );

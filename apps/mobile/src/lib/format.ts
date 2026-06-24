@@ -5,6 +5,12 @@
  * Date formatting uses LOCAL calendar fields so that "today"
  * matches the device's local day, not UTC.
  */
+import {
+  formatBusinessDateString,
+  formatCurrencyMinorUnits,
+  formatLocalizedTime,
+  getPaymentMethodLabel,
+} from '@/i18n/index.js';
 
 /**
  * Formats a price in cents as an Argentine-style currency string.
@@ -30,20 +36,7 @@ export function formatCents(cents: number): string {
     throw new Error('cents must be non-negative');
   }
 
-  const parts: string[] = [];
-  let remaining = cents;
-
-  do {
-    parts.push(String(remaining % 1000));
-    remaining = Math.floor(remaining / 1000);
-  } while (remaining > 0);
-
-  const formatted = parts
-    .reverse()
-    .map((part, index) => (index === 0 ? part : part.padStart(3, '0')))
-    .join('.');
-
-  return `$${formatted}`;
+  return formatCurrencyMinorUnits(cents, { currency: 'ARS', fractionDigits: 0 });
 }
 
 /**
@@ -163,9 +156,7 @@ export function formatCentsForDisplay(cents: number): string {
     throw new Error('cents must be non-negative');
   }
 
-  const whole = Math.floor(cents / 100);
-  const remainder = cents % 100;
-  return `$${whole}.${String(remainder).padStart(2, '0')}`;
+  return formatCurrencyMinorUnits(cents, { currency: 'ARS', fractionDigits: 2 });
 }
 
 /**
@@ -185,14 +176,11 @@ export function formatRecordTime(performedAt?: string | null): string | null {
     return null;
   }
 
-  const date = new Date(performedAt);
-  if (isNaN(date.getTime())) {
-    return null;
-  }
-
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+  return formatLocalizedTime(performedAt, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
 
 /**
@@ -206,22 +194,11 @@ export function formatRecordTime(performedAt?: string | null): string | null {
  * @returns Human-readable English label
  */
 export function formatPaymentMethodLabel(paymentMethod: unknown): string {
-  if (typeof paymentMethod !== 'string') {
-    return 'Unspecified';
-  }
+  return getPaymentMethodLabel(paymentMethod);
+}
 
-  switch (paymentMethod.trim().toUpperCase()) {
-    case 'CASH':
-      return 'Cash';
-    case 'CARD':
-      return 'Card';
-    case 'TRANSFER':
-      return 'Transfer';
-    case 'OTHER':
-      return 'Other';
-    default:
-      return 'Unspecified';
-  }
+export function formatBusinessDateLabel(date: string): string {
+  return formatBusinessDateString(date) ?? date;
 }
 
 export function getTodayDateString(date?: Date): string {

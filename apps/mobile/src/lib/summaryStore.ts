@@ -5,6 +5,7 @@
  * CLIENT does not load any summary.
  */
 import { create } from 'zustand';
+import { localizeUnknownError } from '@/i18n/errors.js';
 import { fetchBarbershopDailySummary, fetchEmployeeDailySummary } from './summary.js';
 import { getTodayDateString } from './format.js';
 import type { CurrentUserContext, DailySummary, SummaryQuery } from './types.js';
@@ -90,7 +91,7 @@ export const useSummaryStore = create<SummaryState>((set) => ({
 
       set({ summary, isSummaryLoading: false, summaryError: null });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
       set({ summary: null, isSummaryLoading: false, summaryError: message });
     }
   },

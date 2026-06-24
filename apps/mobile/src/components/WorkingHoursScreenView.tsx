@@ -1,4 +1,5 @@
 import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import {
   ActionRow,
@@ -57,14 +58,15 @@ export function WorkingHoursScreenView({
   onSave,
   onBack,
 }: WorkingHoursScreenViewProps) {
+  const { t } = useTranslation();
   const refreshControl = (
     <RefreshControl refreshing={isWorkingHoursLoading} onRefresh={onRefresh} />
   );
 
   const header = (
     <ScreenHeader
-      title="Working Hours"
-      subtitle="Set your barbershop weekly schedule."
+      title={t('workingHours.title')}
+      subtitle={t('workingHours.subtitle')}
       rightAction={context ? <RoleBadge role={context.role} /> : undefined}
     />
   );
@@ -75,7 +77,7 @@ export function WorkingHoursScreenView({
         {header}
         <AppCard testID="loading" style={styles.stateCard}>
           <ActivityIndicator size="large" color={tokens.colors.primary} />
-          <Text style={styles.stateText}>Loading your context…</Text>
+          <Text style={styles.stateText}>{t('runtime.loadingContext')}</Text>
         </AppCard>
       </Screen>
     );
@@ -99,8 +101,8 @@ export function WorkingHoursScreenView({
         <AppCard>
           <EmptyState
             testID="working-hours-no-context"
-            title="No context available"
-            message="No context available yet."
+            title={t('common.states.noContextTitle')}
+            message={t('common.states.noContextMessage')}
           />
         </AppCard>
       </Screen>
@@ -117,12 +119,10 @@ export function WorkingHoursScreenView({
       {header}
 
       <AppCard testID="working-hours-context" variant="outlined" style={styles.contextCard}>
-        <Text style={styles.contextEyebrow}>Weekly schedule</Text>
-        <Text style={styles.contextTitle}>{context.barbershopName ?? 'Barbershop schedule'}</Text>
+        <Text style={styles.contextEyebrow}>{t('workingHours.contextEyebrow')}</Text>
+        <Text style={styles.contextTitle}>{context.barbershopName ?? t('workingHours.contextFallbackTitle')}</Text>
         <Text style={styles.contextBody}>
-          {isOwner
-            ? 'Configure the weekly opening hours for your barbershop.'
-            : 'Only barbershop owners can manage the weekly schedule.'}
+          {isOwner ? t('workingHours.contextOwnerBody') : t('workingHours.contextBlockedBody')}
         </Text>
       </AppCard>
 
@@ -130,8 +130,8 @@ export function WorkingHoursScreenView({
         <AppCard>
           <EmptyState
             testID="working-hours-blocked"
-            title="Owner access only"
-            message="Only barbershop owners can manage the weekly schedule."
+            title={t('workingHours.blockedTitle')}
+            message={t('workingHours.blockedMessage')}
           />
         </AppCard>
       )}
@@ -141,7 +141,7 @@ export function WorkingHoursScreenView({
           {isWorkingHoursLoading && (
             <AppCard testID="loading" style={styles.stateCard}>
               <ActivityIndicator size="small" color={tokens.colors.primary} />
-              <Text style={styles.stateText}>Loading working hours…</Text>
+              <Text style={styles.stateText}>{t('workingHours.loading')}</Text>
             </AppCard>
           )}
 
@@ -153,8 +153,8 @@ export function WorkingHoursScreenView({
 
           {!isWorkingHoursLoading && !workingHoursError && (
             <AppCard>
-              <SectionHeader title="Weekly schedule" />
-              <FormSection helper="Enable each day you are open and set the opening and closing times in HH:mm format.">
+              <SectionHeader title={t('workingHours.weeklyScheduleTitle')} />
+              <FormSection helper={t('workingHours.helper')}>
                 <View style={styles.daysList}>
                   {dayRows.map((day) => (
                     <AppCard
@@ -168,10 +168,10 @@ export function WorkingHoursScreenView({
                         <StatusBadge status={day.isActive ? 'ACTIVE' : 'INACTIVE'} />
                       </View>
 
-                      <ActionRow label="Day status" style={styles.dayActionRow}>
+                      <ActionRow label={t('workingHours.dayStatusLabel')} style={styles.dayActionRow}>
                         <AppButton
                           testID={`day-toggle-${day.dayOfWeek}`}
-                          title={day.isActive ? 'Open' : 'Closed'}
+                          title={day.isActive ? t('common.states.open') : t('common.states.closed')}
                           variant={day.isActive ? 'secondary' : 'ghost'}
                           size="sm"
                           onPress={day.onToggle}
@@ -182,7 +182,7 @@ export function WorkingHoursScreenView({
                         <View style={styles.timeFields}>
                           <AppTextInput
                             testID={`day-open-${day.dayOfWeek}`}
-                            label="Open"
+                            label={t('workingHours.openLabel')}
                             value={day.openTime}
                             onChangeText={day.onOpenTimeChange}
                             placeholder="HH:mm"
@@ -193,7 +193,7 @@ export function WorkingHoursScreenView({
                           />
                           <AppTextInput
                             testID={`day-close-${day.dayOfWeek}`}
-                            label="Close"
+                            label={t('workingHours.closeLabel')}
                             value={day.closeTime}
                             onChangeText={day.onCloseTimeChange}
                             placeholder="HH:mm"
@@ -204,7 +204,7 @@ export function WorkingHoursScreenView({
                           />
                         </View>
                       ) : (
-                        <Text style={styles.closedHint}>Closed for this day.</Text>
+                        <Text style={styles.closedHint}>{t('workingHours.closedHint')}</Text>
                       )}
 
                       {day.error && <Text style={styles.fieldError}>{day.error}</Text>}
@@ -224,9 +224,10 @@ export function WorkingHoursScreenView({
           {!isWorkingHoursLoading && !workingHoursError && (
             <AppButton
               testID="save-button"
-              title={saving ? 'Saving…' : 'Save Schedule'}
+              title={t('workingHours.save')}
               onPress={onSave}
               loading={saving}
+              loadingText={t('workingHours.saving')}
               disabled={saving}
             />
           )}
@@ -235,7 +236,7 @@ export function WorkingHoursScreenView({
 
       <AppButton
         testID="working-hours-back"
-        title="Back to Home"
+        title={t('common.actions.backToHome')}
         variant="ghost"
         onPress={onBack}
       />

@@ -1,4 +1,5 @@
 import { View, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import {
   AppCard,
   EmptyState,
@@ -8,6 +9,7 @@ import {
 } from '@/components/ui/index.js';
 import { tokens } from '@/theme/index.js';
 import {
+  formatBusinessDateLabel,
   formatCents,
   formatPaymentMethodLabel,
   isTodayDateString,
@@ -31,26 +33,33 @@ export function DailySummarySection({
   totalRevenueCents,
   titleLabel,
 }: DailySummarySectionProps) {
-  const dateLabel = titleLabel ?? (isTodayDateString(selectedDate) ? 'Today' : selectedDate);
+  const { t } = useTranslation();
+  const dateLabel = titleLabel ?? (
+    isTodayDateString(selectedDate)
+      ? t('common.periods.today')
+      : formatBusinessDateLabel(selectedDate)
+  );
   const hasRecords = totalRecords > 0;
 
   return (
     <View style={styles.container}>
       <SectionHeader
         testID="summary-title"
-        title={`${titleLabel ? 'Revenue Summary' : 'Daily Summary'} — ${dateLabel}`}
+        title={t(titleLabel ? 'summary.revenueSummaryTitle' : 'summary.dailySummaryTitle', {
+          label: dateLabel,
+        })}
       />
 
       <AppCard style={styles.metricsCard}>
         <View style={styles.metricRow}>
           <MetricCard
             value={totalRecords}
-            label="Records"
+            label={t('summary.recordsMetric')}
             style={styles.metric}
           />
           <MetricCard
             value={formatCents(totalRevenueCents)}
-            label="Revenue"
+            label={t('summary.revenueMetric')}
             style={styles.metric}
           />
         </View>
@@ -58,18 +67,18 @@ export function DailySummarySection({
 
       {!hasRecords && (
         <EmptyState
-          title="No services recorded for this date."
-          message="Records you create will appear here."
+          title={t('summary.noRecordsTitle')}
+          message={t('summary.noRecordsMessage')}
         />
       )}
 
       {hasRecords && byEmployee && byEmployee.length > 0 && (
         <View style={styles.breakdownSection}>
-          <SectionHeader title="By Employee" />
+          <SectionHeader title={t('summary.byEmployee')} />
           {byEmployee.map((employee) => (
             <ListItem
               key={employee.employeeId}
-              title={employee.employeeName ?? 'Unknown'}
+              title={employee.employeeName ?? t('common.states.unknown')}
               subtitle={`${employee.recordsCount} · ${formatCents(employee.revenueCents)}`}
               style={styles.breakdownItem}
             />
@@ -79,7 +88,7 @@ export function DailySummarySection({
 
       {hasRecords && byPaymentMethod.length > 0 && (
         <View style={styles.breakdownSection}>
-          <SectionHeader title="By Payment Method" />
+          <SectionHeader title={t('summary.byPaymentMethod')} />
           {byPaymentMethod.map((paymentMethod, index) => (
             <ListItem
               key={paymentMethod.paymentMethod ?? `null-${index}`}

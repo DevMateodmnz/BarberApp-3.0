@@ -505,7 +505,17 @@ describe('MoneyText', () => {
   it('formats cents as currency', () => {
     const tree = MoneyText({ testID: 'money-root', priceCents: 5000 });
     expect(findByTestId(tree, 'money-root')).toBeDefined();
-    expect(findByText(tree, '$50.00')).toBeDefined();
+    expect(
+      findByText(
+        tree,
+        new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'ARS',
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(50),
+      ),
+    ).toBeDefined();
   });
 
   it('renders a placeholder for null/undefined price', () => {
@@ -520,6 +530,16 @@ describe('PriceText', () => {
   it('is an alias that formats cents as currency', () => {
     const tree = PriceText({ testID: 'price-root', priceCents: 250000 });
     expect(findByTestId(tree, 'price-root')).toBeDefined();
-    expect(findByText(tree, '$2500.00')).toBeDefined();
+    expect(
+      findByText(
+        tree,
+        new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'ARS',
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(2500),
+      ),
+    ).toBeDefined();
   });
 });

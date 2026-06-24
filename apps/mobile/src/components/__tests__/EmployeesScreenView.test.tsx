@@ -171,13 +171,13 @@ describe('EmployeesScreenView', () => {
   it('renders the barber blocked state', () => {
     const tree = renderView({ context: BARBER_CONTEXT, isOwner: false, employeeRows: [] });
     expect(findByTestId(tree, 'employees-blocked')).toBeDefined();
-    expect(findByText(tree, 'Only barbershop owners can manage the employee roster.')).toBeDefined();
+    expect(findByText(tree, 'Only owners can manage the employee roster.')).toBeDefined();
   });
 
   it('renders the client blocked state', () => {
     const tree = renderView({ context: CLIENT_CONTEXT, isOwner: false, employeeRows: [] });
     expect(findByTestId(tree, 'employees-blocked')).toBeDefined();
-    expect(findByText(tree, 'Only barbershop owners can manage the employee roster.')).toBeDefined();
+    expect(findByText(tree, 'Only owners can manage the employee roster.')).toBeDefined();
   });
 
   it('renders the add employee button and back action', () => {
@@ -245,7 +245,7 @@ describe('EmployeesScreenView', () => {
     expect(findByText(activeEmployee, 'Carlos')).toBeDefined();
     expect(findByText(activeEmployee, 'carlos@example.com')).toBeDefined();
     expect(findByText(activeEmployee, 'Active')).toBeDefined();
-    expect(findByText(activeEmployee, 'BARBER')).toBeDefined();
+    expect(findByText(activeEmployee, 'Barber')).toBeDefined();
 
     expect(findByText(inactiveEmployee, 'Ana')).toBeDefined();
     expect(findByText(inactiveEmployee, 'Inactive')).toBeDefined();
@@ -299,8 +299,8 @@ describe('EmployeesScreenView', () => {
 
     const assignments = findByTestId(tree, 'employee-assignments-emp-1');
     expect(assignments).toBeDefined();
-    expect(findByText(assignments, 'Assigned Services')).toBeDefined();
-    expect(findByText(assignments, 'Available Services')).toBeDefined();
+    expect(findByText(assignments, 'Assigned services')).toBeDefined();
+    expect(findByText(assignments, 'Available services')).toBeDefined();
     expect(findByText(assignments, 'Classic Cut')).toBeDefined();
     expect(findByText(assignments, 'Beard Trim')).toBeDefined();
 

@@ -127,11 +127,11 @@ describe('WorkingHoursScreenView', () => {
   it('renders blocked barber and client states', () => {
     const barberTree = renderView({ context: BARBER_CONTEXT, isOwner: false, dayRows: [] });
     expect(findByTestId(barberTree, 'working-hours-blocked')).toBeDefined();
-    expect(findByText(barberTree, 'Only barbershop owners can manage the weekly schedule.')).toBeDefined();
+    expect(findByText(barberTree, 'Only owners can manage the weekly schedule.')).toBeDefined();
 
     const clientTree = renderView({ context: CLIENT_CONTEXT, isOwner: false, dayRows: [] });
     expect(findByTestId(clientTree, 'working-hours-blocked')).toBeDefined();
-    expect(findByText(clientTree, 'Only barbershop owners can manage the weekly schedule.')).toBeDefined();
+    expect(findByText(clientTree, 'Only owners can manage the weekly schedule.')).toBeDefined();
   });
 
   it('renders day rows with active and inactive states', () => {

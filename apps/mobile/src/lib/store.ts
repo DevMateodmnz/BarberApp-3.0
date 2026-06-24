@@ -5,6 +5,7 @@
  * Used by the Home screen and role-based navigation logic.
  */
 import { create } from 'zustand';
+import { translate } from '@/i18n/helpers.js';
 import { fetchCurrentUserContext } from './context.js';
 import type { CurrentUserContext } from './types.js';
 
@@ -63,7 +64,7 @@ export const useContextStore = create<ContextState>((set, get) => ({
       const context = await fetchCurrentUserContext(getToken);
       set({ context, isLoading: false, error: null });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = err instanceof Error ? err.message : translate('errors.unknownApi');
       set({ context: null, isLoading: false, error: message });
     }
   },

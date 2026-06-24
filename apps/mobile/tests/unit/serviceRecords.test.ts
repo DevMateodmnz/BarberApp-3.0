@@ -17,9 +17,12 @@ function createMockApi() {
 
 let mockApi: ReturnType<typeof createMockApi>;
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetModules();
   mockApi = createMockApi();
+  const { mobileLocalizationRuntime } = await import('../../src/i18n/runtime.js');
+  await mobileLocalizationRuntime.bootstrap();
+  await mobileLocalizationRuntime.setPreference('en');
 });
 
 async function importApi() {
@@ -460,7 +463,7 @@ describe('validateServiceRecordDraft', () => {
         serviceId: 'svc-1',
         priceCentsInput: '',
       })
-    ).toEqual({ ok: false, error: 'Enter a valid price amount.' });
+    ).toEqual({ ok: false, error: 'Enter a valid amount.' });
   });
 
   it('fails for more than two decimal places', async () => {
@@ -473,7 +476,7 @@ describe('validateServiceRecordDraft', () => {
         serviceId: 'svc-1',
         priceCentsInput: '10.999',
       })
-    ).toEqual({ ok: false, error: 'Enter a valid price amount.' });
+    ).toEqual({ ok: false, error: 'Enter a valid amount.' });
   });
 
   it('fails for negative price input', async () => {
@@ -486,7 +489,7 @@ describe('validateServiceRecordDraft', () => {
         serviceId: 'svc-1',
         priceCentsInput: '-1',
       })
-    ).toEqual({ ok: false, error: 'Enter a valid price amount.' });
+    ).toEqual({ ok: false, error: 'Enter a valid amount.' });
   });
 
   it('fails when clientName exceeds 200 characters', async () => {

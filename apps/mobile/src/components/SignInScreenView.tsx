@@ -1,7 +1,9 @@
 import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import { AppButton, AppCard, Screen } from '@/components/ui/index.js';
 import { KeyboardAwareScreenContext } from '@/components/ui/Screen.js';
+import { APP_NAME } from '@/lib/constants.js';
 import { tokens } from '@/theme/index.js';
 
 type SignInPhase = 'loading' | 'email' | 'sending' | 'code' | 'verifying';
@@ -17,6 +19,7 @@ export interface SignInScreenViewProps {
   onSendCode: () => void;
   onVerify: () => void;
   onBackToEmail: () => void;
+  onOpenLanguageSettings?: () => void;
 }
 
 export function SignInScreenView({
@@ -30,16 +33,19 @@ export function SignInScreenView({
   onSendCode,
   onVerify,
   onBackToEmail,
+  onOpenLanguageSettings,
 }: SignInScreenViewProps) {
+  const { t } = useTranslation();
+
   if (phase === 'loading') {
     return (
       <Screen>
         <View style={styles.centeredState}>
           <AppCard style={styles.stateCard}>
             <ActivityIndicator testID="sign-in-loading" size="large" color={tokens.colors.primary} />
-            <Text style={styles.stateTitle}>Loading sign-in</Text>
+            <Text style={styles.stateTitle}>{t('auth.loadingTitle')}</Text>
             <Text style={styles.stateMessage}>
-              Preparing secure email-code authentication…
+              {t('auth.loadingMessage')}
             </Text>
           </AppCard>
         </View>
@@ -61,35 +67,47 @@ export function SignInScreenView({
       contentContainerStyle={styles.screenContent}
     >
       <View style={styles.content}>
+        {onOpenLanguageSettings && (
+          <View style={styles.headerAction}>
+            <AppButton
+              testID="sign-in-language-settings"
+              title={t('languageSelector.openFromSignIn')}
+              variant="ghost"
+              size="sm"
+              onPress={onOpenLanguageSettings}
+              accessibilityLabel={t('accessibility.languageSettings')}
+            />
+          </View>
+        )}
         <View style={styles.hero}>
-          <Text style={styles.eyebrow}>BarberApp</Text>
-          <Text style={styles.heroTitle}>Welcome back</Text>
+          <Text style={styles.eyebrow}>{APP_NAME}</Text>
+          <Text style={styles.heroTitle}>{t('auth.welcomeTitle')}</Text>
           <Text style={styles.heroSubtitle}>
-            Sign in with the email code we send to your inbox.
+            {t('auth.welcomeSubtitle')}
           </Text>
         </View>
 
         <AppCard variant="elevated" style={styles.formCard}>
           <Text style={styles.cardTitle}>
-            {isEmailPhase ? 'Enter your email' : 'Check your email'}
+            {isEmailPhase ? t('auth.emailPhaseTitle') : t('auth.codePhaseTitle')}
           </Text>
           <Text style={styles.cardSubtitle}>
             {isEmailPhase
-              ? 'We will send a 6-digit code so you can continue securely.'
-              : `Enter the 6-digit code sent to ${destinationEmail}.`}
+              ? t('auth.emailPhaseSubtitle')
+              : t('auth.codePhaseSubtitle', { email: destinationEmail })}
           </Text>
 
           {error && <Text style={styles.errorText}>{error}</Text>}
 
           {isEmailPhase && (
             <View style={styles.formSection}>
-              <Text style={styles.inputLabel}>Email address</Text>
+              <Text style={styles.inputLabel}>{t('common.labels.emailAddress')}</Text>
               <KeyboardAwareScreenContext.Consumer>
                 {(keyboardAwareContext) => (
                   <TextInput
                     testID="email-input"
                     style={styles.input}
-                    placeholder="email@example.com"
+                    placeholder={t('auth.emailPlaceholder')}
                     placeholderTextColor={tokens.colors.textMuted}
                     value={email}
                     onChangeText={onEmailChange}
@@ -113,9 +131,9 @@ export function SignInScreenView({
 
               <AppButton
                 testID="sign-in-send-code"
-                title="Send Code"
+                title={t('common.actions.sendCode')}
                 loading={isSending}
-                loadingText="Sending…"
+                loadingText={t('auth.sending')}
                 onPress={onSendCode}
               />
             </View>
@@ -123,13 +141,13 @@ export function SignInScreenView({
 
           {isCodePhase && (
             <View style={styles.formSection}>
-              <Text style={styles.inputLabel}>Verification code</Text>
+              <Text style={styles.inputLabel}>{t('common.labels.verificationCode')}</Text>
               <KeyboardAwareScreenContext.Consumer>
                 {(keyboardAwareContext) => (
                   <TextInput
                     testID="code-input"
                     style={[styles.input, styles.codeInput]}
-                    placeholder="000000"
+                    placeholder={t('auth.codePlaceholder')}
                     placeholderTextColor={tokens.colors.textMuted}
                     value={code}
                     onChangeText={onCodeChange}
@@ -152,14 +170,14 @@ export function SignInScreenView({
 
               <AppButton
                 testID="sign-in-verify"
-                title="Verify"
+                title={t('common.actions.verify')}
                 loading={isVerifying}
-                loadingText="Verifying…"
+                loadingText={t('auth.verifying')}
                 onPress={onVerify}
               />
               <AppButton
                 testID="sign-in-back"
-                title="Back"
+                title={t('common.actions.changeEmail')}
                 variant="ghost"
                 onPress={onBackToEmail}
                 disabled={isVerifying}
@@ -198,6 +216,9 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: tokens.spacing[6],
+  },
+  headerAction: {
+    alignItems: 'flex-end',
   },
   hero: {
     gap: tokens.spacing[2],

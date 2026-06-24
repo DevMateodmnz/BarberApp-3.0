@@ -1,4 +1,5 @@
 import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 import {
   ActionRow,
@@ -14,6 +15,7 @@ import {
 } from '@/components/ui/index.js';
 import { tokens } from '@/theme/index.js';
 import type { AppointmentStatus, CurrentUserContext } from '@/lib/types.js';
+import { formatBusinessDateLabel } from '@/lib/format.js';
 
 export interface EmployeeFilterOption {
   id: string;
@@ -72,6 +74,7 @@ export function AppointmentsScreenView({
   onToday,
   onNextDate,
 }: AppointmentsScreenViewProps) {
+  const { t } = useTranslation();
   const refreshControl = (
     <RefreshControl
       refreshing={isRefreshing}
@@ -81,21 +84,21 @@ export function AppointmentsScreenView({
   );
 
   const headerSubtitle = context?.role === 'BARBER'
-    ? 'Your operational appointment schedule.'
-    : 'Operational appointment schedule.';
+    ? t('appointments.subtitleBarber')
+    : t('appointments.subtitleOwner');
 
   if (context?.role === 'CLIENT') {
     return (
       <Screen>
         <ScreenHeader
-          title="Appointments"
-          subtitle="Operational appointment schedule."
+          title={t('appointments.title')}
+          subtitle={t('appointments.subtitleOwner')}
         />
         <AppCard style={styles.blockedCard}>
           <EmptyState
             testID="appointments-client-blocked"
-            title="Owner and barber access only"
-            message="Appointment management is available for barbershop owners and barbers only."
+            title={t('appointments.blockedTitle')}
+            message={t('appointments.blockedMessage')}
           />
         </AppCard>
       </Screen>
@@ -105,22 +108,26 @@ export function AppointmentsScreenView({
   return (
     <Screen scrollable refreshControl={refreshControl}>
       <ScreenHeader
-        title="Appointments"
+        title={t('appointments.title')}
         subtitle={headerSubtitle}
         rightAction={context ? <RoleBadge role={context.role} /> : undefined}
       />
 
       {context && (
         <AppCard testID="appointments-context" variant="outlined" style={styles.contextCard}>
-          <Text style={styles.contextEyebrow}>Schedule scope</Text>
-          <Text style={styles.contextTitle}>{context.barbershopName ?? 'Barbershop schedule'}</Text>
+          <Text style={styles.contextEyebrow}>{t('common.labels.scheduleScope')}</Text>
+          <Text style={styles.contextTitle}>
+            {context.barbershopName ?? t('appointments.contextFallbackTitle')}
+          </Text>
           <Text style={styles.contextBody}>
             {context.role === 'OWNER'
-              ? 'Review every barber appointment or narrow the list by barber.'
-              : 'Review and update the appointments assigned to you.'}
+              ? t('appointments.contextOwnerBody')
+              : t('appointments.contextBarberBody')}
           </Text>
           {context.role === 'BARBER' && context.employeeName && (
-            <Text style={styles.contextMeta}>Barber: {context.employeeName}</Text>
+            <Text style={styles.contextMeta}>
+              {t('appointments.contextBarberMeta', { name: context.employeeName })}
+            </Text>
           )}
         </AppCard>
       )}
@@ -128,22 +135,24 @@ export function AppointmentsScreenView({
       {isContextLoading && (
         <AppCard style={styles.stateCard}>
           <ActivityIndicator testID="appointments-loading" size="large" color={tokens.colors.primary} />
-          <Text style={styles.stateText}>Loading your context…</Text>
+          <Text style={styles.stateText}>{t('runtime.loadingContext')}</Text>
         </AppCard>
       )}
 
       {context && !isContextLoading && (
         <>
           <AppCard testID="appointments-date-controls" variant="outlined" style={styles.dateCard}>
-            <Text style={styles.dateEyebrow}>Selected date</Text>
-            <Text style={styles.dateDisplay} testID="appointments-date-display">{selectedDate}</Text>
+            <Text style={styles.dateEyebrow}>{t('common.labels.selectedDate')}</Text>
+            <Text style={styles.dateDisplay} testID="appointments-date-display">
+              {formatBusinessDateLabel(selectedDate)}
+            </Text>
             <Text style={styles.dateHint}>
-              {isTodaySelected ? 'Today' : 'Browse past and upcoming appointments.'}
+              {isTodaySelected ? t('appointments.selectedDateHintToday') : t('appointments.selectedDateHintBrowse')}
             </Text>
             <View style={styles.dateActions}>
               <AppButton
                 testID="appointments-date-prev"
-                title="Previous"
+                title={t('common.actions.previous')}
                 variant="secondary"
                 size="sm"
                 onPress={onPrevDate}
@@ -151,7 +160,7 @@ export function AppointmentsScreenView({
               />
               <AppButton
                 testID="appointments-date-today"
-                title="Today"
+                title={t('common.actions.today')}
                 variant={isTodaySelected ? 'secondary' : 'primary'}
                 size="sm"
                 onPress={onToday}
@@ -160,7 +169,7 @@ export function AppointmentsScreenView({
               />
               <AppButton
                 testID="appointments-date-next"
-                title="Next"
+                title={t('common.actions.next')}
                 variant="secondary"
                 size="sm"
                 onPress={onNextDate}
@@ -171,7 +180,7 @@ export function AppointmentsScreenView({
 
           {employeeFilters.length > 0 && (
             <AppCard testID="appointments-employee-filter" variant="outlined">
-              <SectionHeader title="Barber filter" />
+              <SectionHeader title={t('common.labels.barberFilter')} />
               <View style={styles.filterWrap}>
                 {employeeFilters.map((filter) => (
                   <AppButton
@@ -191,7 +200,7 @@ export function AppointmentsScreenView({
           {isAppointmentsLoading && (
             <AppCard style={styles.stateCard}>
               <ActivityIndicator size="small" color={tokens.colors.primary} />
-              <Text style={styles.stateText}>Loading appointments…</Text>
+              <Text style={styles.stateText}>{t('appointments.loading')}</Text>
             </AppCard>
           )}
 
@@ -200,15 +209,15 @@ export function AppointmentsScreenView({
               <Text style={styles.errorText} testID="appointments-error">
                 {appointmentsError}
               </Text>
-              <Text style={styles.stateHint}>Pull to refresh and try again.</Text>
+              <Text style={styles.stateHint}>{t('appointments.errorHint')}</Text>
             </AppCard>
           )}
 
           {!isAppointmentsLoading && !appointmentsError && appointmentRows.length === 0 && (
             <AppCard testID="appointments-empty">
               <EmptyState
-                title="No appointments for this date."
-                message="Try another day or adjust the barber filter."
+                title={t('appointments.emptyTitle')}
+                message={t('appointments.emptyMessage')}
               />
             </AppCard>
           )}
@@ -216,7 +225,7 @@ export function AppointmentsScreenView({
           {!isAppointmentsLoading && !appointmentsError && appointmentRows.length > 0 && (
             <AppCard testID="appointments-list">
               <SectionHeader
-                title="Appointments"
+                title={t('appointments.listTitle')}
                 action={<Text style={styles.sectionCount}>{appointmentRows.length}</Text>}
               />
 
@@ -253,7 +262,7 @@ export function AppointmentsScreenView({
                     {appointment.actions.length > 0 && (
                       <ActionRow
                         testID={`appointment-actions-${appointment.id}`}
-                        label="Available actions"
+                        label={t('common.labels.availableActions')}
                         style={styles.actionRow}
                       >
                         {appointment.actions.map((action) => (

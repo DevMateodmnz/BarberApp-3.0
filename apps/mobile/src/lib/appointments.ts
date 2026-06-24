@@ -1,6 +1,7 @@
 /**
  * Mobile API helpers for appointments.
  */
+import { localizeUnknownError } from '@/i18n/errors.js';
 import { api, type ApiResponse, type GetToken } from './api.js';
 import type { Appointment, AppointmentStatus } from './types.js';
 
@@ -21,7 +22,7 @@ export async function fetchAppointments(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch appointments');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch appointments'));
   }
 
   return data.data;
@@ -46,7 +47,7 @@ export async function fetchEmployeeAppointments(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch employee appointments');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch employee appointments'));
   }
 
   return data.data;
@@ -73,7 +74,7 @@ export async function transitionAppointmentStatus(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to update appointment status');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to update appointment status'));
   }
 
   return data.data;
@@ -97,7 +98,7 @@ export async function cancelAppointment(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to cancel appointment');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to cancel appointment'));
   }
 
   return data.data;

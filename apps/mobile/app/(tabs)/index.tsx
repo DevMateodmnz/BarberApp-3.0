@@ -11,8 +11,10 @@ import { useEffect, useCallback, useRef, useState } from 'react';
 import { RefreshControl } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Screen } from '@/components/ui/index.js';
 import { HomeContent } from '@/components/HomeContent.js';
+import { localizeUnknownError } from '@/i18n/index.js';
 import { fetchEmployees } from '@/lib/employees.js';
 import { useContextStore } from '@/lib/store.js';
 import { useSummaryStore } from '@/lib/summaryStore.js';
@@ -27,13 +29,6 @@ import type {
   EmployeeListItem,
   RevenueSummaryPeriod,
 } from '@/lib/types.js';
-
-const SUMMARY_PERIOD_LABELS: Record<RevenueSummaryPeriod, string> = {
-  today: 'Today',
-  week: 'This week',
-  month: 'This month',
-  year: 'This year',
-};
 
 function buildSummaryQuery(
   context: CurrentUserContext,
@@ -64,12 +59,13 @@ function getOwnerEmployeeFilterErrorMessage(error: unknown) {
     return error.message;
   }
 
-  return 'Failed to load barbers.';
+  return localizeUnknownError('Failed to load barbers');
 }
 
 export default function HomeScreen() {
   const router = useRouter();
   const { isSignedIn, getToken, isLoaded } = useAuth();
+  const { t } = useTranslation();
 
   // Clerk Expo's useAuth creates a new getToken function on every render
   // (unlike Clerk React which uses useCallback). Stabilize via a ref so
@@ -326,12 +322,12 @@ export default function HomeScreen() {
     );
 
   const isRefreshing = isContextLoading || isSummaryLoading || isRecordsLoading;
-  const summaryPeriodLabel = SUMMARY_PERIOD_LABELS[selectedSummaryPeriod];
+  const summaryPeriodLabel = t(`common.periods.${selectedSummaryPeriod}`);
   const ownerEmployeeFilters = context?.role === 'OWNER' && ownerEmployees.length > 0
     ? [
         {
           id: 'all',
-          label: 'All barbers',
+          label: t('common.labels.all'),
           selected: summaryEmployeeFilter === null,
           testID: 'summary-employee-filter-all',
           onPress: () => setSummaryEmployeeFilter(null),
@@ -400,6 +396,7 @@ export default function HomeScreen() {
             setSelectedDate(today);
           }
         }}
+        onOpenLanguageSettings={() => router.push('/language')}
       />
     </Screen>
   );

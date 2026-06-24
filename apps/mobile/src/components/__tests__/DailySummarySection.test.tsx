@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { DailySummarySection } from '@/components/DailySummarySection.js';
 import { findByTestId, findByText, queryByText } from '@/testing/elementTree.js';
-import { getTodayDateString } from '@/lib/format.js';
+import { formatBusinessDateLabel, formatCents, getTodayDateString } from '@/lib/format.js';
 
 const today = getTodayDateString();
 
@@ -36,7 +36,7 @@ describe('DailySummarySection', () => {
       totalRecords: 5,
       totalRevenueCents: 15000,
     });
-    expect(findByText(tree, 'Daily Summary — 2026-06-01')).toBeDefined();
+    expect(findByText(tree, `Daily Summary — ${formatBusinessDateLabel('2026-06-01')}`)).toBeDefined();
   });
 
   it('renders a revenue summary title when a custom period label is provided', () => {
@@ -58,7 +58,7 @@ describe('DailySummarySection', () => {
       totalRevenueCents: 25000,
     });
     expect(findByText(tree, '7')).toBeDefined();
-    expect(findByText(tree, '$25.000')).toBeDefined();
+    expect(findByText(tree, formatCents(25000))).toBeDefined();
     expect(findByText(tree, 'Records')).toBeDefined();
     expect(findByText(tree, 'Revenue')).toBeDefined();
   });
@@ -70,7 +70,7 @@ describe('DailySummarySection', () => {
       totalRecords: 0,
       totalRevenueCents: 0,
     });
-    expect(findByText(tree, 'No services recorded for this date.')).toBeDefined();
+    expect(findByText(tree, 'No services were recorded for this date.')).toBeDefined();
     expect(queryByText(tree, 'By Employee')).toBeNull();
     expect(queryByText(tree, 'By Payment Method')).toBeNull();
   });
@@ -82,11 +82,11 @@ describe('DailySummarySection', () => {
       totalRecords: 5,
       totalRevenueCents: 15000,
     });
-    expect(findByText(tree, 'By Employee')).toBeDefined();
+    expect(findByText(tree, 'By employee')).toBeDefined();
     expect(findByText(tree, 'Carlos')).toBeDefined();
     expect(findByText(tree, 'Ana')).toBeDefined();
-    expect(findByText(tree, '3 · $9.000')).toBeDefined();
-    expect(findByText(tree, '2 · $6.000')).toBeDefined();
+    expect(findByText(tree, `3 · ${formatCents(9000)}`)).toBeDefined();
+    expect(findByText(tree, `2 · ${formatCents(6000)}`)).toBeDefined();
   });
 
   it('renders the payment method breakdown', () => {
@@ -97,10 +97,10 @@ describe('DailySummarySection', () => {
       totalRecords: 5,
       totalRevenueCents: 15000,
     });
-    expect(findByText(tree, 'By Payment Method')).toBeDefined();
+    expect(findByText(tree, 'By payment method')).toBeDefined();
     expect(findByText(tree, 'Cash')).toBeDefined();
     expect(findByText(tree, 'Card')).toBeDefined();
-    expect(findByText(tree, '3 · $8.000')).toBeDefined();
-    expect(findByText(tree, '2 · $7.000')).toBeDefined();
+    expect(findByText(tree, `3 · ${formatCents(8000)}`)).toBeDefined();
+    expect(findByText(tree, `2 · ${formatCents(7000)}`)).toBeDefined();
   });
 });

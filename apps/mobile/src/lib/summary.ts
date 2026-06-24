@@ -6,6 +6,7 @@
  */
 import { api, type ApiResponse, type GetToken } from './api.js';
 import type { BarbershopDailySummary, EmployeeDailySummary, SummaryQuery } from './types.js';
+import { localizeUnknownError } from '@/i18n/errors.js';
 
 function toSummaryParams(query: string | SummaryQuery): Record<string, string> {
   if (typeof query === 'string') {
@@ -42,7 +43,7 @@ export async function fetchBarbershopDailySummary(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch barbershop summary');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch barbershop summary'));
   }
   return data.data;
 }
@@ -72,7 +73,7 @@ export async function fetchEmployeeDailySummary(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch employee summary');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch employee summary'));
   }
   return data.data;
 }

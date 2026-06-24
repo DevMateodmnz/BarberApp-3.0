@@ -13,6 +13,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useSignIn } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import { SignInScreenView } from '@/components/SignInScreenView.js';
 import {
   validateEmail,
@@ -31,6 +32,7 @@ type ScreenState =
 export default function SignInScreen() {
   const router = useRouter();
   const { isLoaded, signIn, setActive } = useSignIn();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export default function SignInScreen() {
     clearError();
 
     if (!signIn) {
-      setError('Sign-in is not available. Please try again later.');
+      setError(t('errors.authUnavailable'));
       return;
     }
 
@@ -60,7 +62,7 @@ export default function SignInScreen() {
 
       const emailFactor = isEmailCodeFactor(result.supportedFirstFactors);
       if (!emailFactor || !emailFactor.emailAddressId) {
-        setError('Email code sign-in is not available. Please contact support.');
+        setError(t('errors.emailCodeUnavailable'));
         setScreenState({ phase: 'email' });
         return;
       }
@@ -75,13 +77,13 @@ export default function SignInScreen() {
       setError(extractErrorMessage(err));
       setScreenState({ phase: 'email' });
     }
-  }, [email, signIn, clearError]);
+  }, [clearError, email, signIn, t]);
 
   const handleVerify = useCallback(async () => {
     clearError();
 
     if (!signIn || !setActive) {
-      setError('Sign-in is not available. Please try again later.');
+      setError(t('errors.authUnavailable'));
       return;
     }
 
@@ -126,7 +128,7 @@ export default function SignInScreen() {
         );
       }
     }
-  }, [code, signIn, setActive, clearError, router]);
+  }, [clearError, code, router, setActive, signIn, t]);
 
   const handleBackToEmail = useCallback(() => {
     setError(null);
@@ -154,6 +156,7 @@ export default function SignInScreen() {
         onSendCode={handleSendCode}
         onVerify={handleVerify}
         onBackToEmail={handleBackToEmail}
+        onOpenLanguageSettings={() => router.push('/language')}
       />
     );
   }
@@ -182,6 +185,7 @@ export default function SignInScreen() {
       onSendCode={handleSendCode}
       onVerify={handleVerify}
       onBackToEmail={handleBackToEmail}
+      onOpenLanguageSettings={() => router.push('/language')}
     />
   );
 }

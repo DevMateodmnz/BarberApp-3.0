@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { ServicesScreenView } from '@/components/ServicesScreenView.js';
+import { formatCentsForDisplay } from '@/lib/format.js';
 import {
   changeText,
   findAll,
@@ -151,7 +152,7 @@ describe('ServicesScreenView', () => {
   it('renders a non-owner blocked message', () => {
     const tree = renderView({ context: BARBER_CONTEXT, isOwner: false });
     expect(findByTestId(tree, 'services-blocked')).toBeDefined();
-    expect(findByText(tree, 'Only barbershop owners can manage the service catalog.')).toBeDefined();
+    expect(findByText(tree, 'Only owners can manage the service catalog.')).toBeDefined();
   });
 
   it('renders the screen header and add button for owners', () => {
@@ -282,7 +283,7 @@ describe('ServicesScreenView', () => {
     expect(findByTestId(tree, 'service-svc-1')).toBeDefined();
     expect(findByTestId(tree, 'service-svc-2')).toBeDefined();
     expect(findByText(tree, 'Classic Cut')).toBeDefined();
-    expect(findByText(tree, '$5000.00')).toBeDefined();
+    expect(findByText(tree, formatCentsForDisplay(500000))).toBeDefined();
     expect(findByText(tree, '30 min')).toBeDefined();
     expect(findByText(tree, 'Active')).toBeDefined();
     expect(findByText(tree, 'Inactive')).toBeDefined();

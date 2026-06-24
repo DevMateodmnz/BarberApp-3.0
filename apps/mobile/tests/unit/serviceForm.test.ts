@@ -1,8 +1,14 @@
 /**
  * Unit tests for service form validation helper — PR-053A
  */
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import { validateServiceForm } from '../../src/lib/serviceForm.js';
+import { mobileLocalizationRuntime } from '../../src/i18n/runtime.js';
+
+beforeEach(async () => {
+  await mobileLocalizationRuntime.bootstrap();
+  await mobileLocalizationRuntime.setPreference('en');
+});
 
 describe('validateServiceForm', () => {
   it('valid input returns ok true with trimmed name', () => {
@@ -72,7 +78,7 @@ describe('validateServiceForm', () => {
       durationInput: '30',
       description: '',
     });
-    expect(result).toEqual({ ok: false, error: 'Enter a valid price amount.' });
+    expect(result).toEqual({ ok: false, error: 'Enter a valid amount.' });
   });
 
   it('negative price returns ok false', () => {
@@ -82,7 +88,7 @@ describe('validateServiceForm', () => {
       durationInput: '30',
       description: '',
     });
-    expect(result).toEqual({ ok: false, error: 'Enter a valid price amount.' });
+    expect(result).toEqual({ ok: false, error: 'Enter a valid amount.' });
   });
 
   it('duration zero returns ok false', () => {
@@ -92,7 +98,7 @@ describe('validateServiceForm', () => {
       durationInput: '0',
       description: '',
     });
-    expect(result).toEqual({ ok: false, error: 'Enter a valid positive duration in minutes.' });
+    expect(result).toEqual({ ok: false, error: 'Enter a valid duration in minutes.' });
   });
 
   it('duration negative returns ok false', () => {
@@ -102,7 +108,7 @@ describe('validateServiceForm', () => {
       durationInput: '-5',
       description: '',
     });
-    expect(result).toEqual({ ok: false, error: 'Enter a valid positive duration in minutes.' });
+    expect(result).toEqual({ ok: false, error: 'Enter a valid duration in minutes.' });
   });
 
   it('duration decimal returns ok false', () => {
@@ -112,7 +118,7 @@ describe('validateServiceForm', () => {
       durationInput: '30.5',
       description: '',
     });
-    expect(result).toEqual({ ok: false, error: 'Enter a valid positive duration in minutes.' });
+    expect(result).toEqual({ ok: false, error: 'Enter a valid duration in minutes.' });
   });
 
   it('duration non-numeric returns ok false', () => {
@@ -122,7 +128,7 @@ describe('validateServiceForm', () => {
       durationInput: 'abc',
       description: '',
     });
-    expect(result).toEqual({ ok: false, error: 'Enter a valid positive duration in minutes.' });
+    expect(result).toEqual({ ok: false, error: 'Enter a valid duration in minutes.' });
   });
 
   it('blank description is omitted from payload', () => {

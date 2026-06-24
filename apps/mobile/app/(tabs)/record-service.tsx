@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 import { AppButton, AppCard, EmptyState, Screen, ScreenHeader } from '@/components/ui/index.js';
 import { ServiceRecordCreateSection } from '@/components/ServiceRecordCreateSection.js';
@@ -12,9 +13,8 @@ import { tokens } from '@/theme/index.js';
 export default function RecordServiceScreen() {
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { t } = useTranslation();
 
-  // Stabilize getToken via ref — Clerk Expo recreates getToken every render,
-  // which causes infinite useEffect re-fire loops when used as a dep.
   const getTokenRef = useRef(getToken);
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -28,9 +28,9 @@ export default function RecordServiceScreen() {
   }, [context, isSignedIn, loadContext]);
 
   const handleRecordCreated = useCallback(async () => {
-    useFlashStore.getState().setMessage('Service record created successfully.');
+    useFlashStore.getState().setMessage(t('recordService.successCreated'));
     router.back();
-  }, [router]);
+  }, [router, t]);
 
   if (!isLoaded || !isSignedIn) {
     return null;
@@ -42,7 +42,7 @@ export default function RecordServiceScreen() {
         <View style={styles.centerContent}>
           <AppCard variant="outlined" style={styles.stateCard}>
             <ActivityIndicator size="large" color={tokens.colors.primary} />
-            <Text style={styles.mutedText}>Loading your context…</Text>
+            <Text style={styles.mutedText}>{t('runtime.loadingContext')}</Text>
           </AppCard>
         </View>
       </Screen>
@@ -66,8 +66,8 @@ export default function RecordServiceScreen() {
       <Screen>
         <View style={styles.centerContent}>
           <EmptyState
-            title="No context available"
-            message="No context available yet."
+            title={t('common.states.noContextTitle')}
+            message={t('common.states.noContextMessage')}
           />
         </View>
       </Screen>
@@ -78,14 +78,10 @@ export default function RecordServiceScreen() {
   const canBarberCreate = context.role === 'BARBER' && !!context.barbershopId && !!context.employeeId;
 
   return (
-    <Screen
-      scrollable
-      keyboardAware
-      testID="record-service-screen"
-    >
+    <Screen scrollable keyboardAware testID="record-service-screen">
       <ScreenHeader
-        title="Record Service"
-        subtitle="Add a completed service record"
+        title={t('recordService.title')}
+        subtitle={t('recordService.subtitle')}
       />
 
       {canOwnerCreate && (
@@ -110,7 +106,7 @@ export default function RecordServiceScreen() {
       {context.role === 'CLIENT' && (
         <AppCard variant="outlined" style={styles.messageCard}>
           <Text style={styles.messageText}>
-            Only owners and barbers can record completed services.
+            {t('recordService.blockedClientMessage')}
           </Text>
         </AppCard>
       )}
@@ -119,15 +115,15 @@ export default function RecordServiceScreen() {
         <AppCard variant="outlined" style={styles.messageCard}>
           <Text style={styles.messageText}>
             {context.role === 'OWNER'
-              ? 'No barbershop is linked to your account yet.'
-              : 'No employee context is linked to your account yet.'}
+              ? t('recordService.ownerNoBarbershop')
+              : t('recordService.barberNoEmployeeContext')}
           </Text>
         </AppCard>
       )}
 
       <AppButton
         testID="record-service-back"
-        title="Back to Home"
+        title={t('common.actions.backToHome')}
         variant="ghost"
         size="md"
         onPress={() => router.back()}

@@ -92,7 +92,9 @@ describe('extractErrorMessage', () => {
     (error as Record<string, unknown>).errors = [
       { message: 'No account found with this email.' },
     ];
-    expect(extractErrorMessage(error)).toBe('No account found with this email.');
+    expect(extractErrorMessage(error)).toBe(
+      'We could not sign you in. Please try again. [No account found with this email.]',
+    );
   });
 
   it('uses first error message when multiple', () => {
@@ -101,18 +103,22 @@ describe('extractErrorMessage', () => {
       { message: 'First error' },
       { message: 'Second error' },
     ];
-    expect(extractErrorMessage(error)).toBe('First error');
+    expect(extractErrorMessage(error)).toBe(
+      'We could not sign you in. Please try again. [First error]',
+    );
   });
 
   it('uses Error.message as fallback', () => {
     const error = new Error('Network failure');
-    expect(extractErrorMessage(error)).toBe('Network failure');
+    expect(extractErrorMessage(error)).toBe(
+      'We could not sign you in. Please try again. [Network failure]',
+    );
   });
 
   it('returns default message for non-Error objects', () => {
-    expect(extractErrorMessage('string error')).toBe('Unable to sign in. Please try again.');
-    expect(extractErrorMessage(null)).toBe('Unable to sign in. Please try again.');
-    expect(extractErrorMessage(undefined)).toBe('Unable to sign in. Please try again.');
+    expect(extractErrorMessage('string error')).toBe('We could not sign you in. Please try again.');
+    expect(extractErrorMessage(null)).toBe('We could not sign you in. Please try again.');
+    expect(extractErrorMessage(undefined)).toBe('We could not sign you in. Please try again.');
   });
 });
 
@@ -166,7 +172,7 @@ describe('verifyEmailCode', () => {
 
     expect(result.outcome).toBe('error');
     expect(result.errorMessage).toBe(
-      'Verification succeeded but no session was created. Please try again.',
+      'Verification completed, but no session was created. Please try again.',
     );
     expect(setActive).not.toHaveBeenCalled();
   });
@@ -190,7 +196,7 @@ describe('verifyEmailCode', () => {
 
     expect(result.outcome).toBe('error');
     expect(result.errorMessage).toBe(
-      'Unexpected sign-in status: needs_second_factor. Please try again.',
+      'The sign-in status was unexpected. Please try again. [needs_second_factor]',
     );
     expect(setActive).not.toHaveBeenCalled();
   });
@@ -202,7 +208,7 @@ describe('verifyEmailCode', () => {
     const result = await verifyEmailCode(signIn, setActive, '222222');
 
     expect(result.outcome).toBe('error');
-    expect(result.errorMessage).toContain('Unexpected sign-in status: abandoned');
+    expect(result.errorMessage).toContain('[abandoned]');
     expect(setActive).not.toHaveBeenCalled();
   });
 

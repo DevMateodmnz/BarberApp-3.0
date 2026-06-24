@@ -6,6 +6,7 @@
  * CLIENT is a no-op.
  */
 import { create } from 'zustand';
+import { localizeUnknownError } from '@/i18n/errors.js';
 import { fetchBarbershopRecords, fetchEmployeeRecords } from './serviceRecords.js';
 import type { CurrentUserContext, ServiceRecord } from './types.js';
 
@@ -70,7 +71,7 @@ export const useRecordsStore = create<RecordsState>((set) => ({
 
       set({ records, isRecordsLoading: false, recordsError: null });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
       set({ records: [], isRecordsLoading: false, recordsError: message });
     }
   },

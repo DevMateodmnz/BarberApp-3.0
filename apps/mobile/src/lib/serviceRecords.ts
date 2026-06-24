@@ -1,5 +1,6 @@
 import { api, type ApiResponse, type GetToken } from './api.js';
 import type { CreateServiceRecordInput, ServiceRecord } from './types.js';
+import { localizeUnknownError } from '@/i18n/errors.js';
 
 export async function createServiceRecord(
   getToken: GetToken,
@@ -15,7 +16,7 @@ export async function createServiceRecord(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to create service record');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to create service record'));
   }
 
   return data.data;
@@ -42,7 +43,7 @@ export async function fetchBarbershopRecords(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch service records');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch service records'));
   }
 
   return data.data;
@@ -70,7 +71,7 @@ export async function fetchEmployeeRecords(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch employee records');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch employee records'));
   }
 
   return data.data;

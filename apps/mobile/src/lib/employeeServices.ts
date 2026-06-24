@@ -1,5 +1,6 @@
 import { api, type ApiResponse, type GetToken } from './api.js';
 import type { Service } from './types.js';
+import { localizeUnknownError } from '@/i18n/errors.js';
 
 export async function fetchEmployeeServices(
   getToken: GetToken,
@@ -14,7 +15,7 @@ export async function fetchEmployeeServices(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch employee services');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch employee services'));
   }
 
   return data.data;
@@ -32,7 +33,7 @@ export async function fetchMyAssignedServices(
 
   const { data } = response;
   if (!data.success || !data.data) {
-    throw new Error(data.error?.message ?? 'Failed to fetch assigned services');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch assigned services'));
   }
 
   return data.data;
@@ -58,7 +59,7 @@ export async function assignEmployeeService(
 
   const { data } = response;
   if (!data.success) {
-    throw new Error(data.error?.message ?? 'Failed to assign service');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to assign service'));
   }
 }
 
@@ -81,6 +82,6 @@ export async function unassignEmployeeService(
 
   const { data } = response;
   if (!data.success) {
-    throw new Error(data.error?.message ?? 'Failed to unassign service');
+    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to unassign service'));
   }
 }

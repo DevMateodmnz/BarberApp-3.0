@@ -1,224 +1,185 @@
-# Mobile Internationalization Foundation
+# Mobile Interface Localization
 
-This document defines the first mobile i18n foundation for BarberApp. It adds shared locale resolution, persisted language preference, typed translation catalogs, locale-aware formatters, and localized error mapping **before** the navigation/dashboard redesign so future translated layouts can be built safely.
+BarberApp mobile now uses one shared localization system for the complete OWNER/BARBER interface, including a reusable language selector, centralized formatting, localized mobile-owned validation/errors, and a hardcoded-string audit guard.
 
 ## Quick path
 
-1. Use the shared mobile i18n runtime in `apps/mobile/src/i18n/`.
-2. Keep interface language, business timezone, and currency as separate concerns.
-3. Migrate screens incrementally in the next batch instead of rewriting every hardcoded string now.
+1. Add or update interface copy in `apps/mobile/src/i18n/locales/es.ts` first.
+2. Keep every other locale in parity with the Spanish catalog.
+3. Use `translate(...)`, `useTranslation()`, or the shared formatter/helpers instead of inline UI copy or manual formatting.
 
-## What is in scope now
+## Current outcome
 
 | Topic | Decision |
 |-------|----------|
-| Libraries | Use `expo-localization`, `i18next`, and `react-i18next`. |
-| Supported app locales | `es`, `en`, `de`, `fr`, `it`, `zh-Hans`. |
-| Android locale declaration | Declare `zh-CN` in `app.json`, then normalize it to canonical app locale `zh-Hans` in code. |
-| Fallback | Unsupported or invalid locale input falls back to Spanish (`es`). |
-| Preference storage | Persist explicit language preference in Expo Secure Store; `system` means “use device language”. |
-| Runtime switching | Language can change at runtime through the localization runtime without Metro restart or source edits. |
-| Missing keys | Fallback to Spanish; parity tests protect catalogs; dev diagnostics stay non-fatal. |
-| Formatting | New shared `Intl` helpers format dates, times, decimals, percentages, and money without changing business timezone semantics or ARS defaults. |
-| Error localization | Stable employee `NOT_FOUND` / `CONFLICT` cases are localized; unknown errors use localized generic copy with dev-only raw diagnostics. |
+| Supported locales | `es`, `en`, `de`, `fr`, `it`, `zh-Hans` |
+| Fallback locale | Spanish (`es`) |
+| Selector architecture | Root Expo Router modal route at `app/language.tsx` |
+| Signed-out entry | `SignInScreenView` language action |
+| Signed-in entry | `HomeContent` language action |
+| Persistence | Explicit locale or `system` preference stored through the existing localization runtime |
+| Runtime switching | Immediate, no restart, no Metro reload |
+| Formatter source of truth | `apps/mobile/src/i18n/formatters.ts` |
+| Legacy formatter status | `apps/mobile/src/lib/format.ts` now delegates user-facing presentation to the i18n formatter layer |
+| Error strategy | Known stable cases map to translated keys; unknown API/mobile errors use localized generic fallback with dev-only diagnostics |
+| Hardcoded-string guard | `apps/mobile/tests/unit/i18n-hardcoded-audit.test.ts` plus reviewed allowlist |
 
-## Supported languages and locale behavior
+## What is now localized
 
-### Supported interface languages
+### Surfaces completed
 
-| Language | Canonical locale |
-|----------|------------------|
-| Spanish | `es` |
-| English | `en` |
-| German | `de` |
-| French | `fr` |
-| Italian | `it` |
-| Simplified Chinese | `zh-Hans` |
+- root loading and configuration states
+- sign-in flow
+- language selector
+- Home/dashboard
+- Appointments
+- Record Service
+- Services
+- Employees
+- Working Hours
+- shared role/status/payment labels
+- loading, empty, success, validation, and confirmation copy owned by mobile
 
-### Device locale resolution
+### Shared formatting completed
 
-- Regional aliases normalize to supported app locales.
-- Examples:
-  - `es-AR` → `es`
-  - `en-US` → `en`
-  - `de-DE` → `de`
-  - `fr-FR` → `fr`
-  - `it-IT` → `it`
-  - `zh-CN`, `zh-SG`, `zh-Hans-CN` → `zh-Hans`
-- Unsupported locales (for example `pt-BR`) fall back to `es`.
+- localized date labels
+- localized time labels
+- localized integer/decimal/percent rendering
+- localized ARS money formatting
+- localized weekday rendering
+- localized role/status/payment labels without changing backend codes
 
-### Preference behavior
+## Language selector architecture
 
-- Stored values can be one supported locale or `system`.
-- Missing or invalid stored values fall back safely to `system`.
-- Storage failures must not block app startup.
-- The visible language selector is deferred to the next batch, but the runtime API is ready for it.
+### Route
 
-## Locale, timezone, and currency are separate
+- `apps/mobile/app/language.tsx`
 
-These values must **not** be conflated:
+### Behavior
 
-| Concern | Current rule |
-|---------|--------------|
-| Interface language | Comes from device locale or saved user preference. |
-| Business timezone | Remains the barbershop-local timezone behavior already used by the app. |
-| Currency | Remains Argentine peso behavior until currency becomes configurable. |
+- supports `system` mode plus the six explicit locales
+- shows locale self-names:
+  - Español
+  - English
+  - Deutsch
+  - Français
+  - Italiano
+  - 简体中文
+- shows the resolved active language while `system` mode is selected
+- applies selection immediately
+- preserves auth/session state, navigation state, and local stores
+- persists the preference through the shared localization runtime
 
-Rules:
+### Accessibility rules
 
-- Do not infer currency from language.
-- Do not infer timezone from language.
-- Do not concatenate money strings manually when the shared formatter is available.
-- Continue treating user-entered calendar/day semantics as barbershop-local, not UTC-derived.
+- selector actions expose localized labels
+- selected rows expose selected-state semantics
+- language entry points remain reachable from signed-out and signed-in flows
+- long labels are allowed to wrap instead of clipping
 
-## Translation resource conventions
+## Formatter migration rules
 
-### Key conventions
+### Separation of concerns
 
-- Use stable semantic keys, not translated strings, as identifiers.
-- Group keys by feature or cross-cutting concern (`common`, `navigation`, `errors`, `paymentMethods`, and so on).
-- Prefer short, composable keys over large sentence blobs.
-- Keep interpolation variables semantic (`countLabel`, `amount`, `count`).
+| Concern | Rule |
+|-------|------|
+| Interface language | Controlled by locale preference/runtime |
+| Business timezone | Still barbershop-local calendar semantics |
+| Currency | Still ARS |
+| User-created content | Never auto-translated |
 
-### Pluralization and interpolation
+### Implementation notes
 
-- Use i18next plural keys (`*_one`, `*_other`) through the base key.
-- Use interpolation for dynamic values.
-- Keep user-created data outside the translation catalog.
+- `apps/mobile/src/i18n/formatters.ts` is the presentation source of truth.
+- `apps/mobile/src/lib/format.ts` keeps legacy call sites stable while delegating display formatting to the i18n formatter layer.
+- Locale changes affect presentation only, not stored values or date-boundary logic.
 
-### User-content policy
+## Error localization strategy
 
-Never auto-translate user-created content, including:
+### Mobile-owned errors
 
-- barbershop names
-- employee names
-- client names
-- service names
-- notes
+- form validation uses translation keys
+- screen-level missing-context states use translation keys
+- unknown mobile/API failures flow through `localizeUnknownError(...)`
 
-These values are content, not interface copy.
+### Structured API mapping
 
-## Missing-translation behavior
+- employee create flow maps known `NOT_FOUND` and `CONFLICT` cases to stable translated copy
+- unknown backend messages are hidden behind a localized generic fallback in production
+- development may append sanitized raw diagnostics for debugging
 
-- Spanish is the fallback catalog.
-- Catalog parity tests are required across all six locales.
-- Development diagnostics may append raw unknown error text.
-- Production must not crash on missing keys or storage errors.
+### Remaining backend gaps
 
-## Shared responsive text rules
+The mobile app still depends on human-readable backend messages for some unknown-error diagnostics. This batch did **not** redesign the backend error contract; it only ensured the mobile UI no longer depends on untranslated fallback copy for user-facing presentation.
 
-These rules exist now so the next layout batch does not assume English-only dimensions:
+## Responsive text hardening
 
-1. Do not assume one-line labels for tabs, buttons, cards, or section headers.
-2. Avoid fixed heights that only fit short English labels.
-3. Expect German and French strings to be longer than English.
-4. Expect Chinese strings to be shorter but visually denser.
-5. Check accessibility font scaling before locking vertical spacing.
-6. Prefer content-driven layout over hardcoded widths.
-7. Hidden routes still need translated titles because they appear in headers and future navigation flows.
-
-## Current migration inventory
-
-This batch intentionally does **not** migrate every hardcoded string. Current rough inventory from the mobile audit:
-
-| Domain | Approx. string count | Notes |
-|--------|-----------------------|-------|
-| Home / dashboard | 91 | Largest visible summary surface |
-| Services | 84 | Forms, buttons, validation, labels |
-| Service records | 65 | Record flow + summary copy |
-| Employees | 63 | Owner management + onboarding errors |
-| Appointments | 62 | Status/action heavy |
-| Working hours | 44 | Weekdays + validation |
-| Roles / statuses / payment methods | 34 | Shared cross-screen labels |
-| Authentication | 24 | Sign-in and auth errors |
-| Runtime / configuration errors | 20 | Startup/config surfaces |
-| Dates / times / currency | 19 | Needs formatter migration |
-| Navigation | 6 | Tabs + hidden route titles |
-| Shared UI / misc | 9+ | Small but cross-cutting |
-
-## Migration plan by screen
-
-### Next migration order
-
-1. `app/(tabs)/index.tsx` and Home shared components
-2. `app/(tabs)/appointments.tsx`
-3. `app/(tabs)/record-service.tsx`
-4. `app/(tabs)/services.tsx`
-5. `app/(tabs)/employees.tsx`
-6. `app/(tabs)/working-hours.tsx`
-7. auth surfaces and remaining startup/runtime copy
-
-### Why this order
-
-- Home and Appointments define the future daily-workflow navigation priorities.
-- Record/Services/Employees/Working Hours already depend on many shared labels and formatters.
-- Shared formatters should migrate before deeper layout changes so text wrapping can be measured with translated content.
-
-## Current shared components to revisit in Prompt 2
-
-These components were audited but not redesigned here:
+### Components updated for translation safety
 
 - `AppButton`
-- `AppCard`
-- `Screen`
+- `ActionRow`
+- `FormSection`
+- `ListItem`
 - `ScreenHeader`
 - `SectionHeader`
-- `ListItem`
-- `FormSection`
-- tab/navigation labels
+- `RoleBadge`
+- `StatusBadge`
+- `MoneyText`
+- Home/sign-in language entry placements
 
-Review them for:
+### Rules enforced
 
-- fixed heights
-- fixed widths
-- single-line assumptions
-- truncated labels without fallback behavior
-- spacing that breaks under accessibility font scaling
+- labels may wrap
+- buttons can grow vertically
+- action rows can wrap across lines
+- headers no longer depend on short English text
+- long German/French text must remain tappable
+- Chinese strings must flow through the same component tree without custom branching
 
-## Translation review status
+## Intentional untranslated literals
 
-Current non-Spanish catalogs are implementation starters only.
+These remain by design and are protected by the hardcoded audit allowlist:
 
-| Locale | Review status |
+| Literal | Why it stays |
 |--------|---------------|
-| `es` | Project fallback / reference catalog |
-| `en` | Needs product review |
-| `de` | Needs native-speaker review before commercial launch |
-| `fr` | Needs native-speaker review before commercial launch |
-| `it` | Needs native-speaker review before commercial launch |
-| `zh-Hans` | Needs native-speaker review before commercial launch |
+| `BarberApp` | Brand name |
+| `HH:mm` | Format mask placeholder |
+| `—` | Neutral missing-value glyph |
+| `‹` | Back icon glyph |
+| legacy raw employee backend messages | internal matcher inputs for structured localization fallback |
 
-Do **not** treat AI-generated German, French, Italian, or Chinese copy as launch-ready localization.
+## Verification
 
-## Future QA matrix
+### Automated
 
-| Area | Spanish | English | German | French | Italian | Simplified Chinese | Accessibility font sizes |
-|------|---------|---------|--------|--------|---------|--------------------|--------------------------|
-| Root/config surfaces | ✅ | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| Home | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| Appointments | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| Record Service | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| Services | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| Employees | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| Working Hours | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 | 🔲 |
-| Runtime language switching | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | N/A |
+- catalog parity tests
+- locale render matrix smoke tests for auth, Home, Appointments, Record Service, Services, Employees, and Working Hours
+- language-selector tests
+- formatter tests
+- hardcoded-string audit
 
-Legend:
+### Human review still required
 
-- ✅ covered by current automated foundation tests
-- 🔲 requires future screen-level migration + QA
+- native-speaker review for German
+- native-speaker review for French
+- native-speaker review for Italian
+- native-speaker review for Simplified Chinese
+- physical-device overflow verification across larger accessibility font sizes
 
-## Reviewer checklist
+## Translation quality warning
 
-- [ ] Supported locales are limited to the six approved interface languages.
-- [ ] Unsupported and invalid locale inputs fall back to Spanish.
-- [ ] Language preference storage cannot crash startup.
-- [ ] Runtime switching works without app rebuild or Metro restart.
-- [ ] Translation catalogs stay in parity across all locales.
-- [ ] New formatters keep timezone semantics separate from language.
-- [ ] User-created content is not auto-translated.
-- [ ] Unknown API errors do not leak raw server copy in production.
+Non-Spanish catalogs are implementation-ready for development and QA, but not launch-approved localization. They still require native-speaker product review before production release.
+
+## Checklist
+
+- [x] Complete OWNER/BARBER mobile interface migrated to i18n
+- [x] Shared language selector available before and after sign-in
+- [x] User-facing formatting centralized
+- [x] Unknown mobile/API fallbacks localized
+- [x] Hardcoded runtime UI literals audited with allowlist
+- [ ] Native-speaker review completed for non-Spanish locales
+- [ ] Physical six-language device QA completed
 
 ## Next step
 
-Prompt 2 should migrate the first screen batch onto this foundation, starting with Home + Appointments + shared navigation labels, and then validate translated layout behavior under German/French length pressure and larger accessibility font sizes.
+Prompt 3 can now focus on navigation/layout redesign constraints using real translated copy instead of English-only placeholders.

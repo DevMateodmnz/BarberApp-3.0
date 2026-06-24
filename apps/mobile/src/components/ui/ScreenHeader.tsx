@@ -35,7 +35,7 @@ export function ScreenHeader({
             <Text style={styles.backIcon}>‹</Text>
           </Pressable>
         )}
-        <View>
+        <View style={styles.titleBlock}>
           <Text style={styles.title}>{title}</Text>
           {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
         </View>
@@ -56,9 +56,10 @@ const styles = StyleSheet.create({
   },
   left: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: tokens.spacing[2],
     flex: 1,
+    minWidth: 0,
   },
   backButton: {
     width: minTouchTarget,
@@ -74,13 +75,20 @@ const styles = StyleSheet.create({
   title: {
     ...tokens.typography.variant.heading,
     color: tokens.colors.textPrimary,
+    flexShrink: 1,
   },
   subtitle: {
     ...tokens.typography.variant.caption,
     color: tokens.colors.textSecondary,
     marginTop: tokens.spacing[1],
+    flexShrink: 1,
   },
   rightAction: {
     marginLeft: tokens.spacing[2],
+    alignSelf: 'flex-start',
+  },
+  titleBlock: {
+    flex: 1,
+    minWidth: 0,
   },
 });

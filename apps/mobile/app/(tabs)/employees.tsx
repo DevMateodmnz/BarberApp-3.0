@@ -1,14 +1,8 @@
-/**
- * Employees screen — OWNER-only barbershop employee roster.
- *
- * Hidden route (href: null in _layout.tsx). Accessible via
- * "View Employees" card on Home for OWNER users with a barbershop.
- * OWNER can view, deactivate, and reactivate employees.
- */
 import { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 import {
   EmployeesScreenView,
@@ -24,9 +18,8 @@ import type { EmployeeListItem } from '@/lib/types.js';
 export default function EmployeesScreen() {
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { t } = useTranslation();
 
-  // Stabilize getToken via ref — Clerk Expo recreates getToken every render,
-  // which causes infinite useEffect re-fire loops when used as a dep.
   const getTokenRef = useRef(getToken);
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -62,7 +55,6 @@ export default function EmployeesScreen() {
     void loadEmployees(getTokenRef.current, context.barbershopId);
   }, [context, loadEmployees]);
 
-  // Add employee form state
   const [showAddForm, setShowAddForm] = useState(false);
   const [newUserId, setNewUserId] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -79,12 +71,12 @@ export default function EmployeesScreen() {
 
     const identifier = newUserId.trim();
     if (identifier.length === 0) {
-      setCreateError('Email or User ID is required.');
+      setCreateError(t('employees.identifierRequired'));
       return;
     }
 
     if (!context?.barbershopId) {
-      setCreateError('No barbershop context available.');
+      setCreateError(t('employees.missingBarbershop'));
       return;
     }
 
@@ -93,10 +85,9 @@ export default function EmployeesScreen() {
     try {
       await createEmployee(getTokenRef.current, context.barbershopId, identifier);
       resetAddForm();
-      useFlashStore.getState().setMessage('Employee added successfully.');
+      useFlashStore.getState().setMessage(t('employees.addSuccess'));
     } catch {
-      // Store already set employeesError with a friendly message.
-      // Keep the form open so the user can retry without re-typing.
+      setCreateError(useEmployeesStore.getState().employeesError ?? t('errors.unknownApi'));
     } finally {
       setIsCreating(false);
     }
@@ -108,7 +99,6 @@ export default function EmployeesScreen() {
       return;
     }
     if (!context?.barbershopId || !getTokenRef.current) return;
-    // Ensure all services are loaded
     void loadServices(getTokenRef.current, context.barbershopId);
     void loadAssignments(getTokenRef.current, context.barbershopId, employeeId);
   }
@@ -134,21 +124,21 @@ export default function EmployeesScreen() {
     if (!context?.barbershopId) return;
 
     Alert.alert(
-      'Deactivate employee?',
-      `${employee.user.name ?? employee.user.email} will no longer be able to record services.`,
+      t('employees.deactivateConfirmTitle'),
+      t('employees.deactivateConfirmMessage', { name: employee.user.name ?? employee.user.email }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.actions.cancel'), style: 'cancel' },
         {
-          text: 'Deactivate',
+          text: t('common.actions.deactivate'),
           style: 'destructive',
           onPress: () => {
             deactivateEmployee(getTokenRef.current, context.barbershopId!, employee.id)
               .then(() => {
-                useFlashStore.getState().setMessage('Employee deactivated.');
+                useFlashStore.getState().setMessage(t('employees.deactivateSuccess'));
               })
               .catch((err: unknown) => {
                 useFlashStore.getState().setMessage(
-                  err instanceof Error ? err.message : 'Failed to deactivate employee',
+                  err instanceof Error ? err.message : t('errors.unknownApi'),
                 );
               });
           },
@@ -162,11 +152,11 @@ export default function EmployeesScreen() {
 
     reactivateEmployee(getTokenRef.current, context.barbershopId, employee.id)
       .then(() => {
-        useFlashStore.getState().setMessage('Employee reactivated.');
+        useFlashStore.getState().setMessage(t('employees.reactivateSuccess'));
       })
       .catch((err: unknown) => {
         useFlashStore.getState().setMessage(
-          err instanceof Error ? err.message : 'Failed to reactivate employee',
+          err instanceof Error ? err.message : t('errors.unknownApi'),
         );
       });
   }
@@ -179,7 +169,7 @@ export default function EmployeesScreen() {
         ? assignedServices.map((service) => ({
             id: service.id,
             name: service.name,
-            actionLabel: 'Remove',
+            actionLabel: t('common.actions.remove'),
             actionTestID: `employee-unassign-${employee.id}-${service.id}`,
             onAction: () => {
               if (!context?.barbershopId) return;
@@ -192,7 +182,7 @@ export default function EmployeesScreen() {
         ? unassignedServices.map((service) => ({
             id: service.id,
             name: service.name,
-            actionLabel: 'Assign',
+            actionLabel: t('common.actions.assign'),
             actionTestID: `employee-assign-${employee.id}-${service.id}`,
             onAction: () => {
               if (!context?.barbershopId) return;
@@ -207,7 +197,7 @@ export default function EmployeesScreen() {
         email: employee.user.email,
         role: employee.user.role,
         isActive: employee.isActive,
-        primaryActionLabel: employee.isActive ? 'Deactivate' : 'Reactivate',
+        primaryActionLabel: employee.isActive ? t('common.actions.deactivate') : t('common.actions.reactivate'),
         primaryActionTestID: employee.isActive
           ? `employee-deactivate-${employee.id}`
           : `employee-reactivate-${employee.id}`,
@@ -218,7 +208,7 @@ export default function EmployeesScreen() {
           }
           handleReactivate(employee);
         },
-        manageServicesLabel: isExpanded ? 'Hide Services' : 'Manage Services',
+        manageServicesLabel: isExpanded ? t('common.actions.hideServices') : t('common.actions.manageServices'),
         manageServicesTestID: `employee-manage-services-${employee.id}`,
         onManageServices: () => handleToggleAssignments(employee.id),
         assignmentsExpanded: isExpanded,
@@ -228,14 +218,15 @@ export default function EmployeesScreen() {
       };
     });
   }, [
-    employees,
-    selectedEmployeeIdForAssignments,
     assignedServices,
-    unassignedServices,
-    context?.barbershopId,
-    isAssignmentsLoading,
-    unassignService,
     assignService,
+    context?.barbershopId,
+    employees,
+    isAssignmentsLoading,
+    selectedEmployeeIdForAssignments,
+    t,
+    unassignedServices,
+    unassignService,
   ]);
 
   if (!isLoaded || !isSignedIn) {

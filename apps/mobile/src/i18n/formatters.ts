@@ -48,6 +48,28 @@ export interface DateFormatterOptions extends Intl.DateTimeFormatOptions {
   timeZone?: string;
 }
 
+function parseDateInput(value: Date | string): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [yearText, monthText, dayText] = value.split('-');
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+      return null;
+    }
+
+    return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function formatInteger(value: number, locale?: SupportedLocale): string {
   try {
     return getNumberFormatter(locale, {
@@ -132,8 +154,8 @@ export function formatLocalizedDate(
   value: Date | string,
   options: DateFormatterOptions = {},
 ): string | null {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  if (Number.isNaN(date.getTime())) {
+  const date = parseDateInput(value);
+  if (!date) {
     return null;
   }
 
@@ -156,8 +178,8 @@ export function formatLocalizedTime(
   value: Date | string,
   options: DateFormatterOptions = {},
 ): string | null {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  if (Number.isNaN(date.getTime())) {
+  const date = parseDateInput(value);
+  if (!date) {
     return null;
   }
 
@@ -186,4 +208,17 @@ export function formatLocalizedWeekday(dayOfWeek: number, locale?: SupportedLoca
   } catch {
     return reference.toUTCString();
   }
+}
+
+export function formatBusinessDateString(
+  value: string,
+  options: Omit<DateFormatterOptions, 'timeZone'> = {},
+): string | null {
+  return formatLocalizedDate(value, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: DEFAULT_BUSINESS_TIME_ZONE,
+    ...options,
+  });
 }

@@ -13,6 +13,7 @@ import {
 import {
   formatCurrencyMinorUnits,
   formatCurrencyUnits,
+  formatBusinessDateString,
   formatDecimal,
   formatInteger,
   formatLocalizedDate,
@@ -21,6 +22,16 @@ import {
   formatPercent,
 } from './formatters.js';
 import { localizeApiError, localizeUnknownError } from './errors.js';
+import {
+  getAppointmentStatusLabel,
+  getAppointmentTransitionLabel,
+  getLocalizedLanguageLabel,
+  getNavigationLabel,
+  getPaymentMethodLabel,
+  getRoleLabel,
+  getPluralLabel,
+  translate,
+} from './helpers.js';
 import { mobileLocalizationRuntime, type LocalizationRuntimeSnapshot } from './runtime.js';
 
 interface LocalizationContextValue extends LocalizationRuntimeSnapshot {
@@ -88,75 +99,6 @@ export function useLocalization() {
   return value;
 }
 
-export function getRoleLabel(role: string): string {
-  switch (role) {
-    case 'OWNER':
-    case 'BARBER':
-    case 'CLIENT':
-      return mobileLocalizationRuntime.i18n.t(`roles.${role}`);
-    default:
-      return mobileLocalizationRuntime.i18n.t('roles.UNKNOWN');
-  }
-}
-
-export function getPaymentMethodLabel(paymentMethod: unknown): string {
-  if (typeof paymentMethod !== 'string') {
-    return mobileLocalizationRuntime.i18n.t('paymentMethods.UNSPECIFIED');
-  }
-
-  const normalized = paymentMethod.trim().toUpperCase();
-  switch (normalized) {
-    case 'CASH':
-    case 'CARD':
-    case 'TRANSFER':
-    case 'OTHER':
-      return mobileLocalizationRuntime.i18n.t(`paymentMethods.${normalized}`);
-    default:
-      return mobileLocalizationRuntime.i18n.t('paymentMethods.UNSPECIFIED');
-  }
-}
-
-export function getAppointmentStatusLabel(status: string): string {
-  switch (status) {
-    case 'PENDING':
-    case 'CONFIRMED':
-    case 'IN_PROGRESS':
-    case 'COMPLETED':
-    case 'CANCELLED':
-    case 'NO_SHOW':
-      return mobileLocalizationRuntime.i18n.t(`appointmentStatuses.${status}`);
-    default:
-      return status;
-  }
-}
-
-export function getAppointmentTransitionLabel(status: string): string {
-  switch (status) {
-    case 'CONFIRMED':
-    case 'CANCELLED':
-    case 'IN_PROGRESS':
-    case 'COMPLETED':
-    case 'NO_SHOW':
-      return mobileLocalizationRuntime.i18n.t(`appointmentActions.${status}`);
-    default:
-      return status;
-  }
-}
-
-export function getLocalizedLanguageLabel(locale: LocalePreference): string {
-  if (locale === SYSTEM_LOCALE_PREFERENCE) {
-    return mobileLocalizationRuntime.i18n.t('languages.system');
-  }
-
-  return mobileLocalizationRuntime.i18n.t(`languages.${locale}`);
-}
-
-export function getNavigationLabel(
-  route: 'home' | 'recordService' | 'services' | 'employees' | 'workingHours' | 'appointments',
-): string {
-  return mobileLocalizationRuntime.i18n.t(`navigation.${route}`);
-}
-
 export function getSystemLocalePreferenceValue(): LocalePreference {
   return SYSTEM_LOCALE_PREFERENCE;
 }
@@ -166,6 +108,7 @@ export {
   SYSTEM_LOCALE_PREFERENCE,
   formatCurrencyMinorUnits,
   formatCurrencyUnits,
+  formatBusinessDateString,
   formatDecimal,
   formatInteger,
   formatLocalizedDate,
@@ -175,6 +118,14 @@ export {
   localizeApiError,
   localizeUnknownError,
   mobileLocalizationRuntime,
+  getAppointmentStatusLabel,
+  getAppointmentTransitionLabel,
+  getLocalizedLanguageLabel,
+  getNavigationLabel,
+  getPaymentMethodLabel,
+  getRoleLabel,
+  getPluralLabel,
+  translate,
 };
 export type { LocalePreference, SupportedLocale } from './catalog.js';
 export {

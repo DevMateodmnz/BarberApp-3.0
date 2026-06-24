@@ -8,12 +8,14 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 
 import { AppCard, Screen } from '@/components/ui/index.js';
 import { tokens } from '@/theme/index.js';
 
 export default function Index() {
   const { isSignedIn, isLoaded } = useAuth();
+  const { t } = useTranslation();
 
   // Show nothing while Clerk is initializing
   if (!isLoaded) {
@@ -22,9 +24,9 @@ export default function Index() {
         <View style={styles.loadingContainer}>
           <AppCard variant="elevated" style={styles.loadingCard}>
             <ActivityIndicator size="large" color={tokens.colors.primary} />
-            <Text style={styles.loadingTitle}>Loading BarberApp</Text>
+            <Text style={styles.loadingTitle}>{t('runtime.loadingAppTitle')}</Text>
             <Text style={styles.loadingMessage}>
-              Checking your authentication session…
+              {t('runtime.loadingAppMessage')}
             </Text>
           </AppCard>
         </View>

@@ -1,43 +1,28 @@
-/**
- * Working Hours screen — OWNER-only barbershop weekly schedule.
- *
- * Hidden route (href: null in _layout.tsx). Accessible via
- * "View Working Hours" card on Home for OWNER users with a barbershop.
- * OWNER can view and edit weekly open/close times per day.
- */
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 import {
   WorkingHoursScreenView,
   type WorkingHoursDayViewModel,
 } from '@/components/WorkingHoursScreenView.js';
+import { formatLocalizedWeekday } from '@/i18n/index.js';
 import { useContextStore } from '@/lib/store.js';
 import { useWorkingHoursStore } from '@/lib/workingHoursStore.js';
+import { useFlashStore } from '@/lib/flashStore.js';
 import type { WorkingHoursDay } from '@/lib/types.js';
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const TIME_REGEX = /^\d{2}:\d{2}$/;
 
-/**
- * Creates a blank pre-populated day.
- */
 function blankDay(dayOfWeek: number): WorkingHoursDay {
   return { dayOfWeek, openTime: '', closeTime: '', isActive: false };
 }
 
-/**
- * Pre-populates all 7 days with blank (closed) state.
- */
 function allDaysBlank(): WorkingHoursDay[] {
-  return DAY_NAMES.map((_, i) => blankDay(i));
+  return Array.from({ length: 7 }, (_, dayOfWeek) => blankDay(dayOfWeek));
 }
 
-/**
- * Merges API data into the pre-populated blank days.
- * Days present in the API response overwrite the blank defaults.
- */
 function mergeDays(apiDays: WorkingHoursDay[]): WorkingHoursDay[] {
   const days = allDaysBlank();
   for (const apiDay of apiDays) {
@@ -46,18 +31,17 @@ function mergeDays(apiDays: WorkingHoursDay[]): WorkingHoursDay[] {
   return days;
 }
 
-/**
- * Validates a single day row for local (pre-submit) errors.
- * Returns an error message string, or null if valid.
- */
-function validateDay(day: WorkingHoursDay): string | null {
+function validateDay(
+  day: WorkingHoursDay,
+  t: (key: string) => string,
+): string | null {
   if (!day.isActive) return null;
 
   if (!day.openTime || !TIME_REGEX.test(day.openTime)) {
-    return 'Open time must be in HH:mm format (e.g. 09:00)';
+    return t('workingHours.errors.invalidOpenTime');
   }
   if (!day.closeTime || !TIME_REGEX.test(day.closeTime)) {
-    return 'Close time must be in HH:mm format (e.g. 18:00)';
+    return t('workingHours.errors.invalidCloseTime');
   }
 
   const openParts = day.openTime.split(':').map(Number);
@@ -66,7 +50,7 @@ function validateDay(day: WorkingHoursDay): string | null {
   const closeMin = (closeParts[0] ?? 0) * 60 + (closeParts[1] ?? 0);
 
   if (closeMin <= openMin) {
-    return 'Close time must be after open time';
+    return t('workingHours.errors.closeBeforeOpen');
   }
 
   return null;
@@ -75,8 +59,8 @@ function validateDay(day: WorkingHoursDay): string | null {
 export default function WorkingHoursScreen() {
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { t } = useTranslation();
 
-  // Stabilize getToken with a ref to avoid infinite re-renders
   const getTokenRef = useRef(getToken);
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -92,30 +76,25 @@ export default function WorkingHoursScreen() {
     clearWorkingHours,
   } = useWorkingHoursStore();
 
-  // Local editable copy of the 7 days
   const [days, setDays] = useState<WorkingHoursDay[]>(() => allDaysBlank());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dayErrors, setDayErrors] = useState<Record<number, string | null>>({});
 
-  // Load context
   useEffect(() => {
     if (!isSignedIn || !getTokenRef.current || context) return;
     void loadContext(getTokenRef.current);
   }, [context, isSignedIn, loadContext]);
 
-  // Load working hours when context is ready
   useEffect(() => {
     if (!context || !getTokenRef.current) return;
     void loadWorkingHours(getTokenRef.current, context.barbershopId);
   }, [context, loadWorkingHours]);
 
-  // Merge loaded hours into editable days when data arrives
   useEffect(() => {
     setDays(mergeDays(loadedHours));
   }, [loadedHours]);
 
-  // Cleanup store on unmount
   useEffect(() => {
     return () => {
       clearWorkingHours();
@@ -137,7 +116,6 @@ export default function WorkingHoursScreen() {
         day.dayOfWeek === dayOfWeek ? { ...day, isActive: !day.isActive } : day,
       ),
     );
-    // Clear any error for this day
     setDayErrors((prev) => ({ ...prev, [dayOfWeek]: null }));
     setSaveError(null);
   }, []);
@@ -156,15 +134,14 @@ export default function WorkingHoursScreen() {
     setSaveError(null);
 
     if (!context?.barbershopId || !getTokenRef.current) {
-      setSaveError('No barbershop context available.');
+      setSaveError(t('workingHours.errors.missingBarbershop'));
       return;
     }
 
-    // Local validation: all active days must have valid times
     const errors: Record<number, string | null> = {};
     let hasErrors = false;
     for (const day of days) {
-      const err = validateDay(day);
+      const err = validateDay(day, t);
       if (err) {
         errors[day.dayOfWeek] = err;
         hasErrors = true;
@@ -175,7 +152,6 @@ export default function WorkingHoursScreen() {
       return;
     }
 
-    // Prepare payload: closed days have openTime/closeTime cleared
     const payload = days.map((day) => ({
       ...day,
       openTime: day.isActive ? day.openTime : '',
@@ -185,17 +161,18 @@ export default function WorkingHoursScreen() {
     setSaving(true);
     try {
       await saveWorkingHours(getTokenRef.current, context.barbershopId, payload);
+      useFlashStore.getState().setMessage(t('workingHours.saveSuccess'));
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save working hours');
+      setSaveError(err instanceof Error ? err.message : t('errors.unknownApi'));
     } finally {
       setSaving(false);
     }
-  }, [context?.barbershopId, days, saveWorkingHours]);
+  }, [context?.barbershopId, days, saveWorkingHours, t]);
 
   const dayRows = useMemo<WorkingHoursDayViewModel[]>(() => {
     return days.map((day) => ({
       dayOfWeek: day.dayOfWeek,
-      dayName: DAY_NAMES[day.dayOfWeek] ?? `Day ${day.dayOfWeek}`,
+      dayName: formatLocalizedWeekday(day.dayOfWeek) ?? String(day.dayOfWeek),
       isActive: day.isActive,
       openTime: day.openTime,
       closeTime: day.closeTime,
@@ -206,7 +183,6 @@ export default function WorkingHoursScreen() {
     }));
   }, [dayErrors, days, toggleDay, updateTime]);
 
-  // --- Guards ---
   if (!isLoaded || !isSignedIn) {
     return null;
   }
