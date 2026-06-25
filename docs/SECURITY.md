@@ -108,9 +108,9 @@ docker compose up -d postgres_test
 cd apps/api && npm install
 
 # 3. Apply migrations to test DB
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5433/barberapp_test"
-npx prisma generate
-npx prisma db push
+export DATABASE_URL_TEST="postgresql://postgres:postgres@localhost:5433/barberapp_test"
+npm run db:generate --workspace @barberapp/api
+npm run db:migrate:test --workspace @barberapp/api
 
 # 4. Run all tests
 npm test
@@ -135,24 +135,57 @@ npx vitest run tests/db/models.test.ts
 
 1. **Concurrent double-booking race — RESOLVED**: DB-level exclusion constraint prevents concurrent double-booking race for same employee + active statuses (PENDING, CONFIRMED, IN_PROGRESS). Application-layer `hasTimeConflict()` check remains as defense-in-depth. See `apps/api/prisma/migrations/20260604_add_db_double_booking_constraint/migration.sql`.
 
-2. **Rate limiting**: Not yet implemented in routes. The SECURITY_MODEL.md documents the pattern but it's not active.
+2. **Rate limiting — RESOLVED**: In-memory rate limiting is implemented for `/api/v1/appointments` routes (window: 15 min, max: 100 requests). Uses `express-rate-limit` with MemoryStore — acceptable for single-instance MVP. Production horizontal scaling should use a shared store (Redis, etc.). See `apps/api/src/middleware/rateLimit.ts`.
 
-3. **CORS**: Configured with `*` wildcard for development. Must restrict to mobile app origin in production.
+3. **CORS**: Production now requires an explicit HTTP(S) allowlist in `ALLOWED_ORIGIN`. Non-production can reflect concrete request origins dynamically for credentialed local development, but never returns `*` with credentials.
 
-4. **Clerk webhook**: Not implemented yet. Webhook validation (svix-signature) is deferred to Phase 3 API Foundation.
+4. **Clerk webhook — RESOLVED**: Webhook endpoint implemented at `POST /api/v1/webhooks/clerk` with Svix signature verification via `standardwebhooks`. Handles `user.created`, `user.updated`, `user.deleted` events. Role is now read from Clerk `public_metadata.role` (valid values: `OWNER`, `BARBER`, `CLIENT`). When metadata is absent or invalid, defaults to `CLIENT`. Webhook NEVER downgrades an existing `OWNER` or `BARBER` role via `user.updated` — privilege preservation is enforced by `resolveRole()` in `userSyncService.ts`. The DB `User.role` remains the runtime source of truth for auth middleware. `unsafe_metadata` is intentionally NOT trusted for role assignment. See `apps/api/src/services/userSyncService.ts`.
 
-5. **EmployeeService validation at booking**: The service layer validates employee and service belong to the barbershop, but does NOT check that the employee is assigned to perform the specific service (EmployeeService junction). This should be added.
+   **Remaining limitation**: OWNER/BARBER role bootstrap is done via Clerk Dashboard (`public_metadata: { role: "OWNER" }`). There is no internal backend endpoint for OWNER-managed employee creation or role assignment yet (deferred to future PR).
 
-6. **Business hours enforcement**: Not implemented. Appointments can be booked at any time.
+5. **EmployeeService validation at booking — RESOLVED**: `createAppointment()` now validates the selected employee is assigned to the selected service via the EmployeeService junction table (`@@unique([employeeId, serviceId])`). Returns 400 BadRequestError if not assigned. See `apps/api/src/services/appointmentService.ts:validateEmployeeOffersService()`.
 
-7. **BARBER `listAppointments`**: Currently returns all appointments for the barber's employee ID. It doesn't filter by barbershop scope when called without an employee context.
+6. **Business hours enforcement — RESOLVED**: `createAppointment()` and `updateAppointment()` now validate that appointment times fall within the barbershop's configured `WorkingHours`. Each barbershop configures its own schedule per day-of-week (Mon-Sun) with open/close times in "HH:mm" 24h format. Validation uses the barbershop's `timezone` field (default: `America/Argentina/Tucuman`) to convert UTC appointment timestamps to local day-of-week and time-of-day. Closed days (no `WorkingHours` row) reject bookings with a 400 error. Time boundary checks validate both start and end time against opening/closing. See `apps/api/src/lib/businessHours.ts` and `apps/api/prisma/migrations/20260605052616_add_working_hours/migration.sql`.
 
-## PR-005C Verdict: ✅ PASS
+   **Remaining limitation**: If a barbershop has zero `WorkingHours` rows (no schedule configured at all), appointments are rejected for every day. Barbershop owners must configure their schedule to accept appointments. Timezone support relies on Node.js `Intl.DateTimeFormat` — no external tz library is used. Overnight appointments (crossing midnight in local time) are explicitly rejected. Employee-level schedule overrides (e.g., a specific barber working different hours) are deferred to a future PR.
 
-All 36 security integration tests pass against real infrastructure.
-The backend security guarantees for authentication, authorization, tenant isolation,
-booking integrity, double-booking prevention, and status transitions are verified.
+7. **BARBER `listAppointments` — RESOLVED**: `listAppointments()` now fails closed (403 ForbiddenError) when called with `role=BARBER` and no `employeeId`. This prevents the broad data leak where an unfiltered query (`WHERE {}`) could return all appointments across all tenants. BARBER listing with a valid `employeeId` still works correctly — scoped to only that barber's appointments. The fix is defense-in-depth in the service layer, independent of middleware ordering. See `apps/api/src/services/appointmentService.ts:listAppointments()`.
 
-**PR-006 is safe to start.**
+   **Remaining limitation**: The HTTP route `GET /api/v1/appointments` does not set `employeeId` for BARBER users (no `requireBarbershopAccess` middleware on the listing route). BARBERs currently cannot list their appointments via HTTP — they must use `GET /api/v1/appointments/:id` for single-appointment access. A dedicated BARBER listing endpoint or middleware enhancement is deferred to a future PR.
 
-The remaining risks are documented above and do not block PR-006.
+   **Update**: BARBER scoped appointment listing — RESOLVED in PR-020. `GET /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments` provides a barbershop-scoped endpoint. BARBERs can list only their own appointments (employee.userId must match authenticated user). OWNERs can list appointments for any active employee in their barbershop. CLIENTs are blocked (403). The global `GET /api/v1/appointments` BARBER fail-closed behavior is preserved.
+
+8. **OWNER-managed employee creation — RESOLVED**: `POST /api/v1/barbershops/:barbershopId/employees` allows an OWNER to add existing users as employees of their barbershop. Tenant isolation is enforced by `requireBarbershopAccess` (cross-tenant blocked with 403). Duplicate employee links return 409 Conflict via the `@@unique([barbershopId, userId])` constraint. The endpoint does NOT modify `User.role`, create Clerk users, or send invitations. See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/employeeService.ts`.
+
+   **Remaining limitations**:
+   - Target user must already exist in DB (synced via Clerk webhook). No auto-provisioning.
+   - Role assignment is separate — use Clerk Dashboard `public_metadata.role` (PR-013).
+   - Service assignment for employees — RESOLVED in PR-015. `POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services` assigns a service; `DELETE .../services/:serviceId` unassigns. See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/employeeService.ts`.
+   - Employee listing — RESOLVED in PR-016. `GET /api/v1/barbershops/:barbershopId/employees` returns all non-deleted employees for a barbershop (OWNER only). Response includes safe user fields only (id, email, name, role) — no clerkUserId or internal fields exposed. Assigned services listing remains deferred.
+   - Employee deactivation — RESOLVED in PR-017. `DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId` soft-deletes an employee (isActive=false, deletedAt=now). Does not modify User, User.role, appointments, or EmployeeService links. Existing validations reject deactivated employees for booking (400) and service assignment (404).
+    - Service management — RESOLVED in PR-022. Full CRUD for barbershop services: `POST /api/v1/barbershops/:barbershopId/services` (create), `GET .../services` (list active), `PATCH .../services/:serviceId` (update), `DELETE .../services/:serviceId` (soft-deactivate via isActive=false + deletedAt). Services are per-barbershop (tenant-scoped). Custom names allowed — no predefined enum. Deleted services are excluded from listings and new bookings but historical appointments are preserved. See `apps/api/src/services/serviceService.ts`.
+    - Service records (walk-in log) — RESOLVED in PR-023. `POST /api/v1/barbershops/:barbershopId/service-records` creates completed service logs (walk-in support, no appointment required). BARBER can record only their own work. OWNER can record for any employee or list all records. GET endpoints support filtering by employee and date. Employee must be assigned to the service. Price is explicit per record (not auto-derived from service). See `apps/api/src/services/serviceRecordService.ts`.
+   - Employee reactivation — RESOLVED in PR-018. `PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactivate` allows OWNER to reactivate a previously deactivated employee. Sets isActive=true, deletedAt=null. Does not modify User.role or EmployeeService links. Cross-tenant reactivation returns 404. Already-active employees return 409.
+   - Employee service listing — RESOLVED in PR-019. `GET /api/v1/barbershops/:barbershopId/employees/:employeeId/services` allows OWNER to list services assigned to an active employee. Returns only active, non-deleted services. Deactivated/inactive employees return 404.
+   - Working hours management — RESOLVED in PR-021. `GET /api/v1/barbershops/:barbershopId/working-hours` lists the current schedule. `PUT /api/v1/barbershops/:barbershopId/working-hours` replaces the weekly schedule. OWNER-only. Uses upsert per day on the `@@unique([barbershopId, dayOfWeek])` constraint — idempotent, no duplicate rows. Closed days set `isActive: false`. Time format: "HH:mm". Overnight hours rejected. See `apps/api/src/services/workingHoursService.ts`.
+   - No invitation flow.
+
+## PR-011 Verdict: ✅ PASS
+
+All 96 tests pass (48 integration + 27 db models + 11 webhook + 5 double-booking + 2 rate limit + 3 unit).
+Business hours enforcement is implemented and verified:
+- Appointments inside business hours succeed
+- Appointments before opening are rejected (400)
+- Appointments ending after closing are rejected (400)
+- Appointments on closed days are rejected (400)
+- Update/reschedule into invalid hours is rejected (400)
+- Tenant isolation for business hours is preserved (per-barbershop schedule)
+- DB double-booking constraint remains intact
+
+The business hours validation sits in the service layer alongside other booking integrity checks.
+Per-barbershop configuration uses the `WorkingHours` model with day-of-week granularity.
+Timezone conversion uses `Barbershop.timezone` via Node.js `Intl.DateTimeFormat`.
+
+**PR-012 is safe to start.**
+
+The remaining risks are documented above and do not block PR-012.

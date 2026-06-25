@@ -1,9 +1,16 @@
 /**
  * Database seed script
- * Creates realistic test data for development
+ * Creates realistic demo data for development.
+ *
+ * Important:
+ * - The identities in this file are FAKE local demo identities only.
+ * - They are intentionally not compatible with real Clerk phone-QA accounts.
+ * - Real local OWNER/BARBER Clerk mappings belong to the ignored
+ *   `.env.qa.local` + `npm run qa:bootstrap --workspace apps/api` workflow.
  */
 
 import { PrismaClient, UserRole, AppointmentStatus } from '@prisma/client';
+import { createBarbershop } from '../src/services/barbershopService.js';
 
 const prisma = new PrismaClient();
 
@@ -19,7 +26,7 @@ async function main() {
   await prisma.barbershop.deleteMany();
   await prisma.user.deleteMany();
 
-  // Create Owner
+  // Create demo Owner (fake Clerk mapping by design)
   const owner = await prisma.user.create({
     data: {
       clerkUserId: 'owner_clerk_123',
@@ -30,20 +37,17 @@ async function main() {
   });
   console.log('Created owner:', owner.email);
 
-  // Create Barbershop
-  const barbershop = await prisma.barbershop.create({
-    data: {
-      ownerId: owner.id,
-      name: 'Barbería Classic',
-      address: 'Av. Santa Fe 1234, Buenos Aires',
-      phone: '+54 11 5555-1234',
-      timezone: 'America/Argentina/Buenos_Aires',
-      isActive: true,
-    },
+  // Create Barbershop (includes default WorkingHours setup)
+  const barbershop = await createBarbershop({
+    ownerId: owner.id,
+    name: 'Barbería Classic',
+    address: 'Av. Santa Fe 1234, Buenos Aires',
+    phone: '+54 11 5555-1234',
+    timezone: 'America/Argentina/Buenos_Aires',
   });
   console.log('Created barbershop:', barbershop.name);
 
-  // Create Barber 1
+  // Create demo Barber 1 (fake Clerk mapping by design)
   const barber1User = await prisma.user.create({
     data: {
       clerkUserId: 'barber_clerk_456',
@@ -62,7 +66,7 @@ async function main() {
   });
   console.log('Created barber:', barber1User.name);
 
-  // Create Barber 2
+  // Create demo Barber 2 (fake Clerk mapping by design)
   const barber2User = await prisma.user.create({
     data: {
       clerkUserId: 'barber_clerk_789',

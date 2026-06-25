@@ -29,6 +29,13 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  OTHER
+}
+
 // ============================================
 // USER
 // ============================================
@@ -74,10 +81,12 @@ model Barbershop {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  owner       User          @relation("BarbershopOwner", fields: [ownerId], references: [id])
-  employees   Employee[]
-  services    Service[]
-  appointments Appointment[]
+  owner          User              @relation("BarbershopOwner", fields: [ownerId], references: [id])
+  employees      Employee[]
+  services       Service[]
+  appointments   Appointment[]
+  workingHours   WorkingHours[]
+  serviceRecords ServiceRecord[]
 
   // Indexes
   @@index([ownerId])
@@ -101,10 +110,11 @@ model Employee {
   deletedAt    DateTime? @map("deleted_at")
 
   // Relations
-  barbershop     Barbershop       @relation(fields: [barbershopId], references: [id])
-  user           User              @relation(fields: [userId], references: [id])
+  barbershop       Barbershop          @relation(fields: [barbershopId], references: [id])
+  user             User              @relation(fields: [userId], references: [id])
   employeeServices EmployeeService[]
-  appointments   Appointment[]
+  appointments     Appointment[]
+  serviceRecords   ServiceRecord[]
 
   // Indexes
   @@index([barbershopId])
@@ -135,9 +145,10 @@ model Service {
   deletedAt       DateTime? @map("deleted_at")
 
   // Relations
-  barbershop       Barbershop       @relation(fields: [barbershopId], references: [id])
-  employeeServices EmployeeService[]
-  appointments     Appointment[]
+  barbershop        Barbershop          @relation(fields: [barbershopId], references: [id])
+  employeeServices  EmployeeService[]
+  appointments      Appointment[]
+  serviceRecords    ServiceRecord[]
 
   // Indexes
   @@index([barbershopId])
@@ -187,10 +198,11 @@ model Appointment {
   deletedAt    DateTime?         @map("deleted_at")
 
   // Relations
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  employee   Employee   @relation(fields: [employeeId], references: [id])
-  client     User       @relation("AppointmentClient", fields: [clientId], references: [id])
-  service    Service    @relation(fields: [serviceId], references: [id])
+  barbershop      Barbershop      @relation(fields: [barbershopId], references: [id])
+  employee        Employee        @relation(fields: [employeeId], references: [id])
+  client          User            @relation("AppointmentClient", fields: [clientId], references: [id])
+  service         Service         @relation(fields: [serviceId], references: [id])
+  serviceRecords  ServiceRecord[]
 
   // Indexes for common queries
   @@index([barbershopId])
@@ -201,6 +213,69 @@ model Appointment {
   @@index([employeeId, startAt, status])
 
   @@map("appointments")
+}
+
+// ============================================
+// SERVICE RECORD
+// ============================================
+
+/// ServiceRecord model - represents a completed service/cut performed by a barber
+/// Supports walk-in customers (no appointment required) and future appointment-linked records
+model ServiceRecord {
+  id            String         @id @default(cuid())
+  barbershopId  String         @map("barbershop_id")
+  employeeId    String         @map("employee_id")
+  serviceId     String         @map("service_id")
+  appointmentId String?        @map("appointment_id")
+  clientName    String?        @map("client_name")
+  priceCents    Int            @map("price_cents")
+  paymentMethod PaymentMethod? @map("payment_method")
+  notes         String?
+  performedAt   DateTime       @default(now()) @map("performed_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  deletedAt     DateTime?      @map("deleted_at")
+
+  // Relations
+  barbershop  Barbershop   @relation(fields: [barbershopId], references: [id])
+  employee    Employee     @relation(fields: [employeeId], references: [id])
+  service     Service      @relation(fields: [serviceId], references: [id])
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+
+  // Indexes
+  @@index([barbershopId])
+  @@index([employeeId])
+  @@index([serviceId])
+  @@index([barbershopId, performedAt])
+  @@index([employeeId, performedAt])
+  @@map("service_records")
+}
+
+// ============================================
+// WORKING HOURS
+// ============================================
+
+/// WorkingHours model — per-barbershop per-day-of-week schedule
+/// dayOfWeek: 0=Sunday, 1=Monday, ..., 6=Saturday
+/// openTime/closeTime in "HH:mm" 24h format in the barbershop's local timezone
+/// Absence of a row for a given dayOfWeek means the shop is closed that day
+model WorkingHours {
+  id            String   @id @default(cuid())
+  barbershopId  String   @map("barbershop_id")
+  dayOfWeek     Int      @map("day_of_week")
+  openTime      String   @map("open_time")
+  closeTime     String   @map("close_time")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
+
+  // Constraint: one schedule per barbershop per day
+  @@unique([barbershopId, dayOfWeek])
+  @@index([barbershopId])
+  @@map("working_hours")
 }
 
 // ============================================

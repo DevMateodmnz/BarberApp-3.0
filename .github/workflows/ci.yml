@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'release/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: barberapp_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d barberapp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/barberapp_test
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5433/barberapp_test
+      CLERK_SECRET_KEY: sk_test_mock
+      CLERK_WEBHOOK_SECRET: whsec_test_mock
+      NODE_ENV: test
+      RATE_LIMIT_ENABLED: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            docker exec "${{ job.services.postgres.id }}" pg_isready -U postgres -d barberapp_test && exit 0
+            sleep 2
+          done
+          echo "PostgreSQL did not become ready in time" >&2
+          exit 1
+
+      - name: Generate Prisma client
+        run: npm run db:generate --workspace @barberapp/api
+
+      - name: Apply test migrations
+        run: npm run db:migrate:test --workspace @barberapp/api
+
+      - name: Typecheck API
+        run: npm run typecheck --workspace @barberapp/api
+
+      - name: Lint API
+        run: npm run lint --workspace @barberapp/api
+
+      - name: Test API
+        run: npm run test --workspace @barberapp/api
+
+      - name: Build API
+        run: npm run build --workspace @barberapp/api
+
+  mobile:
+    name: Mobile
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck mobile
+        run: npm run typecheck --workspace @barberapp/mobile
+
+      - name: Lint mobile
+        run: npm run lint --workspace @barberapp/mobile
+
+      - name: Test mobile
+        run: npm run test --workspace @barberapp/mobile

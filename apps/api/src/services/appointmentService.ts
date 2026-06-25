@@ -12,6 +12,8 @@ import {
   ForbiddenError,
   NotFoundError,
 } from '../lib/errors.js';
+import { validateBusinessHours } from '../lib/businessHours.js';
+import { validateEmployeeInBarbershop } from './employeeService.js';
 import type { AppointmentStatus, UserRole } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import type { CreateAppointmentInput } from '../schemas/appointment.js';
@@ -100,6 +102,10 @@ async function validateServiceBelongsToBarbershop(
       'Service does not belong to the specified barbershop'
     );
   }
+
+  if (!service.isActive || service.deletedAt) {
+    throw new BadRequestError('Service is not available');
+  }
 }
 
 /**
@@ -125,6 +131,27 @@ async function validateEmployeeBelongsToBarbershop(
 
   if (!employee.isActive || employee.deletedAt) {
     throw new BadRequestError('Employee is not active');
+  }
+}
+
+/**
+ * Validates that an employee is assigned to perform the specified service
+ * via the EmployeeService junction table.
+ */
+async function validateEmployeeOffersService(
+  employeeId: string,
+  serviceId: string
+): Promise<void> {
+  const link = await prisma.employeeService.findUnique({
+    where: {
+      employeeId_serviceId: { employeeId, serviceId },
+    },
+  });
+
+  if (!link) {
+    throw new BadRequestError(
+      'Employee does not offer this service'
+    );
   }
 }
 
@@ -163,7 +190,7 @@ export async function hasTimeConflict(
 
 /**
  * Creates a new appointment (CLIENT booking).
- * Enforces: tenant integrity, double-booking prevention.
+ * Enforces: tenant integrity, business hours, double-booking prevention.
  */
 export async function createAppointment(
   input: CreateAppointmentInput,
@@ -174,6 +201,7 @@ export async function createAppointment(
   // 1. Validate tenant integrity: service and employee belong to barbershop
   await validateServiceBelongsToBarbershop(serviceId, barbershopId);
   await validateEmployeeBelongsToBarbershop(employeeId, barbershopId);
+  await validateEmployeeOffersService(employeeId, serviceId);
 
   // 2. Calculate endAt from service duration
   const service = await prisma.service.findUniqueOrThrow({
@@ -183,13 +211,16 @@ export async function createAppointment(
   const startAt = new Date(startAtStr);
   const endAt = new Date(startAt.getTime() + service.durationMinutes * 60_000);
 
-  // 3. Check double-booking
+  // 3. Validate business hours
+  await validateBusinessHours({ barbershopId, startAt, endAt });
+
+  // 4. Check double-booking
   const conflict = await hasTimeConflict(employeeId, startAt, endAt);
   if (conflict) {
     throw new ConflictError('This time slot is already booked');
   }
 
-  // 4. Create appointment
+  // 5. Create appointment
   try {
     const appointment = await prisma.appointment.create({
       data: {
@@ -225,7 +256,9 @@ export async function createAppointment(
 /**
  * Lists appointments filtered by role and tenant.
  * - OWNER: sees all appointments for their barbershop
- * - BARBER: sees appointments assigned to them (scope: their employee record)
+ * - BARBER: sees appointments assigned to them (scope: their employee record).
+ *           Requires employeeId to be set by upstream middleware.
+ *           Fails closed if employeeId is missing (no broad data leak).
  * - CLIENT: sees only their own appointments
  */
 export async function listAppointments(
@@ -233,13 +266,20 @@ export async function listAppointments(
   role: UserRole,
   employeeId?: string
 ) {
+  // BARBER without employee context: fail closed — prevent broad data leak
+  if (role === 'BARBER' && !employeeId) {
+    throw new ForbiddenError(
+      'Employee context required for barber appointment listing'
+    );
+  }
+
   const where: Record<string, unknown> = {};
 
   if (role === 'OWNER') {
     // Owner sees all appointments for shops they own
     where.barbershop = { ownerId: userId };
-  } else if (role === 'BARBER' && employeeId) {
-    // Barber sees only their appointments
+  } else if (role === 'BARBER') {
+    // Barber sees only their appointments (employeeId guaranteed by check above)
     where.employeeId = employeeId;
   } else if (role === 'CLIENT') {
     // Client sees only their own appointments
@@ -248,6 +288,57 @@ export async function listAppointments(
 
   return prisma.appointment.findMany({
     where,
+    include: {
+      barbershop: true,
+      employee: true,
+      client: true,
+      service: true,
+    },
+    orderBy: { startAt: 'desc' },
+    take: 100,
+  });
+}
+
+/**
+ * Lists appointments for a specific employee within a barbershop.
+ * Scoped endpoint — requires explicit barbershop + employee context.
+ *
+ * - OWNER: can list appointments for any active employee in their barbershop
+ * - BARBER: can list only their own appointments (employee.userId must match)
+ * - CLIENT: blocked (403)
+ *
+ * Validates that the employee exists, is active, and belongs to the barbershop
+ * via validateEmployeeInBarbershop (reused from employeeService).
+ */
+export async function listEmployeeAppointments(
+  barbershopId: string,
+  employeeId: string,
+  userId: string,
+  userRole: UserRole
+) {
+  // Validate employee exists, is active, and belongs to barbershop
+  await validateEmployeeInBarbershop(employeeId, barbershopId);
+
+  // BARBER: must own this employee record (their own)
+  if (userRole === 'BARBER') {
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+    });
+    if (!employee || employee.userId !== userId) {
+      throw new ForbiddenError('You can only view your own appointments');
+    }
+  }
+
+  // CLIENT: not allowed
+  if (userRole === 'CLIENT') {
+    throw new ForbiddenError('Clients cannot access employee appointments');
+  }
+
+  return prisma.appointment.findMany({
+    where: {
+      barbershopId,
+      employeeId,
+    },
     include: {
       barbershop: true,
       employee: true,
@@ -310,7 +401,7 @@ export async function getAppointment(
 
 /**
  * Updates an appointment (reschedule).
- * Enforces: tenant isolation, double-booking prevention.
+ * Enforces: tenant isolation, business hours, double-booking prevention.
  */
 export async function updateAppointment(
   appointmentId: string,
@@ -342,6 +433,13 @@ export async function updateAppointment(
     const newEndAt = new Date(
       newStartAt.getTime() + service.durationMinutes * 60_000
     );
+
+    // Validate business hours for the new time slot
+    await validateBusinessHours({
+      barbershopId: appointment.barbershopId,
+      startAt: newStartAt,
+      endAt: newEndAt,
+    });
 
     // Check for time conflicts (excluding this appointment)
     const conflict = await hasTimeConflict(

@@ -2,7 +2,7 @@
 
 ## Overview
 
-BarberApp is a mobile-first SaaS application for barbershop management. It enables barbershop owners to manage their business, barbers to handle appointments, and clients to book services.
+BarberApp is a mobile-first SaaS application for barbershop management. The current MVP enables barbershop owners to manage their business and barbers to handle assigned work; a standalone client booking experience remains deferred.
 
 ## Target Users
 
@@ -10,21 +10,21 @@ BarberApp is a mobile-first SaaS application for barbershop management. It enabl
 |------|-------------|
 | **OWNER** | Manages the barbershop: business settings, employees, services, and appointments |
 | **BARBER** | Manages their own assigned appointments and client photos |
-| **CLIENT** | Books appointments at a barbershop for a specific service and barber |
+| **CLIENT** | Deferred from the current MVP; planned for a later booking-focused phase |
 
 ## Core Features
 
 ### Authentication & Authorization
 
 - **Authentication**: Clerk for identity management
-  - Email/password, social login (Google)
+  - Current implemented sign-in: email-code (OTP) flow
   - Webhook-based user synchronization
   - JWT token validation on API requests
 
 - **Role-Based Access Control**:
   - OWNER: Full access to their barbershop
   - BARBER: Access to assigned appointments only
-  - CLIENT: Booking and own appointment management
+  - CLIENT: Deferred from the current MVP
 
 ### Multi-Tenancy Model
 
@@ -61,6 +61,8 @@ User (Clerk user)
 
 ### Appointment Booking (CLIENT)
 
+Client booking is deferred from the current MVP. These flows remain future-scope requirements rather than implemented release scope:
+
 - Browse available barbers
 - Select service and preferred barber
 - View barber availability
@@ -89,9 +91,9 @@ PENDING → CONFIRMED → IN_PROGRESS → COMPLETED
 
 ### Client Features
 
-- View appointment history
-- View assigned barber
-- Upload reference photos (for hair style)
+- Deferred from the current MVP
+- Planned future client history/visibility features
+- Planned future reference-photo upload flow
 
 ## Data Model
 

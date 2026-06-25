@@ -19,18 +19,26 @@ app.use('/api/v1', requireAuth());
 
 ### Webhook Sync
 
-Users are synced to the database via Clerk webhooks:
+Users are synced to the database via Clerk webhooks. Implemented in PR-010.
 
 ```
-POST /api/v1/auth/webhook
-Headers: svix-signature (signed by Clerk)
-Body: Clerk event payload
+POST /api/v1/webhooks/clerk
+Headers: svix-id, svix-timestamp, svix-signature (verified via standardwebhooks)
+Body: Clerk event payload (raw JSON, express.raw)
 ```
 
 Events handled:
-- `user.created` → Create user record
-- `user.updated` → Update user record
-- `user.deleted` → Soft delete or deactivate
+- `user.created` → Create user record (idempotent, role from `public_metadata.role` or default `CLIENT`)
+- `user.updated` → Update name/email; resolve role preserving privilege (never downgrade OWNER/BARBER)
+- `user.deleted` → Soft delete (set deletedAt)
+
+**Role source**: `public_metadata.role` on the Clerk user object. Valid values: `OWNER`, `BARBER`, `CLIENT`. Absent/invalid metadata defaults to `CLIENT`. `unsafe_metadata` is intentionally not trusted.
+
+**DB as source of truth**: Auth middleware (`auth.ts:85`) reads `user.role` from the DB on every request. The webhook is only a sync mechanism — the DB `User.role` column is authoritative at runtime.
+
+**Limitations**: OWNER/BARBER role bootstrap currently requires setting `public_metadata` in the Clerk Dashboard. There is no backend endpoint for OWNER-managed employee/role assignment yet (deferred to future PR).
+
+See `apps/api/src/routes/webhooks.ts` and `apps/api/src/services/userSyncService.ts`.
 
 ## Authorization
 
@@ -48,10 +56,23 @@ OWNER > BARBER > CLIENT
 | Barbershop (own) | CRUD | R | - |
 | Employees (shop) | CRUD | R | - |
 | Services (shop) | CRUD | R | - |
+| Working Hours (shop) | RU | - | - |
 | Appointments (own shop) | CRUD | R (assigned) | R (own) |
 | Create appointment | - | - | C |
 | Cancel appointment (own) | - | - | D |
 | Mark appointment status | U | U (assigned) | - |
+| Service Records | CR (own) | C (self) | - |
+
+### Employee Lifecycle
+
+- **Employee management**: OWNER can add, list, deactivate, and reactivate employees. See `apps/api/src/routes/barbershops.ts` and `apps/api/src/services/employeeService.ts`.
+- **Service listing**: OWNER can list services assigned to an employee via `GET .../employees/:employeeId/services`. Returns active, non-deleted services only.
+- **Reactivation**: OWNER can reactivate deactivated employees via `PATCH .../employees/:employeeId/reactivate`. Restores isActive=true and deletedAt=null. Preserves EmployeeService links and does not modify User.role.
+- **Deactivation**: OWNER can soft-deactivate employees via `DELETE .../employees/:employeeId`. Sets isActive=false and deletedAt=now without removing historical data.
+- **Appointment listing**: BARBERs can list their own appointments via the scoped `GET .../employees/:employeeId/appointments` endpoint. OWNERs can list any employee's appointments. Global BARBER listing remains fail-closed for safety.
+- **Working hours**: OWNER can view and update barbershop working hours via `GET/PUT /api/v1/barbershops/:barbershopId/working-hours`. Updates are idempotent. Closed days set `isActive: false`. Appointment booking validates against current working hours.
+- **Service catalog**: OWNER can manage the full service catalog (CRUD). Services are custom per barbershop — names like "Combo Deluxe", "Corte + barba", and "Servicio VIP" are accepted. Soft-deletion preserves historical appointments.
+- **Service records**: Walk-in service logs for completed cuts/services. No appointment required. BARBER creates records for their own work. OWNER views all records. Prices are explicit per record. Foundation for future daily production/revenue tracking.
 
 ### Implementation Pattern
 
@@ -315,16 +336,25 @@ END $$;
 
 ### Rate Limiting
 
+Implemented in PR-009. See `apps/api/src/middleware/rateLimit.ts`.
+
 ```typescript
-import rateLimit from 'express-rate-limit';
+// apps/api/src/index.ts
+import { appointmentRateLimit } from './middleware/rateLimit.js';
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window
-  message: { success: false, error: { code: 'RATE_LIMITED' } }
-});
+app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
+```
 
-app.use('/api/v1/auth/webhook', authLimiter);
+**Configuration** (env vars):
+- `RATE_LIMIT_ENABLED` — "true" or "false" (default: true, except in `NODE_ENV=test`)
+- `RATE_LIMIT_WINDOW_MS` — window duration (default: 15 minutes)
+- `RATE_LIMIT_MAX` — max requests per window (default: 100)
+
+**Limitations**: Uses in-memory MemoryStore — acceptable for single-instance MVP. For production horizontal scaling, replace with a shared store (Redis via `rate-limit-redis`, etc.).
+
+**Error response** (HTTP 429):
+```json
+{ "success": false, "error": { "code": "RATE_LIMITED", "message": "Too many requests, please try again later" } }
 ```
 
 ### CORS Configuration
@@ -372,7 +402,7 @@ CLOUDINARY_API_SECRET=...
 - [ ] All user input is validated with Zod
 - [ ] All queries include tenant filter
 - [ ] Double-booking prevention tested
-- [ ] Rate limiting on sensitive endpoints
-- [ ] Webhook signature verification
+- [x] Rate limiting on sensitive endpoints
+- [x] Webhook signature verification
 - [ ] No hardcoded IDs in code
 - [ ] No secrets in repository

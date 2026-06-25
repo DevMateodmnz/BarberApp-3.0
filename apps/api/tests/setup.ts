@@ -7,7 +7,9 @@ import { vi } from 'vitest';
 process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5433/barberapp_test';
 process.env.DATABASE_URL_TEST = 'postgresql://postgres:postgres@localhost:5433/barberapp_test';
 process.env.CLERK_SECRET_KEY = 'sk_test_mock';
+process.env.CLERK_WEBHOOK_SECRET = 'whsec_zAGFhc4cWAj7K1SEE8cBGD9BYq/1DDyI8aFNVnifLGU=';
 process.env.NODE_ENV = 'test';
+process.env.RATE_LIMIT_ENABLED = 'false';
 
 // Global test timeout
 vi.setConfig({

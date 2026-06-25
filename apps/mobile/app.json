@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "slug": "barberapp",
+    "plugins": [
+      "expo-router",
+      "expo-web-browser",
+      "expo-secure-store",
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": ["es", "en", "de", "fr", "it", "zh-Hans"],
+            "android": ["es", "en", "de", "fr", "it", "zh-CN"]
+          }
+        }
+      ]
+    ]
+  }
+}

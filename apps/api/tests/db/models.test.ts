@@ -193,6 +193,169 @@ describe('Barbershop Model', () => {
   });
 });
 
+describe('WorkingHours Default Setup', () => {
+  beforeEach(async () => {
+    await cleanupTestData();
+  });
+
+  afterEach(async () => {
+    await cleanupTestData();
+  });
+
+  /**
+   * Returns a Date object for the next occurrence of `dayOfWeek`
+   * (0=Sun, 1=Mon, ..., 6=Sat) at the given local hour/minute.
+   * Barbershop timezone is America/Argentina/Tucuman (UTC-3),
+   * so we offset the UTC time by 3 hours.
+   */
+  function nextWeekday(dayOfWeek: number, hour: number, minute = 0): Date {
+    const now = new Date();
+    const utcDay = now.getUTCDay();
+    let daysAhead = dayOfWeek - utcDay;
+    if (daysAhead <= 0) daysAhead += 7;
+
+    return new Date(
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() + daysAhead,
+        hour + 3, // UTC-3 for Argentina/Tucuman
+        minute,
+        0,
+        0
+      )
+    );
+  }
+
+  it('new barbershop receives default WorkingHours (Mon-Sat)', async () => {
+    const { barbershop } = await createTestBarbershop();
+
+    const hours = await prisma.workingHours.findMany({
+      where: { barbershopId: barbershop.id },
+      orderBy: { dayOfWeek: 'asc' },
+    });
+
+    // 6 rows: Monday (1) through Saturday (6), no Sunday (0)
+    expect(hours).toHaveLength(6);
+    expect(hours.map((h) => h.dayOfWeek)).toEqual([1, 2, 3, 4, 5, 6]);
+
+    // Verify default times
+    const monday = hours[0]!;
+    expect(monday.openTime).toBe('09:00');
+    expect(monday.closeTime).toBe('19:00');
+
+    const saturday = hours[5]!;
+    expect(saturday.openTime).toBe('09:00');
+    expect(saturday.closeTime).toBe('14:00');
+  });
+
+  it('setupDefaultWorkingHours is idempotent (no duplicate rows)', async () => {
+    const { barbershop } = await createTestBarbershop();
+
+    // First call via createTestBarbershop already set up hours
+    // Call setupDefaultWorkingHours again explicitly
+    const { setupDefaultWorkingHours } = await import(
+      '../../src/services/barbershopService.js'
+    );
+    await setupDefaultWorkingHours(barbershop.id);
+
+    const hours = await prisma.workingHours.findMany({
+      where: { barbershopId: barbershop.id },
+    });
+
+    // Still 6 rows — no duplicates
+    expect(hours).toHaveLength(6);
+  });
+
+  it('existing custom WorkingHours are not overwritten', async () => {
+    const { barbershop } = await createTestBarbershop();
+
+    // Manually update Monday to custom hours
+    await prisma.workingHours.update({
+      where: {
+        barbershopId_dayOfWeek: {
+          barbershopId: barbershop.id,
+          dayOfWeek: 1, // Monday
+        },
+      },
+      data: { openTime: '10:00', closeTime: '18:00' },
+    });
+
+    // Call setupDefaultWorkingHours again
+    const { setupDefaultWorkingHours } = await import(
+      '../../src/services/barbershopService.js'
+    );
+    await setupDefaultWorkingHours(barbershop.id);
+
+    // Monday should still have custom hours (skipDuplicates preserves existing)
+    const monday = await prisma.workingHours.findUniqueOrThrow({
+      where: {
+        barbershopId_dayOfWeek: {
+          barbershopId: barbershop.id,
+          dayOfWeek: 1,
+        },
+      },
+    });
+
+    expect(monday.openTime).toBe('10:00');
+    expect(monday.closeTime).toBe('18:00');
+  });
+
+  it('new barbershop can immediately accept appointments (within hours)', async () => {
+    const { barbershop, owner } = await createTestBarbershop();
+    const client = await createTestUser({ role: UserRole.CLIENT });
+    const { employee } = await createTestEmployee({
+      barbershopId: barbershop.id,
+    });
+    const { service } = await createTestService({
+      barbershopId: barbershop.id,
+      durationMinutes: 30,
+    });
+
+    // Link employee to service
+    await prisma.employeeService.create({
+      data: {
+        employeeId: employee.id,
+        serviceId: service.id,
+      },
+    });
+
+    // Book at Monday 10:00 AM — should succeed (within default hours)
+    const monday = nextWeekday(1, 10, 0);
+
+    const appointment = await prisma.appointment.create({
+      data: {
+        barbershopId: barbershop.id,
+        employeeId: employee.id,
+        clientId: client.user.id,
+        serviceId: service.id,
+        startAt: monday,
+        endAt: new Date(monday.getTime() + 30 * 60000),
+        status: AppointmentStatus.PENDING,
+      },
+    });
+
+    expect(appointment.id).toBeDefined();
+    expect(appointment.status).toBe('PENDING');
+  });
+
+  it('Sunday has no WorkingHours row (closed day)', async () => {
+    const { barbershop } = await createTestBarbershop();
+
+    const sundayHours = await prisma.workingHours.findUnique({
+      where: {
+        barbershopId_dayOfWeek: {
+          barbershopId: barbershop.id,
+          dayOfWeek: 0, // Sunday
+        },
+      },
+    });
+
+    // Sunday should have no row — the shop is closed
+    expect(sundayHours).toBeNull();
+  });
+});
+
 describe('Employee Model', () => {
   beforeEach(async () => {
     await cleanupTestData();

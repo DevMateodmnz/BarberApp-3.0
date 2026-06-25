@@ -1,9 +1,23 @@
 /**
- * BarberApp Mobile - Entry Point
- * Phase 1: Minimal placeholder for TypeScript validation
+ * BarberApp Mobile — Entry Point
+ *
+ * Re-exports constants and types for convenience.
+ * The actual app entry point is app/_layout.tsx (Expo Router).
  */
 
-// This file will be expanded in Phase 5 with real Expo Router setup
-
-export const APP_NAME = 'BarberApp';
-export const API_TIMEOUT = 30000;
+export { APP_NAME } from './lib/constants.js';
+export type { ApiResponse } from './lib/api.js';
+export type {
+  UserRole,
+  CurrentUserContext,
+  PaymentMethodSummary,
+  EmployeeSummary,
+  BarbershopDailySummary,
+  EmployeeDailySummary,
+  DailySummary,
+} from './lib/types.js';
+export { createAuthInterceptor } from './lib/api.js';
+export { fetchCurrentUserContext } from './lib/context.js';
+export { useContextStore } from './lib/store.js';
+export { fetchBarbershopDailySummary, fetchEmployeeDailySummary } from './lib/summary.js';
+export { useSummaryStore } from './lib/summaryStore.js';

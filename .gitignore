@@ -9,6 +9,7 @@ build/
 .env
 .env.local
 .env.*.local
+apps/api/.env.qa.local
 
 # IDE
 .idea/
