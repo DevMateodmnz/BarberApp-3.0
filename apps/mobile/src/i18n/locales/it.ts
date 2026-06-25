@@ -99,13 +99,30 @@ export const it = {
     'zh-Hans': '简体中文',
   },
   navigation: {
-    home: 'Home',
+    home: 'Inizio',
     recordService: 'Registra servizio',
     services: 'Servizi',
     employees: 'Dipendenti',
     workingHours: 'Orari',
     appointments: 'Appuntamenti',
+    manage: 'Gestisci',
     languageSettings: 'Lingua',
+    tabs: {
+      home: 'Inizio',
+      appointments: 'Appuntamenti',
+      record: 'Registra',
+      manage: 'Gestisci',
+    },
+    accessibility: {
+      homeTab: 'Apri la scheda Home',
+      appointmentsTab: 'Apri la scheda Appuntamenti',
+      recordTab: 'Apri la scheda Registra servizio',
+      manageTab: 'Apri la scheda Gestisci',
+      services: 'Apri la gestione dei servizi',
+      employees: 'Apri la gestione dei dipendenti',
+      workingHours: 'Apri la gestione degli orari',
+      languageSettings: 'Apri le impostazioni della lingua',
+    },
   },
   runtime: {
     configurationErrorTitle: 'Errore di configurazione mobile',
@@ -141,6 +158,12 @@ export const it = {
   },
   home: {
     dashboardSubtitle: 'Dashboard',
+    dailyActionsTitle: 'Azioni del giorno',
+    dailyActionsHint: 'Tieni le attività più frequenti a portata di tocco.',
+    dailyActionsAccessibility: {
+      recordService: 'Apri il flusso Registra servizio',
+      appointments: 'Apri gli appuntamenti',
+    },
     noBarbershopAssigned: 'Nessun barbershop è ancora collegato al tuo account.',
     ownerSummaryUnavailable: 'Il tuo riepilogo apparirà quando un barbershop sarà collegato al tuo account.',
     barberSummaryUnavailable: 'Il tuo riepilogo apparirà quando il tuo utente sarà collegato a un barbershop.',
@@ -190,6 +213,29 @@ export const it = {
     selectedDate: 'Data selezionata',
     recordClient: 'Cliente: {{name}}',
     unknownService: 'Servizio sconosciuto',
+  },
+  manage: {
+    title: 'Gestisci',
+    subtitle: 'Tieni amministrazione del negozio e lingua a un tocco di distanza.',
+    blockedTitle: 'Solo per proprietari',
+    blockedMessage: 'Solo i proprietari possono aprire gli strumenti di gestione del negozio.',
+    businessSectionTitle: 'Gestione del negozio',
+    businessSectionHint: 'Sposta l’amministrazione occasionale fuori dalla Home senza allontanarla dal flusso quotidiano.',
+    settingsSectionTitle: 'Impostazioni dell’app',
+    items: {
+      services: {
+        description: 'Controlla e aggiorna il catalogo dei servizi del tuo negozio.',
+      },
+      employees: {
+        description: 'Gestisci il team e le assegnazioni dei servizi in un solo posto.',
+      },
+      workingHours: {
+        description: 'Modifica gli orari settimanali di apertura del tuo negozio.',
+      },
+      language: {
+        description: 'Cambia la lingua dell’interfaccia senza riavviare l’app.',
+      },
+    },
   },
   summary: {
     revenueSummaryTitle: 'Riepilogo ricavi — {{label}}',

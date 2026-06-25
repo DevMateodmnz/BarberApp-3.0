@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { AppointmentsScreenView } from '@/components/AppointmentsScreenView.js';
 import { EmployeesScreenView } from '@/components/EmployeesScreenView.js';
 import { HomeContent } from '@/components/HomeContent.js';
+import { ManageContent } from '@/components/ManageContent.js';
 import { ServiceRecordCreateSectionView } from '@/components/ServiceRecordCreateSection.js';
 import { ServicesScreenView } from '@/components/ServicesScreenView.js';
 import { SignInScreenView } from '@/components/SignInScreenView.js';
 import { WorkingHoursScreenView } from '@/components/WorkingHoursScreenView.js';
 import { SUPPORTED_LOCALES, mobileLocalizationRuntime } from '@/i18n/index.js';
+import { getPrimaryDestinationsForRole, resolvePrimaryDestinationCopy } from '@/lib/mobileNavigation.js';
 import { findAll, findByTestId, findByText, getDisplayName, textContent } from '@/testing/elementTree.js';
 
 const OWNER_CONTEXT = {
@@ -17,6 +19,15 @@ const OWNER_CONTEXT = {
   barbershopName: 'Main St Barber',
   employeeId: null,
   employeeName: null,
+};
+
+const BARBER_CONTEXT = {
+  userId: 'u-barber',
+  role: 'BARBER' as const,
+  barbershopId: 'shop-1',
+  barbershopName: 'Main St Barber',
+  employeeId: 'emp-1',
+  employeeName: 'Carlos',
 };
 
 const SERVICE = {
@@ -40,10 +51,7 @@ const EMPLOYEE = {
 } as const;
 
 function assertNoTranslationKeys(node: unknown): void {
-  const visibleText = findAll(
-    node,
-    (element) => getDisplayName(element) === 'Text',
-  )
+  const visibleText = findAll(node, (element) => getDisplayName(element) === 'Text')
     .map((element) => textContent(element))
     .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 
@@ -57,28 +65,23 @@ describe('locale render smoke matrix', () => {
     await mobileLocalizationRuntime.bootstrap();
   });
 
-  it('renders the main mobile surfaces in every supported locale', async () => {
+  it('renders navigation labels, Home, and Manage content for OWNER and BARBER across every supported locale', async () => {
     for (const locale of SUPPORTED_LOCALES) {
       await mobileLocalizationRuntime.i18n.changeLanguage(locale);
 
-      const signInTree = SignInScreenView({
-        phase: 'email',
-        email: '',
-        destinationEmail: '',
-        code: '',
-        error: null,
-        onEmailChange: () => undefined,
-        onCodeChange: () => undefined,
-        onSendCode: () => undefined,
-        onVerify: () => undefined,
-        onBackToEmail: () => undefined,
-        onOpenLanguageSettings: () => undefined,
-      });
-      expect(findByTestId(signInTree, 'sign-in-language-settings')).toBeDefined();
-      expect(findByText(signInTree, mobileLocalizationRuntime.i18n.t('auth.emailPhaseTitle'))).toBeDefined();
-      assertNoTranslationKeys(signInTree);
+      const ownerNavigation = getPrimaryDestinationsForRole('OWNER').map((destination) =>
+        resolvePrimaryDestinationCopy(destination, (key, options) => mobileLocalizationRuntime.i18n.t(key, options)),
+      );
+      const barberNavigation = getPrimaryDestinationsForRole('BARBER').map((destination) =>
+        resolvePrimaryDestinationCopy(destination, (key, options) => mobileLocalizationRuntime.i18n.t(key, options)),
+      );
 
-      const homeTree = HomeContent({
+      expect(ownerNavigation).toHaveLength(4);
+      expect(barberNavigation).toHaveLength(3);
+      expect(ownerNavigation.every((item) => item.tabLabel.trim().length > 0)).toBe(true);
+      expect(barberNavigation.every((item) => item.tabLabel.trim().length > 0)).toBe(true);
+
+      const ownerHomeTree = HomeContent({
         context: OWNER_CONTEXT,
         isContextLoading: false,
         contextError: null,
@@ -108,18 +111,80 @@ describe('locale render smoke matrix', () => {
         flashMessage: null,
         canRecordService: true,
         onRecordService: () => undefined,
-        onServices: () => undefined,
-        onEmployees: () => undefined,
-        onWorkingHours: () => undefined,
         onAppointments: () => undefined,
         onPrevDate: () => undefined,
         onNextDate: () => undefined,
         onToday: () => undefined,
         onOpenLanguageSettings: () => undefined,
       });
-      expect(findByTestId(homeTree, 'home-context')).toBeDefined();
-      expect(findByText(homeTree, mobileLocalizationRuntime.i18n.t('home.dashboardSubtitle'))).toBeDefined();
-      assertNoTranslationKeys(homeTree);
+      expect(findByTestId(ownerHomeTree, 'home-daily-action-record')).toBeDefined();
+      expect(findByTestId(ownerHomeTree, 'home-daily-action-appointments')).toBeDefined();
+      assertNoTranslationKeys(ownerHomeTree);
+
+      const barberHomeTree = HomeContent({
+        context: BARBER_CONTEXT,
+        isContextLoading: false,
+        contextError: null,
+        summary: null,
+        isSummaryLoading: false,
+        summaryError: null,
+        records: [],
+        isRecordsLoading: false,
+        recordsError: null,
+        summaryPeriod: 'today',
+        summaryPeriodLabel: mobileLocalizationRuntime.i18n.t('common.periods.today'),
+        onSummaryPeriodChange: () => undefined,
+        ownerEmployeeFilters: [],
+        hasLoadedOwnerEmployeeFilters: false,
+        isOwnerEmployeeFiltersLoading: false,
+        ownerEmployeeFiltersError: null,
+        onRetryOwnerEmployeeFilters: () => undefined,
+        selectedDate: '2026-06-24',
+        flashMessage: null,
+        canRecordService: true,
+        onRecordService: () => undefined,
+        onAppointments: () => undefined,
+        onPrevDate: () => undefined,
+        onNextDate: () => undefined,
+        onToday: () => undefined,
+        onOpenLanguageSettings: () => undefined,
+      });
+      expect(findByTestId(barberHomeTree, 'home-daily-action-record')).toBeDefined();
+      assertNoTranslationKeys(barberHomeTree);
+
+      const manageTree = ManageContent({
+        isOwner: true,
+        onServices: () => undefined,
+        onEmployees: () => undefined,
+        onWorkingHours: () => undefined,
+        onOpenLanguageSettings: () => undefined,
+      });
+      expect(findByTestId(manageTree, 'manage-services')).toBeDefined();
+      expect(findByTestId(manageTree, 'manage-language')).toBeDefined();
+      assertNoTranslationKeys(manageTree);
+    }
+  });
+
+  it('renders the main mobile surfaces in every supported locale', async () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      await mobileLocalizationRuntime.i18n.changeLanguage(locale);
+
+      const signInTree = SignInScreenView({
+        phase: 'email',
+        email: '',
+        destinationEmail: '',
+        code: '',
+        error: null,
+        onEmailChange: () => undefined,
+        onCodeChange: () => undefined,
+        onSendCode: () => undefined,
+        onVerify: () => undefined,
+        onBackToEmail: () => undefined,
+        onOpenLanguageSettings: () => undefined,
+      });
+      expect(findByTestId(signInTree, 'sign-in-language-settings')).toBeDefined();
+      expect(findByText(signInTree, mobileLocalizationRuntime.i18n.t('auth.emailPhaseTitle'))).toBeDefined();
+      assertNoTranslationKeys(signInTree);
 
       const appointmentsTree = AppointmentsScreenView({
         context: OWNER_CONTEXT,

@@ -15,5 +15,6 @@ export { MetricCard } from './MetricCard.js';
 export { ListItem } from './ListItem.js';
 export { ActionRow } from './ActionRow.js';
 export { FormSection } from './FormSection.js';
+export { NavigationTile } from './NavigationTile.js';
 export { RoleBadge } from './RoleBadge.js';
 export { MoneyText, PriceText } from './MoneyText.js';

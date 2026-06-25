@@ -105,7 +105,24 @@ export const zhHans = {
     employees: '员工',
     workingHours: '营业时间',
     appointments: '预约',
+    manage: '管理',
     languageSettings: '语言',
+    tabs: {
+      home: '首页',
+      appointments: '预约',
+      record: '登记',
+      manage: '管理',
+    },
+    accessibility: {
+      homeTab: '打开首页标签',
+      appointmentsTab: '打开预约标签',
+      recordTab: '打开登记服务标签',
+      manageTab: '打开管理标签',
+      services: '打开服务管理',
+      employees: '打开员工管理',
+      workingHours: '打开营业时间管理',
+      languageSettings: '打开语言设置',
+    },
   },
   runtime: {
     configurationErrorTitle: '移动端配置错误',
@@ -141,6 +158,12 @@ export const zhHans = {
   },
   home: {
     dashboardSubtitle: '仪表板',
+    dailyActionsTitle: '今日操作',
+    dailyActionsHint: '将最常用的任务保持在一步可达。',
+    dailyActionsAccessibility: {
+      recordService: '打开登记服务流程',
+      appointments: '打开预约',
+    },
     noBarbershopAssigned: '你的账户尚未关联任何理发店。',
     ownerSummaryUnavailable: '当你的账户关联理发店后，这里会显示汇总。',
     barberSummaryUnavailable: '当你的用户与理发店关联后，这里会显示汇总。',
@@ -190,6 +213,29 @@ export const zhHans = {
     selectedDate: '所选日期',
     recordClient: '客户：{{name}}',
     unknownService: '未知服务',
+  },
+  manage: {
+    title: '管理',
+    subtitle: '将门店管理和语言设置保持在一步可达。',
+    blockedTitle: '仅限店主访问',
+    blockedMessage: '只有店主可以打开门店管理工具。',
+    businessSectionTitle: '门店管理',
+    businessSectionHint: '把偶尔使用的管理任务从首页移开，但仍保持近距离访问。',
+    settingsSectionTitle: '应用设置',
+    items: {
+      services: {
+        description: '查看并更新门店的服务目录。',
+      },
+      employees: {
+        description: '在一个地方管理员工和服务分配。',
+      },
+      workingHours: {
+        description: '调整门店每周营业时间。',
+      },
+      language: {
+        description: '无需重启应用即可更改界面语言。',
+      },
+    },
   },
   summary: {
     revenueSummaryTitle: '收入汇总 — {{label}}',

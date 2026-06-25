@@ -16,7 +16,7 @@ BarberApp mobile now uses one shared localization system for the complete OWNER/
 | Fallback locale | Spanish (`es`) |
 | Selector architecture | Root Expo Router modal route at `app/language.tsx` |
 | Signed-out entry | `SignInScreenView` language action |
-| Signed-in entry | `HomeContent` language action |
+| Signed-in entry | `HomeContent` plus OWNER `Manage` language actions |
 | Persistence | Explicit locale or `system` preference stored through the existing localization runtime |
 | Runtime switching | Immediate, no restart, no Metro reload |
 | Formatter source of truth | `apps/mobile/src/i18n/formatters.ts` |
@@ -120,16 +120,19 @@ The mobile app still depends on human-readable backend messages for some unknown
 - `ActionRow`
 - `FormSection`
 - `ListItem`
+- `NavigationTile`
 - `ScreenHeader`
 - `SectionHeader`
 - `RoleBadge`
 - `StatusBadge`
 - `MoneyText`
 - Home/sign-in language entry placements
+- role-based tab labels and OWNER Manage cards
 
 ### Rules enforced
 
 - labels may wrap
+- concise tab-specific labels can differ from full screen titles
 - buttons can grow vertically
 - action rows can wrap across lines
 - headers no longer depend on short English text
@@ -153,7 +156,7 @@ These remain by design and are protected by the hardcoded audit allowlist:
 ### Automated
 
 - catalog parity tests
-- locale render matrix smoke tests for auth, Home, Appointments, Record Service, Services, Employees, and Working Hours
+- locale render matrix smoke tests for auth, role-based navigation labels, Home, Manage, Appointments, Record Service, Services, Employees, and Working Hours
 - language-selector tests
 - formatter tests
 - hardcoded-string audit

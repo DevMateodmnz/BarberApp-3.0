@@ -82,7 +82,7 @@ export function getLocalizedLanguageLabel(locale: LocalePreference): string {
 }
 
 export function getNavigationLabel(
-  route: 'home' | 'recordService' | 'services' | 'employees' | 'workingHours' | 'appointments',
+  route: 'home' | 'recordService' | 'services' | 'employees' | 'workingHours' | 'appointments' | 'manage',
 ): string {
   return t(`navigation.${route}`);
 }

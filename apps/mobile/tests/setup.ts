@@ -121,3 +121,13 @@ vi.mock('react-native-safe-area-context', async () => {
     useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
   };
 });
+
+vi.mock('@expo/vector-icons', async () => {
+  const React = await import('react');
+  const Ionicons = React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) =>
+    React.createElement('Ionicons', { ref, ...props }),
+  );
+  Ionicons.displayName = 'Ionicons';
+
+  return { Ionicons };
+});

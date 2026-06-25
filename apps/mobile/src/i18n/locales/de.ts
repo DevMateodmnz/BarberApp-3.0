@@ -114,7 +114,24 @@ export const de = {
     employees: 'Mitarbeiter',
     workingHours: 'Öffnungszeiten',
     appointments: 'Termine',
+    manage: 'Verwalten',
     languageSettings: 'Sprache',
+    tabs: {
+      home: 'Start',
+      appointments: 'Termine',
+      record: 'Erfassen',
+      manage: 'Verwalten',
+    },
+    accessibility: {
+      homeTab: 'Den Tab Start öffnen',
+      appointmentsTab: 'Den Tab Termine öffnen',
+      recordTab: 'Den Tab Service erfassen öffnen',
+      manageTab: 'Den Tab Verwalten öffnen',
+      services: 'Serviceverwaltung öffnen',
+      employees: 'Mitarbeiterverwaltung öffnen',
+      workingHours: 'Verwaltung der Öffnungszeiten öffnen',
+      languageSettings: 'Spracheinstellungen öffnen',
+    },
   },
   runtime: {
     configurationErrorTitle: 'Mobiler Konfigurationsfehler',
@@ -150,6 +167,12 @@ export const de = {
   },
   home: {
     dashboardSubtitle: 'Dashboard',
+    dailyActionsTitle: 'Tagesaufgaben',
+    dailyActionsHint: 'Halte die häufigsten Aufgaben mit einem Tippen bereit.',
+    dailyActionsAccessibility: {
+      recordService: 'Den Ablauf zum Erfassen eines Services öffnen',
+      appointments: 'Termine öffnen',
+    },
     noBarbershopAssigned: 'Deinem Konto ist noch kein Barbershop zugeordnet.',
     ownerSummaryUnavailable: 'Deine Übersicht erscheint, sobald deinem Konto ein Barbershop zugeordnet ist.',
     barberSummaryUnavailable: 'Deine Übersicht erscheint, sobald dein Benutzer einem Barbershop zugeordnet ist.',
@@ -199,6 +222,29 @@ export const de = {
     selectedDate: 'Ausgewähltes Datum',
     recordClient: 'Kunde: {{name}}',
     unknownService: 'Unbekannter Service',
+  },
+  manage: {
+    title: 'Verwalten',
+    subtitle: 'Geschäftsverwaltung und Spracheinstellungen bleiben einen Tipp entfernt.',
+    blockedTitle: 'Nur für Inhaber',
+    blockedMessage: 'Nur Inhaber können die Werkzeuge zur Geschäftsverwaltung öffnen.',
+    businessSectionTitle: 'Geschäftsverwaltung',
+    businessSectionHint: 'Verschiebe gelegentliche Verwaltung aus dem Home-Bereich, ohne sie weit wegzulegen.',
+    settingsSectionTitle: 'App-Einstellungen',
+    items: {
+      services: {
+        description: 'Prüfe und aktualisiere den Servicekatalog deines Salons.',
+      },
+      employees: {
+        description: 'Verwalte Team und Servicezuweisungen an einem Ort.',
+      },
+      workingHours: {
+        description: 'Passe die wöchentlichen Öffnungszeiten deines Salons an.',
+      },
+      language: {
+        description: 'Ändere die Sprache der Oberfläche ohne Neustart der App.',
+      },
+    },
   },
   summary: {
     revenueSummaryTitle: 'Umsatzübersicht — {{label}}',

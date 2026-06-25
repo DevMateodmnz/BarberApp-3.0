@@ -101,6 +101,15 @@ export const spacing = {
   '4xl': 96,
 } as const;
 
+export const layout = {
+  screenHorizontalPadding: spacing[4],
+  compactControlGap: spacing[2],
+  relatedCardGap: spacing[3],
+  sectionContentGap: spacing[4],
+  majorSectionGap: spacing[6],
+  bottomSafeAreaSpacing: spacing[8],
+} as const;
+
 export const radius = {
   none: 0,
   sm: 4,
@@ -164,6 +173,7 @@ export const tokens = {
   colors,
   typography,
   spacing,
+  layout,
   radius,
   shadows,
   states,

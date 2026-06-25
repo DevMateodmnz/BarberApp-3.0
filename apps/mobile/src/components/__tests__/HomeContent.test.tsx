@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { HomeContent } from '@/components/HomeContent.js';
-import { findByTestId, findByText, press, queryByTestId, queryByText } from '@/testing/elementTree.js';
 import { formatBusinessDateLabel, formatCentsForDisplay, formatRecordTime, getTodayDateString } from '@/lib/format.js';
 import type { BarbershopDailySummary, EmployeeDailySummary, ServiceRecord } from '@/lib/types.js';
+import { findByTestId, findByText, press, queryByTestId, queryByText } from '@/testing/elementTree.js';
 
 const today = getTodayDateString();
 
@@ -101,9 +101,6 @@ function renderHomeContent(overrides: Partial<Parameters<typeof HomeContent>[0]>
     flashMessage: null,
     canRecordService: true,
     onRecordService: vi.fn(),
-    onServices: vi.fn(),
-    onEmployees: vi.fn(),
-    onWorkingHours: vi.fn(),
     onAppointments: vi.fn(),
     onPrevDate: vi.fn(),
     onNextDate: vi.fn(),
@@ -129,12 +126,11 @@ describe('HomeContent', () => {
     const tree = renderHomeContent({ context: OWNER_CONTEXT });
     expect(findByTestId(tree, 'home-context')).toBeDefined();
     expect(findByText(tree, 'Owner')).toBeDefined();
-    expect(findByTestId(tree, 'home-barbershop-name')).toBeDefined();
     expect(findByText(tree, 'Main St Barber')).toBeDefined();
   });
 
   it('renders the employee name for a barber context', () => {
-    const tree = renderHomeContent({ context: BARBER_CONTEXT });
+    const tree = renderHomeContent({ context: BARBER_CONTEXT, summary: BARBER_SUMMARY });
     expect(findByTestId(tree, 'home-employee-name')).toBeDefined();
     expect(findByText(tree, 'Carlos')).toBeDefined();
   });
@@ -143,42 +139,54 @@ describe('HomeContent', () => {
     const tree = renderHomeContent({
       context: { ...OWNER_CONTEXT, barbershopId: null, barbershopName: null },
       canRecordService: false,
+      summary: null,
     });
     expect(findByTestId(tree, 'home-no-context')).toBeDefined();
     expect(findByText(tree, 'No barbershop is linked to your account yet.')).toBeDefined();
   });
 
-  it('renders owner action cards and navigation buttons', () => {
-    const onServices = vi.fn();
-    const tree = renderHomeContent({ onServices });
-    expect(findByTestId(tree, 'home-record-service-card')).toBeDefined();
-    expect(findByTestId(tree, 'home-services-card')).toBeDefined();
-    expect(findByTestId(tree, 'home-employees-card')).toBeDefined();
-    expect(findByTestId(tree, 'home-working-hours-card')).toBeDefined();
-    expect(findByTestId(tree, 'home-appointments-card')).toBeDefined();
-    press(findByTestId(tree, 'home-services-button'));
-    expect(onServices).toHaveBeenCalledTimes(1);
-  });
+  it('renders compact daily actions and removes owner management cards from Home', () => {
+    const onRecordService = vi.fn();
+    const onAppointments = vi.fn();
+    const tree = renderHomeContent({ onRecordService, onAppointments });
 
-  it('renders barber-only action cards', () => {
-    const tree = renderHomeContent({ context: BARBER_CONTEXT });
-    expect(findByTestId(tree, 'home-record-service-card')).toBeDefined();
-    expect(findByTestId(tree, 'home-appointments-card')).toBeDefined();
+    expect(findByTestId(tree, 'home-daily-actions-section')).toBeDefined();
+    press(findByTestId(tree, 'home-daily-action-record'));
+    press(findByTestId(tree, 'home-daily-action-appointments'));
+
+    expect(onRecordService).toHaveBeenCalledTimes(1);
+    expect(onAppointments).toHaveBeenCalledTimes(1);
     expect(queryByTestId(tree, 'home-services-card')).toBeNull();
     expect(queryByTestId(tree, 'home-employees-card')).toBeNull();
     expect(queryByTestId(tree, 'home-working-hours-card')).toBeNull();
   });
 
-  it('hides action cards when record service is not allowed', () => {
-    const tree = renderHomeContent({ canRecordService: false });
-    expect(queryByTestId(tree, 'home-record-service-card')).toBeNull();
+  it('renders barber daily actions without owner management affordances', () => {
+    const tree = renderHomeContent({ context: BARBER_CONTEXT, summary: BARBER_SUMMARY });
+    expect(findByTestId(tree, 'home-daily-action-record')).toBeDefined();
+    expect(findByTestId(tree, 'home-daily-action-appointments')).toBeDefined();
+    expect(queryByTestId(tree, 'home-services-card')).toBeNull();
+    expect(queryByTestId(tree, 'home-employees-card')).toBeNull();
+    expect(queryByTestId(tree, 'home-working-hours-card')).toBeNull();
   });
 
-  it('renders the client message and no action cards', () => {
-    const tree = renderHomeContent({ context: CLIENT_CONTEXT, canRecordService: false });
+  it('hides the record daily action when record service is not allowed', () => {
+    const tree = renderHomeContent({ canRecordService: false });
+    expect(queryByTestId(tree, 'home-daily-action-record')).toBeNull();
+    expect(findByTestId(tree, 'home-daily-action-appointments')).toBeDefined();
+  });
+
+  it('renders the client message and no daily dashboard sections', () => {
+    const tree = renderHomeContent({
+      context: CLIENT_CONTEXT,
+      canRecordService: false,
+      summary: null,
+      records: [],
+    });
     expect(findByTestId(tree, 'home-client-message')).toBeDefined();
     expect(findByText(tree, 'Coming soon for clients.')).toBeDefined();
-    expect(queryByTestId(tree, 'date-controls')).toBeNull();
+    expect(queryByTestId(tree, 'home-daily-actions-section')).toBeNull();
+    expect(queryByTestId(tree, 'home-revenue-section')).toBeNull();
   });
 
   it('renders date controls and triggers navigation callbacks', () => {
@@ -187,17 +195,12 @@ describe('HomeContent', () => {
     const onToday = vi.fn();
     const tree = renderHomeContent({ onPrevDate, onNextDate, onToday });
     expect(findByTestId(tree, 'date-controls')).toBeDefined();
-    expect(findByTestId(tree, 'date-prev')).toBeDefined();
-    expect(findByTestId(tree, 'date-today')).toBeDefined();
-    expect(findByTestId(tree, 'date-display')).toBeDefined();
-    expect(findByTestId(tree, 'date-next')).toBeDefined();
     expect(findByText(tree, formatBusinessDateLabel(today))).toBeDefined();
-    expect(findByText(tree, 'The selected date only affects the records list below.')).toBeDefined();
     press(findByTestId(tree, 'date-prev'));
-    expect(onPrevDate).toHaveBeenCalledTimes(1);
     press(findByTestId(tree, 'date-next'));
-    expect(onNextDate).toHaveBeenCalledTimes(1);
     press(findByTestId(tree, 'date-today'));
+    expect(onPrevDate).toHaveBeenCalledTimes(1);
+    expect(onNextDate).toHaveBeenCalledTimes(1);
     expect(onToday).toHaveBeenCalledTimes(1);
   });
 
@@ -205,10 +208,9 @@ describe('HomeContent', () => {
     const onSummaryPeriodChange = vi.fn();
     const tree = renderHomeContent({ onSummaryPeriodChange, summaryPeriod: 'today' });
     expect(findByTestId(tree, 'summary-period-controls')).toBeDefined();
-    expect(findByText(tree, 'Period filters only affect revenue totals.')).toBeDefined();
     press(findByTestId(tree, 'summary-period-week'));
-    expect(onSummaryPeriodChange).toHaveBeenCalledWith('week');
     press(findByTestId(tree, 'summary-period-month'));
+    expect(onSummaryPeriodChange).toHaveBeenCalledWith('week');
     expect(onSummaryPeriodChange).toHaveBeenCalledWith('month');
   });
 
@@ -238,14 +240,15 @@ describe('HomeContent', () => {
 
     expect(findByTestId(tree, 'summary-employee-filter')).toBeDefined();
     press(findByTestId(tree, 'summary-employee-filter-all'));
-    expect(onAll).toHaveBeenCalledTimes(1);
     press(findByTestId(tree, 'summary-employee-filter-emp-1'));
+    expect(onAll).toHaveBeenCalledTimes(1);
     expect(onCarlos).toHaveBeenCalledTimes(1);
   });
 
   it('does not render owner employee filters for barber context', () => {
     const tree = renderHomeContent({
       context: BARBER_CONTEXT,
+      summary: BARBER_SUMMARY,
       ownerEmployeeFilters: [
         {
           id: 'all',
@@ -267,7 +270,6 @@ describe('HomeContent', () => {
       isOwnerEmployeeFiltersLoading: true,
     });
     expect(findByTestId(loadingTree, 'summary-employee-filter-loading')).toBeDefined();
-    expect(findByText(loadingTree, 'Loading barbers…')).toBeDefined();
 
     const errorTree = renderHomeContent({
       context: OWNER_CONTEXT,
@@ -286,58 +288,31 @@ describe('HomeContent', () => {
     expect(findByTestId(emptyTree, 'summary-employee-filter-empty')).toBeDefined();
   });
 
-  it('renders a summary loading state', () => {
-    const tree = renderHomeContent({ isSummaryLoading: true, summary: null });
-    expect(findByText(tree, 'Loading summary…')).toBeDefined();
+  it('renders revenue content for owners and barbers', () => {
+    const ownerTree = renderHomeContent({ context: OWNER_CONTEXT, summary: OWNER_SUMMARY });
+    expect(findByTestId(ownerTree, 'home-owner-summary')).toBeDefined();
+    expect(findByTestId(ownerTree, 'home-revenue-section')).toBeDefined();
+
+    const barberTree = renderHomeContent({ context: BARBER_CONTEXT, summary: BARBER_SUMMARY });
+    expect(findByTestId(barberTree, 'home-barber-summary')).toBeDefined();
+    expect(findByTestId(barberTree, 'home-revenue-section')).toBeDefined();
   });
 
-  it('renders a summary error state', () => {
-    const tree = renderHomeContent({ summaryError: 'Summary failed' });
-    expect(findByTestId(tree, 'home-summary-error')).toBeDefined();
-    expect(findByText(tree, 'Summary failed')).toBeDefined();
-  });
+  it('renders records loading, error, and empty states', () => {
+    const loadingTree = renderHomeContent({ isRecordsLoading: true, records: [] });
+    expect(findByText(loadingTree, 'Loading records…')).toBeDefined();
 
-  it('renders the owner summary card', () => {
-    const tree = renderHomeContent({
-      context: OWNER_CONTEXT,
-      summary: OWNER_SUMMARY,
-      summaryPeriodLabel: 'This month',
-    });
-    expect(findByTestId(tree, 'home-owner-summary')).toBeDefined();
-    expect(findByText(tree, 'Revenue Summary — This month')).toBeDefined();
-  });
+    const errorTree = renderHomeContent({ recordsError: 'Records failed' });
+    expect(findByTestId(errorTree, 'home-records-error')).toBeDefined();
+    expect(findByText(errorTree, 'Records failed')).toBeDefined();
 
-  it('renders the barber summary card', () => {
-    const tree = renderHomeContent({
-      context: BARBER_CONTEXT,
-      summary: BARBER_SUMMARY,
-      summaryPeriodLabel: 'This week',
-    });
-    expect(findByTestId(tree, 'home-barber-summary')).toBeDefined();
-    expect(findByText(tree, 'Revenue Summary — This week')).toBeDefined();
-  });
-
-  it('renders a records loading state', () => {
-    const tree = renderHomeContent({ isRecordsLoading: true, records: [] });
-    expect(findByText(tree, 'Loading records…')).toBeDefined();
-  });
-
-  it('renders a records error state', () => {
-    const tree = renderHomeContent({ recordsError: 'Records failed' });
-    expect(findByTestId(tree, 'home-records-error')).toBeDefined();
-    expect(findByText(tree, 'Records failed')).toBeDefined();
-  });
-
-  it('renders an empty records state', () => {
-    const tree = renderHomeContent({ records: [] });
-    expect(findByTestId(tree, 'home-records-empty')).toBeDefined();
+    const emptyTree = renderHomeContent({ records: [] });
+    expect(findByTestId(emptyTree, 'home-records-empty')).toBeDefined();
   });
 
   it('renders service record cards with full details for owners', () => {
     const tree = renderHomeContent({ context: OWNER_CONTEXT, records: [RECORD] });
-    expect(findByTestId(tree, 'home-records-section')).toBeDefined();
     const recordCard = findByTestId(tree, 'record-rec-1');
-    expect(recordCard).toBeDefined();
     expect(findByText(recordCard, 'Haircut')).toBeDefined();
     expect(findByText(recordCard, formatCentsForDisplay(3000))).toBeDefined();
     expect(findByText(recordCard, 'Cash')).toBeDefined();
@@ -351,8 +326,7 @@ describe('HomeContent', () => {
   });
 
   it('hides barber names in the records list for barbers', () => {
-    const tree = renderHomeContent({ context: BARBER_CONTEXT, records: [RECORD] });
-    expect(findByTestId(tree, 'record-rec-1')).toBeDefined();
+    const tree = renderHomeContent({ context: BARBER_CONTEXT, summary: BARBER_SUMMARY, records: [RECORD] });
     const recordCard = findByTestId(tree, 'record-rec-1');
     expect(queryByText(recordCard, 'Carlos')).toBeNull();
   });

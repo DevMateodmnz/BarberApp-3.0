@@ -110,7 +110,24 @@ export const en = {
     employees: 'Employees',
     workingHours: 'Working Hours',
     appointments: 'Appointments',
+    manage: 'Manage',
     languageSettings: 'Language',
+    tabs: {
+      home: 'Home',
+      appointments: 'Appointments',
+      record: 'Record',
+      manage: 'Manage',
+    },
+    accessibility: {
+      homeTab: 'Open the Home tab',
+      appointmentsTab: 'Open the Appointments tab',
+      recordTab: 'Open the Record Service tab',
+      manageTab: 'Open the Manage tab',
+      services: 'Open service management',
+      employees: 'Open employee management',
+      workingHours: 'Open working hours management',
+      languageSettings: 'Open language settings',
+    },
   },
   runtime: {
     configurationErrorTitle: 'Mobile configuration error',
@@ -146,6 +163,12 @@ export const en = {
   },
   home: {
     dashboardSubtitle: 'Dashboard',
+    dailyActionsTitle: 'Daily actions',
+    dailyActionsHint: 'Keep the most frequent tasks one tap away.',
+    dailyActionsAccessibility: {
+      recordService: 'Open the Record Service flow',
+      appointments: 'Open appointments',
+    },
     noBarbershopAssigned: 'No barbershop is linked to your account yet.',
     ownerSummaryUnavailable: 'Your summary will appear once a barbershop is linked to your account.',
     barberSummaryUnavailable: 'Your summary will appear once your user is linked to a barbershop.',
@@ -195,6 +218,29 @@ export const en = {
     selectedDate: 'Selected date',
     recordClient: 'Client: {{name}}',
     unknownService: 'Unknown service',
+  },
+  manage: {
+    title: 'Manage',
+    subtitle: 'Keep business setup and app settings one tap away.',
+    blockedTitle: 'Owner access only',
+    blockedMessage: 'Only owners can open business management tools.',
+    businessSectionTitle: 'Business management',
+    businessSectionHint: 'Move occasional administration off Home while keeping it close.',
+    settingsSectionTitle: 'App settings',
+    items: {
+      services: {
+        description: 'Review and update your barbershop service catalog.',
+      },
+      employees: {
+        description: 'Manage staff and assigned services from one place.',
+      },
+      workingHours: {
+        description: 'Adjust the weekly opening hours for your barbershop.',
+      },
+      language: {
+        description: 'Change the interface language without restarting the app.',
+      },
+    },
   },
   summary: {
     revenueSummaryTitle: 'Revenue Summary — {{label}}',

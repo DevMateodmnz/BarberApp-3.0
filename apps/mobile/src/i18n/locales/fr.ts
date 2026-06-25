@@ -105,7 +105,24 @@ export const fr = {
     employees: 'Employés',
     workingHours: 'Horaires',
     appointments: 'Rendez-vous',
+    manage: 'Gérer',
     languageSettings: 'Langue',
+    tabs: {
+      home: 'Accueil',
+      appointments: 'Rendez-vous',
+      record: 'Saisir',
+      manage: 'Gérer',
+    },
+    accessibility: {
+      homeTab: 'Ouvrir l’onglet Accueil',
+      appointmentsTab: 'Ouvrir l’onglet Rendez-vous',
+      recordTab: 'Ouvrir l’onglet Enregistrer un service',
+      manageTab: 'Ouvrir l’onglet Gérer',
+      services: 'Ouvrir la gestion des services',
+      employees: 'Ouvrir la gestion des employés',
+      workingHours: 'Ouvrir la gestion des horaires',
+      languageSettings: 'Ouvrir les réglages de langue',
+    },
   },
   runtime: {
     configurationErrorTitle: 'Erreur de configuration mobile',
@@ -141,6 +158,12 @@ export const fr = {
   },
   home: {
     dashboardSubtitle: 'Tableau de bord',
+    dailyActionsTitle: 'Actions du jour',
+    dailyActionsHint: 'Garde les tâches les plus fréquentes à portée d’un geste.',
+    dailyActionsAccessibility: {
+      recordService: 'Ouvrir le parcours Enregistrer un service',
+      appointments: 'Ouvrir les rendez-vous',
+    },
     noBarbershopAssigned: 'Aucun salon n’est encore lié à ton compte.',
     ownerSummaryUnavailable: 'Ton résumé apparaîtra une fois qu’un salon sera lié à ton compte.',
     barberSummaryUnavailable: 'Ton résumé apparaîtra une fois que ton utilisateur sera lié à un salon.',
@@ -190,6 +213,29 @@ export const fr = {
     selectedDate: 'Date sélectionnée',
     recordClient: 'Client : {{name}}',
     unknownService: 'Service inconnu',
+  },
+  manage: {
+    title: 'Gérer',
+    subtitle: 'Garde l’administration du salon et la langue à portée d’un geste.',
+    blockedTitle: 'Accès réservé au propriétaire',
+    blockedMessage: 'Seuls les propriétaires peuvent ouvrir les outils de gestion du salon.',
+    businessSectionTitle: 'Gestion du salon',
+    businessSectionHint: 'Retire l’administration occasionnelle de l’accueil tout en la gardant proche du flux quotidien.',
+    settingsSectionTitle: 'Réglages de l’application',
+    items: {
+      services: {
+        description: 'Consulte et mets à jour le catalogue de services de ton salon.',
+      },
+      employees: {
+        description: 'Gère l’équipe et les attributions de services au même endroit.',
+      },
+      workingHours: {
+        description: 'Ajuste les horaires hebdomadaires d’ouverture de ton salon.',
+      },
+      language: {
+        description: 'Change la langue de l’interface sans redémarrer l’application.',
+      },
+    },
   },
   summary: {
     revenueSummaryTitle: 'Résumé des revenus — {{label}}',

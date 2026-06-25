@@ -1,15 +1,16 @@
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+
 import {
   AppButton,
   AppCard,
   EmptyState,
+  NavigationTile,
   RoleBadge,
   ScreenHeader,
   SectionHeader,
 } from '@/components/ui/index.js';
 import { DailySummarySection } from '@/components/DailySummarySection.js';
-import { tokens } from '@/theme/index.js';
 import { APP_NAME } from '@/lib/constants.js';
 import {
   formatBusinessDateLabel,
@@ -19,6 +20,7 @@ import {
   isTodayDateString,
 } from '@/lib/format.js';
 import type { DailySummary, RevenueSummaryPeriod, ServiceRecord } from '@/lib/types.js';
+import { tokens } from '@/theme/index.js';
 
 interface FilterOption {
   id: string;
@@ -56,9 +58,6 @@ export interface HomeContentProps {
   flashMessage: string | null;
   canRecordService: boolean;
   onRecordService: () => void;
-  onServices: () => void;
-  onEmployees: () => void;
-  onWorkingHours: () => void;
   onAppointments: () => void;
   onPrevDate: () => void;
   onNextDate: () => void;
@@ -88,9 +87,6 @@ export function HomeContent({
   flashMessage,
   canRecordService,
   onRecordService,
-  onServices,
-  onEmployees,
-  onWorkingHours,
   onAppointments,
   onPrevDate,
   onNextDate,
@@ -104,11 +100,13 @@ export function HomeContent({
     { value: 'month', label: t('common.periods.month') },
     { value: 'year', label: t('common.periods.year') },
   ];
+
   const role = context?.role;
   const showBarberNames = role === 'OWNER';
   const canShowDashboard = role === 'OWNER' || role === 'BARBER';
   const showRevenueSection = canShowDashboard && !!context?.barbershopId;
   const showRecordsSection = canShowDashboard && !!context?.barbershopId;
+  const showAppointmentsAction = canShowDashboard && !!context?.barbershopId;
   const showOwnerEmployeeFilterCard = role === 'OWNER' && !!context?.barbershopId;
   const showOwnerEmployeeFilterEmptyState =
     showOwnerEmployeeFilterCard &&
@@ -116,6 +114,7 @@ export function HomeContent({
     !isOwnerEmployeeFiltersLoading &&
     !ownerEmployeeFiltersError &&
     ownerEmployeeFilters.length === 0;
+  const showDailyActions = canRecordService || showAppointmentsAction;
 
   return (
     <>
@@ -134,355 +133,301 @@ export function HomeContent({
         ) : undefined}
       />
 
-      {flashMessage && (
-        <AppCard testID="home-flash-message" style={styles.flashBanner}>
-          <Text style={styles.flashText}>{flashMessage}</Text>
-        </AppCard>
-      )}
-
-      {isContextLoading && (
-        <AppCard style={styles.centeredCard}>
-          <ActivityIndicator testID="home-loading" size="large" />
-          <Text style={styles.loadingText}>{t('runtime.loadingContext')}</Text>
-        </AppCard>
-      )}
-
-      {contextError && (
-        <AppCard style={styles.centeredCard}>
-          <Text style={styles.errorText} testID="home-error">
-            {contextError}
-          </Text>
-        </AppCard>
-      )}
-
-      {context && !isContextLoading && !contextError && (
-        <>
-          <AppCard testID="home-context">
-            <View style={styles.contextHeader}>
-              <RoleBadge role={context.role} />
-
-              {context.barbershopName && (
-                <Text style={styles.detailText} testID="home-barbershop-name">
-                  {context.barbershopName}
-                </Text>
-              )}
-
-              {context.employeeName && (
-                <Text style={styles.detailText} testID="home-employee-name">
-                  {context.employeeName}
-                </Text>
-              )}
-
-              {canShowDashboard && !context.barbershopName && (
-                <Text style={styles.emptyHint} testID="home-no-context">
-                  {t('home.noBarbershopAssigned')}
-                </Text>
-              )}
-            </View>
+      <View style={styles.contentStack}>
+        {flashMessage ? (
+          <AppCard testID="home-flash-message" style={styles.flashBanner}>
+            <Text style={styles.flashText}>{flashMessage}</Text>
           </AppCard>
+        ) : null}
 
-          {canRecordService && (
-            <ActionCard
-              testID="home-record-service-card"
-              title={t('home.actionCards.recordService.title')}
-              description={t('home.actionCards.recordService.description')}
-              buttonTestID="home-record-service-button"
-              buttonTitle={t('home.actionCards.recordService.action')}
-              onPress={onRecordService}
-            />
-          )}
+        {isContextLoading ? (
+          <AppCard style={styles.centeredCard}>
+            <ActivityIndicator testID="home-loading" size="large" />
+            <Text style={styles.loadingText}>{t('runtime.loadingContext')}</Text>
+          </AppCard>
+        ) : null}
 
-          {role === 'OWNER' && !!context.barbershopId && (
-            <>
-              <ActionCard
-                testID="home-services-card"
-                title={t('home.actionCards.services.title')}
-                description={t('home.actionCards.services.description')}
-                buttonTestID="home-services-button"
-                buttonTitle={t('home.actionCards.services.action')}
-                onPress={onServices}
-              />
+        {contextError ? (
+          <AppCard style={styles.centeredCard}>
+            <Text style={styles.errorText} testID="home-error">
+              {contextError}
+            </Text>
+          </AppCard>
+        ) : null}
 
-              <ActionCard
-                testID="home-employees-card"
-                title={t('home.actionCards.employees.title')}
-                description={t('home.actionCards.employees.description')}
-                buttonTestID="home-employees-button"
-                buttonTitle={t('home.actionCards.employees.action')}
-                onPress={onEmployees}
-              />
+        {context && !isContextLoading && !contextError ? (
+          <>
+            <AppCard testID="home-context">
+              <View style={styles.contextHeader}>
+                <RoleBadge role={context.role} />
 
-              <ActionCard
-                testID="home-working-hours-card"
-                title={t('home.actionCards.workingHours.title')}
-                description={t('home.actionCards.workingHours.description')}
-                buttonTestID="home-working-hours-button"
-                buttonTitle={t('home.actionCards.workingHours.action')}
-                onPress={onWorkingHours}
-              />
-            </>
-          )}
+                {context.barbershopName ? (
+                  <Text style={styles.detailText} testID="home-barbershop-name">
+                    {context.barbershopName}
+                  </Text>
+                ) : null}
 
-          {canShowDashboard && !!context.barbershopId && (
-            <ActionCard
-              testID="home-appointments-card"
-              title={t('home.actionCards.appointments.title')}
-              description={t('home.actionCards.appointments.description')}
-              buttonTestID="home-appointments-button"
-              buttonTitle={t('home.actionCards.appointments.action')}
-              onPress={onAppointments}
-            />
-          )}
+                {context.employeeName ? (
+                  <Text style={styles.detailText} testID="home-employee-name">
+                    {context.employeeName}
+                  </Text>
+                ) : null}
 
-          {role === 'CLIENT' && (
-            <AppCard testID="home-client-message" title={t('home.clientMessageTitle')}>
-              <Text style={styles.emptyHint}>{t('home.clientMessageBody')}</Text>
+                {canShowDashboard && !context.barbershopName ? (
+                  <Text style={styles.emptyHint} testID="home-no-context">
+                    {t('home.noBarbershopAssigned')}
+                  </Text>
+                ) : null}
+              </View>
             </AppCard>
-          )}
 
-          {showRevenueSection && (
-            <View testID="home-revenue-section" style={styles.sectionBlock}>
-              <SectionHeader title={t('home.revenueOverviewTitle')} />
-              <Text style={styles.sectionHint}>
-                {t('home.revenueOverviewHint')}
-              </Text>
-
-              <AppCard testID="summary-period-controls" variant="outlined">
-                <SectionHeader title={t('home.revenuePeriodTitle')} />
-                <View style={styles.periodGrid}>
-                  {summaryPeriodOptions.map((option) => (
-                    <AppButton
-                      key={option.value}
-                      testID={`summary-period-${option.value}`}
-                      title={option.label}
-                      variant={summaryPeriod === option.value ? 'primary' : 'ghost'}
-                      size="sm"
-                      onPress={() => onSummaryPeriodChange(option.value)}
-                      style={styles.periodButton}
+            {showDailyActions ? (
+              <View style={styles.sectionBlock} testID="home-daily-actions-section">
+                <SectionHeader title={t('home.dailyActionsTitle')} />
+                <Text style={styles.sectionHint}>{t('home.dailyActionsHint')}</Text>
+                <View style={styles.tileGrid}>
+                  {canRecordService ? (
+                    <NavigationTile
+                      testID="home-daily-action-record"
+                      title={t('home.actionCards.recordService.title')}
+                      description={t('home.actionCards.recordService.description')}
+                      iconName="add-circle-outline"
+                      accessibilityLabel={t('home.dailyActionsAccessibility.recordService')}
+                      onPress={onRecordService}
+                      style={styles.tileGridItem}
+                      variant="primary"
                     />
-                  ))}
+                  ) : null}
+
+                  {showAppointmentsAction ? (
+                    <NavigationTile
+                      testID="home-daily-action-appointments"
+                      title={t('home.actionCards.appointments.title')}
+                      description={t('home.actionCards.appointments.description')}
+                      iconName="calendar-outline"
+                      accessibilityLabel={t('home.dailyActionsAccessibility.appointments')}
+                      onPress={onAppointments}
+                      style={styles.tileGridItem}
+                    />
+                  ) : null}
                 </View>
+              </View>
+            ) : null}
+
+            {role === 'CLIENT' ? (
+              <AppCard testID="home-client-message" title={t('home.clientMessageTitle')}>
+                <Text style={styles.emptyHint}>{t('home.clientMessageBody')}</Text>
               </AppCard>
+            ) : null}
 
-              {showOwnerEmployeeFilterCard && (
-                <AppCard testID="summary-employee-filter" variant="outlined">
-                  <SectionHeader title={t('home.barberFilterTitle')} />
+            {showRevenueSection ? (
+              <View testID="home-revenue-section" style={styles.sectionBlock}>
+                <SectionHeader title={t('home.revenueOverviewTitle')} />
+                <Text style={styles.sectionHint}>{t('home.revenueOverviewHint')}</Text>
 
-                  {isOwnerEmployeeFiltersLoading && ownerEmployeeFilters.length === 0 && (
-                    <View style={styles.inlineState} testID="summary-employee-filter-loading">
-                      <ActivityIndicator size="small" />
-                      <Text style={styles.loadingText}>{t('home.noOwnerFilterEmployees')}</Text>
-                    </View>
-                  )}
-
-                  {ownerEmployeeFiltersError && (
-                    <View style={styles.filterStatusBlock}>
-                      <Text style={styles.errorText} testID="summary-employee-filter-error">
-                        {ownerEmployeeFiltersError}
-                      </Text>
+                <AppCard testID="summary-period-controls" variant="outlined">
+                  <SectionHeader title={t('home.revenuePeriodTitle')} />
+                  <View style={styles.periodGrid}>
+                    {summaryPeriodOptions.map((option) => (
                       <AppButton
-                        testID="summary-employee-filter-retry"
-                        title={t('common.actions.retry')}
-                        variant="secondary"
-                        size="md"
-                        onPress={onRetryOwnerEmployeeFilters}
-                        style={styles.retryButton}
+                        key={option.value}
+                        testID={`summary-period-${option.value}`}
+                        title={option.label}
+                        variant={summaryPeriod === option.value ? 'primary' : 'ghost'}
+                        size="sm"
+                        onPress={() => onSummaryPeriodChange(option.value)}
+                        style={styles.periodButton}
                       />
-                    </View>
-                  )}
+                    ))}
+                  </View>
+                </AppCard>
 
-                  {ownerEmployeeFilters.length > 0 && (
-                    <>
-                      {isOwnerEmployeeFiltersLoading && (
-                        <Text
-                          style={styles.loadingText}
-                          testID="summary-employee-filter-refreshing"
-                        >
-                          {t('home.refreshingOwnerFilterEmployees')}
-                        </Text>
-                      )}
-                      <View style={styles.employeeFilterList}>
-                        {ownerEmployeeFilters.map((filter) => (
-                          <AppButton
-                            key={filter.id}
-                            testID={filter.testID}
-                            title={filter.label}
-                            variant={filter.selected ? 'primary' : 'secondary'}
-                            size="md"
-                            onPress={filter.onPress}
-                            style={styles.employeeFilterButton}
-                          />
-                        ))}
+                {showOwnerEmployeeFilterCard ? (
+                  <AppCard testID="summary-employee-filter" variant="outlined">
+                    <SectionHeader title={t('home.barberFilterTitle')} />
+
+                    {isOwnerEmployeeFiltersLoading && ownerEmployeeFilters.length === 0 ? (
+                      <View style={styles.inlineState} testID="summary-employee-filter-loading">
+                        <ActivityIndicator size="small" />
+                        <Text style={styles.loadingText}>{t('home.noOwnerFilterEmployees')}</Text>
                       </View>
-                    </>
-                  )}
+                    ) : null}
 
-                  {showOwnerEmployeeFilterEmptyState && (
-                    <EmptyState
-                      testID="summary-employee-filter-empty"
-                      title={t('home.noActiveBarbersTitle')}
-                      message={t('home.noActiveBarbersMessage')}
+                    {ownerEmployeeFiltersError ? (
+                      <View style={styles.filterStatusBlock}>
+                        <Text style={styles.errorText} testID="summary-employee-filter-error">
+                          {ownerEmployeeFiltersError}
+                        </Text>
+                        <AppButton
+                          testID="summary-employee-filter-retry"
+                          title={t('common.actions.retry')}
+                          variant="secondary"
+                          size="md"
+                          onPress={onRetryOwnerEmployeeFilters}
+                          style={styles.retryButton}
+                        />
+                      </View>
+                    ) : null}
+
+                    {ownerEmployeeFilters.length > 0 ? (
+                      <>
+                        {isOwnerEmployeeFiltersLoading ? (
+                          <Text style={styles.loadingText} testID="summary-employee-filter-refreshing">
+                            {t('home.refreshingOwnerFilterEmployees')}
+                          </Text>
+                        ) : null}
+                        <View style={styles.employeeFilterList}>
+                          {ownerEmployeeFilters.map((filter) => (
+                            <AppButton
+                              key={filter.id}
+                              testID={filter.testID}
+                              title={filter.label}
+                              variant={filter.selected ? 'primary' : 'secondary'}
+                              size="md"
+                              onPress={filter.onPress}
+                              style={styles.employeeFilterButton}
+                            />
+                          ))}
+                        </View>
+                      </>
+                    ) : null}
+
+                    {showOwnerEmployeeFilterEmptyState ? (
+                      <EmptyState
+                        testID="summary-employee-filter-empty"
+                        title={t('home.noActiveBarbersTitle')}
+                        message={t('home.noActiveBarbersMessage')}
+                      />
+                    ) : null}
+                  </AppCard>
+                ) : null}
+
+                {isSummaryLoading ? (
+                  <AppCard style={styles.centeredCard}>
+                    <ActivityIndicator size="small" />
+                    <Text style={styles.loadingText}>{t('home.loadingSummary')}</Text>
+                  </AppCard>
+                ) : null}
+
+                {summaryError ? (
+                  <AppCard>
+                    <Text style={styles.errorText} testID="home-summary-error">
+                      {summaryError}
+                    </Text>
+                  </AppCard>
+                ) : null}
+
+                {role === 'OWNER' && summary && !isSummaryLoading && !summaryError ? (
+                  <AppCard testID="home-owner-summary">
+                    <DailySummarySection
+                      byEmployee={'byEmployee' in summary ? summary.byEmployee : undefined}
+                      byPaymentMethod={summary.byPaymentMethod}
+                      titleLabel={summaryPeriodLabel}
+                      selectedDate={selectedDate}
+                      totalRecords={summary.totalRecords}
+                      totalRevenueCents={summary.totalRevenueCents}
                     />
-                  )}
-                </AppCard>
-              )}
+                  </AppCard>
+                ) : null}
 
-              {isSummaryLoading && (
-                <AppCard style={styles.centeredCard}>
-                  <ActivityIndicator size="small" />
-                  <Text style={styles.loadingText}>{t('home.loadingSummary')}</Text>
-                </AppCard>
-              )}
+                {role === 'BARBER' && summary && !isSummaryLoading && !summaryError ? (
+                  <AppCard testID="home-barber-summary">
+                    <DailySummarySection
+                      byPaymentMethod={summary.byPaymentMethod}
+                      titleLabel={summaryPeriodLabel}
+                      selectedDate={selectedDate}
+                      totalRecords={summary.totalRecords}
+                      totalRevenueCents={summary.totalRevenueCents}
+                    />
+                  </AppCard>
+                ) : null}
+              </View>
+            ) : null}
 
-              {summaryError && (
-                <AppCard>
-                  <Text style={styles.errorText} testID="home-summary-error">
-                    {summaryError}
+            {showRecordsSection ? (
+              <View testID="home-records-block" style={styles.sectionBlock}>
+                <SectionHeader title={t('home.recordsSectionTitle')} />
+                <Text style={styles.sectionHint}>{t('home.recordsSectionHint')}</Text>
+
+                <AppCard testID="date-controls" variant="outlined">
+                  <Text style={styles.controlEyebrow}>{t('home.selectedDate')}</Text>
+                  <Text style={styles.dateDisplay} testID="date-display">
+                    {formatBusinessDateLabel(selectedDate)}
                   </Text>
+                  <View style={styles.dateRow}>
+                    <AppButton
+                      testID="date-prev"
+                      title={t('common.actions.previous')}
+                      variant="secondary"
+                      size="sm"
+                      onPress={onPrevDate}
+                      style={styles.dateButton}
+                    />
+                    <AppButton
+                      testID="date-today"
+                      title={t('common.actions.today')}
+                      variant="secondary"
+                      size="sm"
+                      disabled={isTodayDateString(selectedDate)}
+                      onPress={onToday}
+                      style={styles.dateButton}
+                    />
+                    <AppButton
+                      testID="date-next"
+                      title={t('common.actions.next')}
+                      variant="secondary"
+                      size="sm"
+                      onPress={onNextDate}
+                      style={styles.dateButton}
+                    />
+                  </View>
                 </AppCard>
-              )}
 
-              {role === 'OWNER' && summary && !isSummaryLoading && !summaryError && (
-                <AppCard testID="home-owner-summary">
-                  <DailySummarySection
-                    byEmployee={'byEmployee' in summary ? summary.byEmployee : undefined}
-                    byPaymentMethod={summary.byPaymentMethod}
-                    titleLabel={summaryPeriodLabel}
-                    selectedDate={selectedDate}
-                    totalRecords={summary.totalRecords}
-                    totalRevenueCents={summary.totalRevenueCents}
-                  />
-                </AppCard>
-              )}
+                {isRecordsLoading ? (
+                  <AppCard style={styles.centeredCard}>
+                    <ActivityIndicator size="small" />
+                    <Text style={styles.loadingText}>{t('home.loadingRecords')}</Text>
+                  </AppCard>
+                ) : null}
 
-              {role === 'BARBER' && summary && !isSummaryLoading && !summaryError && (
-                <AppCard testID="home-barber-summary">
-                  <DailySummarySection
-                    byPaymentMethod={summary.byPaymentMethod}
-                    titleLabel={summaryPeriodLabel}
-                    selectedDate={selectedDate}
-                    totalRecords={summary.totalRecords}
-                    totalRevenueCents={summary.totalRevenueCents}
-                  />
-                </AppCard>
-              )}
-            </View>
-          )}
+                {recordsError ? (
+                  <AppCard>
+                    <Text style={styles.errorText} testID="home-records-error">
+                      {recordsError}
+                    </Text>
+                  </AppCard>
+                ) : null}
 
-          {showRecordsSection && (
-            <View testID="home-records-block" style={styles.sectionBlock}>
-              <SectionHeader title={t('home.recordsSectionTitle')} />
-              <Text style={styles.sectionHint}>
-                {t('home.recordsSectionHint')}
-              </Text>
+                {!isRecordsLoading && !recordsError ? (
+                  <AppCard title={t('home.recordsForDateTitle')} testID="home-records-section">
+                    {records.length === 0 ? (
+                      <EmptyState
+                        testID="home-records-empty"
+                        title={t('home.noRecordsForDate')}
+                      />
+                    ) : (
+                      <View style={styles.recordList}>
+                        {records.map((record) => renderRecordCard(record, showBarberNames, t))}
+                      </View>
+                    )}
+                  </AppCard>
+                ) : null}
+              </View>
+            ) : null}
 
-              <AppCard testID="date-controls" variant="outlined">
-                <Text style={styles.controlEyebrow}>{t('home.selectedDate')}</Text>
-                <Text style={styles.dateDisplay} testID="date-display">
-                  {formatBusinessDateLabel(selectedDate)}
+            {canShowDashboard && !context.barbershopId && !isSummaryLoading && !summary ? (
+              <AppCard>
+                <Text style={styles.emptyHint}>
+                  {role === 'OWNER'
+                    ? t('home.ownerSummaryUnavailable')
+                    : t('home.barberSummaryUnavailable')}
                 </Text>
-                <View style={styles.dateRow}>
-                  <AppButton
-                    testID="date-prev"
-                    title={t('common.actions.previous')}
-                    variant="secondary"
-                    size="sm"
-                    onPress={onPrevDate}
-                    style={styles.dateButton}
-                  />
-                  <AppButton
-                    testID="date-today"
-                    title={t('common.actions.today')}
-                    variant="secondary"
-                    size="sm"
-                    disabled={isTodayDateString(selectedDate)}
-                    onPress={onToday}
-                    style={styles.dateButton}
-                  />
-                  <AppButton
-                    testID="date-next"
-                    title={t('common.actions.next')}
-                    variant="secondary"
-                    size="sm"
-                    onPress={onNextDate}
-                    style={styles.dateButton}
-                  />
-                </View>
               </AppCard>
-
-              {isRecordsLoading && (
-                <AppCard style={styles.centeredCard}>
-                  <ActivityIndicator size="small" />
-                  <Text style={styles.loadingText}>{t('home.loadingRecords')}</Text>
-                </AppCard>
-              )}
-
-              {recordsError && (
-                <AppCard>
-                  <Text style={styles.errorText} testID="home-records-error">
-                    {recordsError}
-                  </Text>
-                </AppCard>
-              )}
-
-              {!isRecordsLoading && !recordsError && (
-                <AppCard title={t('home.recordsForDateTitle')} testID="home-records-section">
-                  {records.length === 0 ? (
-                    <EmptyState
-                      testID="home-records-empty"
-                      title={t('home.noRecordsForDate')}
-                    />
-                  ) : (
-                    records.map((record) => renderRecordCard(record, showBarberNames, t))
-                  )}
-                </AppCard>
-              )}
-            </View>
-          )}
-
-          {canShowDashboard && !context.barbershopId && !isSummaryLoading && !summary && (
-            <AppCard>
-              <Text style={styles.emptyHint}>
-                {role === 'OWNER'
-                  ? t('home.ownerSummaryUnavailable')
-                  : t('home.barberSummaryUnavailable')}
-              </Text>
-            </AppCard>
-          )}
-        </>
-      )}
-    </>
-  );
-}
-
-interface ActionCardProps {
-  testID: string;
-  title: string;
-  description: string;
-  buttonTestID: string;
-  buttonTitle: string;
-  onPress: () => void;
-}
-
-function ActionCard({
-  testID,
-  title,
-  description,
-  buttonTestID,
-  buttonTitle,
-  onPress,
-}: ActionCardProps) {
-  return (
-    <AppCard testID={testID} title={title}>
-      <Text style={styles.actionText}>{description}</Text>
-      <View style={styles.actionButtonWrapper}>
-        <AppButton
-          testID={buttonTestID}
-          title={buttonTitle}
-          onPress={onPress}
-        />
+            ) : null}
+          </>
+        ) : null}
       </View>
-    </AppCard>
+    </>
   );
 }
 
@@ -509,37 +454,38 @@ function renderRecordCard(
         </Text>
       </View>
 
-      {showBarberNames && record.employee?.user?.name && (
+      {showBarberNames && record.employee?.user?.name ? (
         <Text style={styles.recordDetail}>{record.employee.user.name}</Text>
-      )}
+      ) : null}
 
       <View style={styles.recordRowDetails}>
-        {record.paymentMethod && (
+        {record.paymentMethod ? (
           <Text style={styles.recordDetail}>
             {formatPaymentMethodLabel(record.paymentMethod)}
           </Text>
-        )}
-        {recordTime && (
-          <Text style={styles.recordDetail}>{recordTime}</Text>
-        )}
+        ) : null}
+        {recordTime ? <Text style={styles.recordDetail}>{recordTime}</Text> : null}
       </View>
 
-      {record.clientName && (
+      {record.clientName ? (
         <Text style={styles.recordDetail} numberOfLines={1}>
           {t('home.recordClient', { name: record.clientName })}
         </Text>
-      )}
+      ) : null}
 
-      {record.notes && (
+      {record.notes ? (
         <Text style={styles.recordNotes} numberOfLines={2}>
           {record.notes}
         </Text>
-      )}
+      ) : null}
     </AppCard>
   );
 }
 
 const styles = StyleSheet.create({
+  contentStack: {
+    gap: tokens.layout.majorSectionGap,
+  },
   flashBanner: {
     backgroundColor: tokens.colors.success,
   },
@@ -562,7 +508,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   contextHeader: {
-    gap: tokens.spacing[2],
+    gap: tokens.layout.relatedCardGap,
   },
   detailText: {
     ...tokens.typography.variant.body,
@@ -573,16 +519,18 @@ const styles = StyleSheet.create({
     color: tokens.colors.textMuted,
     fontStyle: 'italic',
   },
-  actionText: {
-    ...tokens.typography.variant.bodySmall,
-    color: tokens.colors.textSecondary,
-    marginTop: tokens.spacing[1],
-  },
-  actionButtonWrapper: {
-    marginTop: tokens.spacing[3],
-  },
   sectionBlock: {
-    gap: tokens.spacing[3],
+    gap: tokens.layout.sectionContentGap,
+  },
+  tileGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: tokens.layout.relatedCardGap,
+  },
+  tileGridItem: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minWidth: 220,
   },
   sectionHint: {
     ...tokens.typography.variant.bodySmall,
@@ -597,12 +545,12 @@ const styles = StyleSheet.create({
   },
   dateRow: {
     flexDirection: 'row',
-    gap: tokens.spacing[2],
+    gap: tokens.layout.compactControlGap,
   },
   periodGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: tokens.spacing[2],
+    gap: tokens.layout.compactControlGap,
   },
   periodButton: {
     flexBasis: '48%',
@@ -612,16 +560,16 @@ const styles = StyleSheet.create({
   inlineState: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: tokens.spacing[2],
+    gap: tokens.layout.compactControlGap,
   },
   filterStatusBlock: {
-    gap: tokens.spacing[3],
+    gap: tokens.layout.relatedCardGap,
   },
   retryButton: {
     minHeight: 44,
   },
   employeeFilterList: {
-    gap: tokens.spacing[2],
+    gap: tokens.layout.compactControlGap,
   },
   employeeFilterButton: {
     width: '100%',
@@ -635,8 +583,11 @@ const styles = StyleSheet.create({
     ...tokens.typography.variant.subheading,
     color: tokens.colors.textPrimary,
   },
+  recordList: {
+    gap: tokens.layout.relatedCardGap,
+  },
   recordCard: {
-    marginBottom: tokens.spacing[2],
+    marginBottom: 0,
   },
   recordRowMain: {
     flexDirection: 'row',
@@ -657,7 +608,7 @@ const styles = StyleSheet.create({
   },
   recordRowDetails: {
     flexDirection: 'row',
-    gap: tokens.spacing[3],
+    gap: tokens.layout.relatedCardGap,
     marginBottom: tokens.spacing[1],
   },
   recordDetail: {

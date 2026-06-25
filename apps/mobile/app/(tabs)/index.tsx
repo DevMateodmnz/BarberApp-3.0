@@ -384,9 +384,6 @@ export default function HomeScreen() {
         flashMessage={flashMessage}
         canRecordService={canRecordService}
         onRecordService={() => router.push('/(tabs)/record-service')}
-        onServices={() => router.push('/(tabs)/services')}
-        onEmployees={() => router.push('/(tabs)/employees')}
-        onWorkingHours={() => router.push('/(tabs)/working-hours')}
         onAppointments={() => router.push('/(tabs)/appointments')}
         onPrevDate={() => setSelectedDate((prev) => addDaysToDateString(prev, -1))}
         onNextDate={() => setSelectedDate((prev) => addDaysToDateString(prev, 1))}

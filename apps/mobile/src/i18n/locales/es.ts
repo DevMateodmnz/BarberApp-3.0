@@ -110,7 +110,24 @@ export const es = {
     employees: 'Empleados',
     workingHours: 'Horarios',
     appointments: 'Turnos',
+    manage: 'Gestionar',
     languageSettings: 'Idioma',
+    tabs: {
+      home: 'Inicio',
+      appointments: 'Turnos',
+      record: 'Registrar',
+      manage: 'Gestionar',
+    },
+    accessibility: {
+      homeTab: 'Abrir la pestaña Inicio',
+      appointmentsTab: 'Abrir la pestaña Turnos',
+      recordTab: 'Abrir la pestaña Registrar servicio',
+      manageTab: 'Abrir la pestaña Gestionar',
+      services: 'Abrir la gestión de servicios',
+      employees: 'Abrir la gestión de empleados',
+      workingHours: 'Abrir la gestión de horarios',
+      languageSettings: 'Abrir la configuración de idioma',
+    },
   },
   runtime: {
     configurationErrorTitle: 'Error de configuración móvil',
@@ -146,6 +163,12 @@ export const es = {
   },
   home: {
     dashboardSubtitle: 'Panel',
+    dailyActionsTitle: 'Acciones del día',
+    dailyActionsHint: 'Mantén las tareas más frecuentes a un toque.',
+    dailyActionsAccessibility: {
+      recordService: 'Abrir el flujo para registrar un servicio',
+      appointments: 'Abrir turnos',
+    },
     noBarbershopAssigned: 'Todavía no hay una barbería vinculada a tu cuenta.',
     ownerSummaryUnavailable: 'El resumen aparecerá cuando tu cuenta tenga una barbería vinculada.',
     barberSummaryUnavailable: 'El resumen aparecerá cuando tu usuario esté vinculado a una barbería.',
@@ -195,6 +218,29 @@ export const es = {
     selectedDate: 'Fecha seleccionada',
     recordClient: 'Cliente: {{name}}',
     unknownService: 'Servicio desconocido',
+  },
+  manage: {
+    title: 'Gestionar',
+    subtitle: 'Mantén la administración del negocio y el idioma a un toque.',
+    blockedTitle: 'Solo para propietarios',
+    blockedMessage: 'Solo los propietarios pueden abrir las herramientas de gestión del negocio.',
+    businessSectionTitle: 'Gestión del negocio',
+    businessSectionHint: 'Saca la administración ocasional del Home sin alejarla de la operación diaria.',
+    settingsSectionTitle: 'Ajustes de la app',
+    items: {
+      services: {
+        description: 'Revisa y actualiza el catálogo de servicios de tu barbería.',
+      },
+      employees: {
+        description: 'Gestiona el equipo y las asignaciones de servicios desde un solo lugar.',
+      },
+      workingHours: {
+        description: 'Ajusta los horarios semanales de apertura de tu barbería.',
+      },
+      language: {
+        description: 'Cambia el idioma de la interfaz sin reiniciar la aplicación.',
+      },
+    },
   },
   summary: {
     revenueSummaryTitle: 'Resumen de ingresos — {{label}}',
