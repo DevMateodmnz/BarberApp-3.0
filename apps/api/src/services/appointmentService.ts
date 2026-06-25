@@ -7,16 +7,85 @@
  */
 import { prisma } from '../lib/prisma.js';
 import {
+  AppError,
   BadRequestError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
 } from '../lib/errors.js';
-import { validateBusinessHours } from '../lib/businessHours.js';
+import {
+  getLocalDayAndTime,
+  timeToMinutes,
+  validateBusinessHours,
+} from '../lib/businessHours.js';
+import {
+  getLocalDateStringInTimeZone,
+  getLocalTimeStringInTimeZone,
+  getUtcRangeForLocalDate,
+  localDateTimeToUtc,
+} from '../lib/dateUtils.js';
 import { validateEmployeeInBarbershop } from './employeeService.js';
-import type { AppointmentStatus, UserRole } from '@prisma/client';
+import type {
+  AppointmentStatus,
+  Employee,
+  Service,
+  User,
+  UserRole,
+} from '@prisma/client';
 import { Prisma } from '@prisma/client';
-import type { CreateAppointmentInput } from '../schemas/appointment.js';
+import type {
+  AppointmentAvailabilityQuery,
+  CreateAppointmentInput,
+  StaffCreateAppointmentInput,
+} from '../schemas/appointment.js';
+
+const BLOCKING_APPOINTMENT_STATUSES: AppointmentStatus[] = [
+  'PENDING',
+  'CONFIRMED',
+  'IN_PROGRESS',
+];
+
+const APPOINTMENT_SLOT_INTERVAL_MINUTES = 30;
+
+const APPOINTMENT_INCLUDE = {
+  barbershop: true,
+  employee: true,
+  client: true,
+  service: true,
+} satisfies Prisma.AppointmentInclude;
+
+interface AppointmentSnapshotInput {
+  clientName: string;
+  clientPhone: string | null;
+  serviceName: string;
+  servicePriceCents: number;
+  serviceDurationMinutes: number;
+  serviceCurrency: string;
+  notes: string | null;
+}
+
+interface EligibleBookingContext {
+  employee: Employee;
+  service: Service;
+}
+
+interface StaffScopeInput {
+  barbershopId: string;
+  employeeId?: string;
+  userId: string;
+  userRole: UserRole;
+  authenticatedEmployeeId?: string;
+}
+
+interface AvailabilityInput {
+  barbershopId: string;
+  employeeId: string;
+  query: AppointmentAvailabilityQuery;
+  userId: string;
+  userRole: UserRole;
+  authenticatedEmployeeId?: string;
+  now?: Date;
+}
 
 // ============================================
 // STATUS TRANSITION RULES
@@ -42,9 +111,9 @@ const STATUS_TRANSITIONS: Record<
     { to: 'COMPLETED', allowedRoles: ['BARBER', 'OWNER'] },
     { to: 'NO_SHOW', allowedRoles: ['BARBER', 'OWNER'] },
   ],
-  CANCELLED: [], // Terminal state - no transitions allowed
-  COMPLETED: [], // Terminal state - no transitions allowed
-  NO_SHOW: [], // Terminal state - no transitions allowed
+  CANCELLED: [],
+  COMPLETED: [],
+  NO_SHOW: [],
 };
 
 /**
@@ -82,13 +151,94 @@ export function validateStatusTransition(
 // TENANT INTEGRITY CHECKS
 // ============================================
 
-/**
- * Validates that a service belongs to the specified barbershop.
- */
+function normalizeOptionalText(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeRequiredClientName(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new BadRequestError('Client name is required');
+  }
+  return trimmed;
+}
+
+function isDbDoubleBookingError(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientUnknownRequestError &&
+    err.message.includes('no_double_booking')
+  );
+}
+
+async function getClientSnapshotSource(clientId: string): Promise<User> {
+  return prisma.user.findUniqueOrThrow({ where: { id: clientId } });
+}
+
+function buildClientSnapshotFromUser(
+  client: User,
+  notes?: string | null
+): Pick<AppointmentSnapshotInput, 'clientName' | 'clientPhone' | 'notes'> {
+  return {
+    clientName: client.name?.trim() || client.email,
+    clientPhone: null,
+    notes: normalizeOptionalText(notes),
+  };
+}
+
+function buildGuestClientSnapshot(input: {
+  clientName: string;
+  clientPhone?: string;
+  notes?: string;
+}): Pick<AppointmentSnapshotInput, 'clientName' | 'clientPhone' | 'notes'> {
+  return {
+    clientName: normalizeRequiredClientName(input.clientName),
+    clientPhone: normalizeOptionalText(input.clientPhone),
+    notes: normalizeOptionalText(input.notes),
+  };
+}
+
+function buildServiceSnapshot(
+  service: Service
+): Pick<
+  AppointmentSnapshotInput,
+  | 'serviceName'
+  | 'servicePriceCents'
+  | 'serviceDurationMinutes'
+  | 'serviceCurrency'
+> {
+  return {
+    serviceName: service.name,
+    servicePriceCents: service.priceCents,
+    serviceDurationMinutes: service.durationMinutes,
+    serviceCurrency: service.currency,
+  };
+}
+
+function calculateAppointmentEndAt(
+  startAt: Date,
+  durationMinutes: number
+): Date {
+  return new Date(startAt.getTime() + durationMinutes * 60_000);
+}
+
+async function getBarbershopTimezone(barbershopId: string): Promise<string> {
+  const barbershop = await prisma.barbershop.findUnique({
+    where: { id: barbershopId },
+    select: { timezone: true },
+  });
+
+  if (!barbershop) {
+    throw new BadRequestError('Barbershop not found');
+  }
+
+  return barbershop.timezone;
+}
+
 async function validateServiceBelongsToBarbershop(
   serviceId: string,
   barbershopId: string
-): Promise<void> {
+): Promise<Service> {
   const service = await prisma.service.findUnique({
     where: { id: serviceId },
   });
@@ -106,15 +256,14 @@ async function validateServiceBelongsToBarbershop(
   if (!service.isActive || service.deletedAt) {
     throw new BadRequestError('Service is not available');
   }
+
+  return service;
 }
 
-/**
- * Validates that an employee belongs to the specified barbershop.
- */
 async function validateEmployeeBelongsToBarbershop(
   employeeId: string,
   barbershopId: string
-): Promise<void> {
+): Promise<Employee> {
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
   });
@@ -132,6 +281,8 @@ async function validateEmployeeBelongsToBarbershop(
   if (!employee.isActive || employee.deletedAt) {
     throw new BadRequestError('Employee is not active');
   }
+
+  return employee;
 }
 
 /**
@@ -149,9 +300,128 @@ async function validateEmployeeOffersService(
   });
 
   if (!link) {
-    throw new BadRequestError(
-      'Employee does not offer this service'
+    throw new BadRequestError('Employee does not offer this service');
+  }
+}
+
+async function resolveEligibleBookingContext(
+  barbershopId: string,
+  employeeId: string,
+  serviceId: string
+): Promise<EligibleBookingContext> {
+  const [employee, service] = await Promise.all([
+    validateEmployeeBelongsToBarbershop(employeeId, barbershopId),
+    validateServiceBelongsToBarbershop(serviceId, barbershopId),
+  ]);
+
+  await validateEmployeeOffersService(employee.id, service.id);
+
+  return { employee, service };
+}
+
+async function resolveStaffEmployeeScope(
+  input: StaffScopeInput
+): Promise<string> {
+  const {
+    employeeId,
+    userRole,
+    authenticatedEmployeeId,
+  } = input;
+
+  if (userRole === 'BARBER') {
+    if (!authenticatedEmployeeId) {
+      throw new ForbiddenError(
+        'Employee context required for barber appointment booking'
+      );
+    }
+
+    if (employeeId && employeeId !== authenticatedEmployeeId) {
+      throw new AppError(
+        403,
+        'FORBIDDEN_EMPLOYEE_SCOPE',
+        'Barbers can only create appointments for their own employee profile'
+      );
+    }
+
+    return authenticatedEmployeeId;
+  }
+
+  if (!employeeId) {
+    throw new BadRequestError('Employee ID is required');
+  }
+
+  return employeeId;
+}
+
+function validateStaffStartAt(
+  startAt: Date,
+  timezone: string,
+  now: Date = new Date()
+): void {
+  if (startAt.getTime() <= now.getTime()) {
+    throw new AppError(
+      400,
+      'INVALID_APPOINTMENT_TIME',
+      'Appointments must be scheduled in the future'
     );
+  }
+
+  const { minutesSinceMidnight } = getLocalDayAndTime(startAt, timezone);
+  if (minutesSinceMidnight % APPOINTMENT_SLOT_INTERVAL_MINUTES !== 0) {
+    throw new AppError(
+      400,
+      'INVALID_APPOINTMENT_TIME',
+      'Appointments must start on a 30-minute interval'
+    );
+  }
+}
+
+function candidateSlotsOverlap(
+  startAt: Date,
+  endAt: Date,
+  existing: { startAt: Date; endAt: Date }[]
+): boolean {
+  return existing.some(
+    (appointment) => appointment.startAt < endAt && appointment.endAt > startAt
+  );
+}
+
+async function createAppointmentRecord(input: {
+  barbershopId: string;
+  employeeId: string;
+  clientId: string | null;
+  serviceId: string;
+  startAt: Date;
+  endAt: Date;
+  snapshot: AppointmentSnapshotInput;
+}) {
+  const { barbershopId, employeeId, clientId, serviceId, startAt, endAt, snapshot } = input;
+
+  try {
+    return await prisma.appointment.create({
+      data: {
+        barbershopId,
+        employeeId,
+        clientId,
+        serviceId,
+        startAt,
+        endAt,
+        status: 'PENDING',
+        clientName: snapshot.clientName,
+        clientPhone: snapshot.clientPhone,
+        serviceName: snapshot.serviceName,
+        servicePriceCents: snapshot.servicePriceCents,
+        serviceDurationMinutes: snapshot.serviceDurationMinutes,
+        serviceCurrency: snapshot.serviceCurrency,
+        notes: snapshot.notes,
+      },
+      include: APPOINTMENT_INCLUDE,
+    });
+  } catch (err) {
+    if (isDbDoubleBookingError(err)) {
+      throw new ConflictError('This time slot is already booked');
+    }
+    throw err;
   }
 }
 
@@ -174,8 +444,7 @@ export async function hasTimeConflict(
     where: {
       id: excludeId ? { not: excludeId } : undefined,
       employeeId,
-      status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
-      // Overlap detection: existing.startAt < new.endAt AND existing.endAt > new.startAt
+      status: { in: BLOCKING_APPOINTMENT_STATUSES },
       startAt: { lt: endAt },
       endAt: { gt: startAt },
     },
@@ -196,61 +465,227 @@ export async function createAppointment(
   input: CreateAppointmentInput,
   clientId: string
 ) {
-  const { barbershopId, employeeId, serviceId, startAt: startAtStr, notes } = input;
+  const {
+    barbershopId,
+    employeeId,
+    serviceId,
+    startAt: startAtStr,
+    notes,
+  } = input;
 
-  // 1. Validate tenant integrity: service and employee belong to barbershop
-  await validateServiceBelongsToBarbershop(serviceId, barbershopId);
-  await validateEmployeeBelongsToBarbershop(employeeId, barbershopId);
-  await validateEmployeeOffersService(employeeId, serviceId);
-
-  // 2. Calculate endAt from service duration
-  const service = await prisma.service.findUniqueOrThrow({
-    where: { id: serviceId },
-  });
+  const [{ service }, client] = await Promise.all([
+    resolveEligibleBookingContext(barbershopId, employeeId, serviceId),
+    getClientSnapshotSource(clientId),
+  ]);
 
   const startAt = new Date(startAtStr);
-  const endAt = new Date(startAt.getTime() + service.durationMinutes * 60_000);
+  const endAt = calculateAppointmentEndAt(startAt, service.durationMinutes);
 
-  // 3. Validate business hours
   await validateBusinessHours({ barbershopId, startAt, endAt });
 
-  // 4. Check double-booking
   const conflict = await hasTimeConflict(employeeId, startAt, endAt);
   if (conflict) {
     throw new ConflictError('This time slot is already booked');
   }
 
-  // 5. Create appointment
-  try {
-    const appointment = await prisma.appointment.create({
-      data: {
-        barbershopId,
-        employeeId,
-        clientId,
-        serviceId,
-        startAt,
-        endAt,
-        notes: notes || null,
-        status: 'PENDING',
-      },
-      include: {
-        barbershop: true,
-        employee: true,
-        client: true,
-        service: true,
-      },
-    });
+  const snapshot: AppointmentSnapshotInput = {
+    ...buildClientSnapshotFromUser(client, notes),
+    ...buildServiceSnapshot(service),
+  };
 
-    return appointment;
-  } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientUnknownRequestError &&
-      err.message.includes('no_double_booking')
-    ) {
-      throw new ConflictError('This time slot is already booked');
-    }
-    throw err;
+  return createAppointmentRecord({
+    barbershopId,
+    employeeId,
+    clientId,
+    serviceId,
+    startAt,
+    endAt,
+    snapshot,
+  });
+}
+
+export async function createStaffAppointment(
+  barbershopId: string,
+  input: StaffCreateAppointmentInput,
+  userId: string,
+  userRole: UserRole,
+  authenticatedEmployeeId?: string
+) {
+  const employeeId = await resolveStaffEmployeeScope({
+    barbershopId,
+    employeeId: input.employeeId,
+    userId,
+    userRole,
+    authenticatedEmployeeId,
+  });
+
+  const [timezone, bookingContext] = await Promise.all([
+    getBarbershopTimezone(barbershopId),
+    resolveEligibleBookingContext(barbershopId, employeeId, input.serviceId),
+  ]);
+
+  const startAt = new Date(input.startAt);
+  validateStaffStartAt(startAt, timezone);
+
+  const endAt = calculateAppointmentEndAt(
+    startAt,
+    bookingContext.service.durationMinutes
+  );
+
+  await validateBusinessHours({
+    barbershopId,
+    startAt,
+    endAt,
+  });
+
+  const conflict = await hasTimeConflict(employeeId, startAt, endAt);
+  if (conflict) {
+    throw new ConflictError('This time slot is already booked');
   }
+
+  const snapshot: AppointmentSnapshotInput = {
+    ...buildGuestClientSnapshot(input),
+    ...buildServiceSnapshot(bookingContext.service),
+  };
+
+  return createAppointmentRecord({
+    barbershopId,
+    employeeId,
+    clientId: null,
+    serviceId: bookingContext.service.id,
+    startAt,
+    endAt,
+    snapshot,
+  });
+}
+
+export async function getAppointmentAvailability(input: AvailabilityInput) {
+  const {
+    barbershopId,
+    employeeId,
+    query,
+    userRole,
+    authenticatedEmployeeId,
+  } = input;
+
+  if (userRole === 'BARBER') {
+    if (!authenticatedEmployeeId) {
+      throw new ForbiddenError(
+        'Employee context required for barber availability access'
+      );
+    }
+
+    if (employeeId !== authenticatedEmployeeId) {
+      throw new AppError(
+        403,
+        'FORBIDDEN_EMPLOYEE_SCOPE',
+        'Barbers can only view availability for their own employee profile'
+      );
+    }
+  }
+
+  const now = input.now ?? new Date();
+  const { serviceId, localDate } = query;
+  const timezone = await getBarbershopTimezone(barbershopId);
+  const todayLocalDate = getLocalDateStringInTimeZone(timezone, now);
+
+  if (localDate < todayLocalDate) {
+    throw new AppError(
+      400,
+      'INVALID_APPOINTMENT_DATE',
+      'Availability cannot be requested for a past date'
+    );
+  }
+
+  const { service } = await resolveEligibleBookingContext(
+    barbershopId,
+    employeeId,
+    serviceId
+  );
+
+  const [year, month, day] = localDate.split('-').map(Number) as [number, number, number];
+  const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+
+  const workingHours = await prisma.workingHours.findUnique({
+    where: {
+      barbershopId_dayOfWeek: {
+        barbershopId,
+        dayOfWeek,
+      },
+    },
+  });
+
+  if (!workingHours || !workingHours.isActive) {
+    return {
+      localDate,
+      barbershopTimezone: timezone,
+      slotIntervalMinutes: APPOINTMENT_SLOT_INTERVAL_MINUTES,
+      serviceDurationMinutes: service.durationMinutes,
+      slots: [],
+    };
+  }
+
+  const { startUtc, endUtc } = getUtcRangeForLocalDate(localDate, timezone);
+  const blockingAppointments = await prisma.appointment.findMany({
+    where: {
+      employeeId,
+      status: { in: BLOCKING_APPOINTMENT_STATUSES },
+      startAt: { lt: endUtc },
+      endAt: { gt: startUtc },
+    },
+    select: {
+      startAt: true,
+      endAt: true,
+    },
+    orderBy: { startAt: 'asc' },
+  });
+
+  const openMinutes = timeToMinutes(workingHours.openTime);
+  const closeMinutes = timeToMinutes(workingHours.closeTime);
+  const latestStartMinutes = closeMinutes - service.durationMinutes;
+  const slots: Array<{
+    startAt: string;
+    endAt: string;
+    localStartTime: string;
+    localEndTime: string;
+  }> = [];
+
+  for (
+    let startMinutes = openMinutes;
+    startMinutes <= latestStartMinutes;
+    startMinutes += APPOINTMENT_SLOT_INTERVAL_MINUTES
+  ) {
+    const startTime = `${String(Math.floor(startMinutes / 60)).padStart(2, '0')}:${String(startMinutes % 60).padStart(2, '0')}`;
+    const candidateStartAt = localDateTimeToUtc(localDate, startTime, timezone);
+
+    if (candidateStartAt.getTime() <= now.getTime()) {
+      continue;
+    }
+
+    const candidateEndAt = calculateAppointmentEndAt(
+      candidateStartAt,
+      service.durationMinutes
+    );
+
+    if (candidateSlotsOverlap(candidateStartAt, candidateEndAt, blockingAppointments)) {
+      continue;
+    }
+
+    slots.push({
+      startAt: candidateStartAt.toISOString(),
+      endAt: candidateEndAt.toISOString(),
+      localStartTime: getLocalTimeStringInTimeZone(timezone, candidateStartAt),
+      localEndTime: getLocalTimeStringInTimeZone(timezone, candidateEndAt),
+    });
+  }
+
+  return {
+    localDate,
+    barbershopTimezone: timezone,
+    slotIntervalMinutes: APPOINTMENT_SLOT_INTERVAL_MINUTES,
+    serviceDurationMinutes: service.durationMinutes,
+    slots,
+  };
 }
 
 /**
@@ -266,7 +701,6 @@ export async function listAppointments(
   role: UserRole,
   employeeId?: string
 ) {
-  // BARBER without employee context: fail closed — prevent broad data leak
   if (role === 'BARBER' && !employeeId) {
     throw new ForbiddenError(
       'Employee context required for barber appointment listing'
@@ -276,24 +710,16 @@ export async function listAppointments(
   const where: Record<string, unknown> = {};
 
   if (role === 'OWNER') {
-    // Owner sees all appointments for shops they own
     where.barbershop = { ownerId: userId };
   } else if (role === 'BARBER') {
-    // Barber sees only their appointments (employeeId guaranteed by check above)
     where.employeeId = employeeId;
   } else if (role === 'CLIENT') {
-    // Client sees only their own appointments
     where.clientId = userId;
   }
 
   return prisma.appointment.findMany({
     where,
-    include: {
-      barbershop: true,
-      employee: true,
-      client: true,
-      service: true,
-    },
+    include: APPOINTMENT_INCLUDE,
     orderBy: { startAt: 'desc' },
     take: 100,
   });
@@ -302,13 +728,6 @@ export async function listAppointments(
 /**
  * Lists appointments for a specific employee within a barbershop.
  * Scoped endpoint — requires explicit barbershop + employee context.
- *
- * - OWNER: can list appointments for any active employee in their barbershop
- * - BARBER: can list only their own appointments (employee.userId must match)
- * - CLIENT: blocked (403)
- *
- * Validates that the employee exists, is active, and belongs to the barbershop
- * via validateEmployeeInBarbershop (reused from employeeService).
  */
 export async function listEmployeeAppointments(
   barbershopId: string,
@@ -316,10 +735,8 @@ export async function listEmployeeAppointments(
   userId: string,
   userRole: UserRole
 ) {
-  // Validate employee exists, is active, and belongs to barbershop
   await validateEmployeeInBarbershop(employeeId, barbershopId);
 
-  // BARBER: must own this employee record (their own)
   if (userRole === 'BARBER') {
     const employee = await prisma.employee.findUnique({
       where: { id: employeeId },
@@ -329,7 +746,6 @@ export async function listEmployeeAppointments(
     }
   }
 
-  // CLIENT: not allowed
   if (userRole === 'CLIENT') {
     throw new ForbiddenError('Clients cannot access employee appointments');
   }
@@ -339,12 +755,7 @@ export async function listEmployeeAppointments(
       barbershopId,
       employeeId,
     },
-    include: {
-      barbershop: true,
-      employee: true,
-      client: true,
-      service: true,
-    },
+    include: APPOINTMENT_INCLUDE,
     orderBy: { startAt: 'desc' },
     take: 100,
   });
@@ -352,9 +763,6 @@ export async function listEmployeeAppointments(
 
 /**
  * Gets a single appointment with tenant isolation.
- * - OWNER: can see if they own the barbershop
- * - BARBER: can see if assigned to them
- * - CLIENT: can see if it's their appointment
  */
 export async function getAppointment(
   appointmentId: string,
@@ -363,19 +771,13 @@ export async function getAppointment(
 ) {
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
-    include: {
-      barbershop: true,
-      employee: true,
-      client: true,
-      service: true,
-    },
+    include: APPOINTMENT_INCLUDE,
   });
 
   if (!appointment) {
     throw new NotFoundError('Appointment');
   }
 
-  // Tenant isolation check
   if (role === 'OWNER') {
     const barbershop = await prisma.barbershop.findUnique({
       where: { id: appointment.barbershopId },
@@ -411,12 +813,10 @@ export async function updateAppointment(
 ) {
   const appointment = await getAppointment(appointmentId, userId, role);
 
-  // Only OWNER and the assigned BARBER can update
   if (role === 'CLIENT') {
     throw new ForbiddenError('Clients cannot reschedule appointments');
   }
 
-  // Only active appointments can be updated
   if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(appointment.status)) {
     throw new BadRequestError(
       `Cannot update a ${appointment.status.toLowerCase()} appointment`
@@ -426,22 +826,18 @@ export async function updateAppointment(
   const updateData: Record<string, unknown> = {};
 
   if (data.startAt) {
-    const service = await prisma.service.findUniqueOrThrow({
-      where: { id: appointment.serviceId },
-    });
     const newStartAt = new Date(data.startAt);
-    const newEndAt = new Date(
-      newStartAt.getTime() + service.durationMinutes * 60_000
+    const newEndAt = calculateAppointmentEndAt(
+      newStartAt,
+      appointment.serviceDurationMinutes
     );
 
-    // Validate business hours for the new time slot
     await validateBusinessHours({
       barbershopId: appointment.barbershopId,
       startAt: newStartAt,
       endAt: newEndAt,
     });
 
-    // Check for time conflicts (excluding this appointment)
     const conflict = await hasTimeConflict(
       appointment.employeeId,
       newStartAt,
@@ -459,25 +855,17 @@ export async function updateAppointment(
   }
 
   if (data.notes !== undefined) {
-    updateData.notes = data.notes || null;
+    updateData.notes = normalizeOptionalText(data.notes);
   }
 
   try {
     return await prisma.appointment.update({
       where: { id: appointmentId },
       data: updateData,
-      include: {
-        barbershop: true,
-        employee: true,
-        client: true,
-        service: true,
-      },
+      include: APPOINTMENT_INCLUDE,
     });
   } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientUnknownRequestError &&
-      err.message.includes('no_double_booking')
-    ) {
+    if (isDbDoubleBookingError(err)) {
       throw new ConflictError(
         'The new time slot conflicts with an existing appointment'
       );
@@ -498,30 +886,21 @@ export async function transitionAppointmentStatus(
 ) {
   const appointment = await getAppointment(appointmentId, userId, role);
 
-  // Validate the transition is allowed
   validateStatusTransition(appointment.status, newStatus, role);
 
-  // Additional BARBER check: can only transition their own appointments
   if (role === 'BARBER') {
     const employee = await prisma.employee.findFirst({
       where: { userId, barbershopId: appointment.barbershopId },
     });
     if (!employee || employee.id !== appointment.employeeId) {
-      throw new ForbiddenError(
-        'You can only manage your own appointments'
-      );
+      throw new ForbiddenError('You can only manage your own appointments');
     }
   }
 
   return prisma.appointment.update({
     where: { id: appointmentId },
     data: { status: newStatus },
-    include: {
-      barbershop: true,
-      employee: true,
-      client: true,
-      service: true,
-    },
+    include: APPOINTMENT_INCLUDE,
   });
 }
 
@@ -535,12 +914,10 @@ export async function cancelAppointment(
 ) {
   const appointment = await getAppointment(appointmentId, userId, role);
 
-  // CLIENT can only cancel their own appointments
   if (role === 'CLIENT' && appointment.clientId !== userId) {
     throw new ForbiddenError('You can only cancel your own appointments');
   }
 
-  // Terminal states cannot be cancelled again
   if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(appointment.status)) {
     throw new BadRequestError(
       `Cannot cancel a ${appointment.status.toLowerCase()} appointment`

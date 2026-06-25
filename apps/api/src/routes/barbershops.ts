@@ -28,6 +28,10 @@ import { requireBarbershopAccess } from '../middleware/tenant.js';
 import { validateBody } from '../middleware/validate.js';
 import { CreateEmployeeSchema } from '../schemas/employee.js';
 import { AssignServiceSchema } from '../schemas/employeeService.js';
+import {
+  AppointmentAvailabilityQuerySchema,
+  StaffCreateAppointmentSchema,
+} from '../schemas/appointment.js';
 import { CreateServiceSchema, UpdateServiceSchema } from '../schemas/service.js';
 import * as employeeService from '../services/employeeService.js';
 import * as serviceService from '../services/serviceService.js';
@@ -91,6 +95,18 @@ function parseSummaryQuery(
   }
 
   throw new BadRequestError('Either date or period query parameter is required');
+}
+
+function parseAvailabilityQuery(
+  req: Request,
+): { serviceId: string; localDate: string } {
+  const parsed = AppointmentAvailabilityQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError('Invalid availability query parameters', parsed.error.flatten());
+  }
+
+  return parsed.data;
 }
 
 const router = Router();
@@ -249,6 +265,31 @@ router.delete(
 );
 
 // ============================================
+// POST /api/v1/barbershops/:barbershopId/appointments
+// Create appointment as OWNER/BARBER (staff booking)
+// ============================================
+router.post(
+  '/:barbershopId/appointments',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  validateBody(StaffCreateAppointmentSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const appointment = await appointmentService.createStaffAppointment(
+        paramBarbershopId(req),
+        req.body,
+        req.userId,
+        req.userRole,
+        req.employeeId
+      );
+      res.status(201).json({ success: true, data: appointment });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
 // GET /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments
 // List appointments for an employee (OWNER, BARBER scoped)
 // ============================================
@@ -265,6 +306,31 @@ router.get(
         req.userRole
       );
       res.json({ success: true, data: appointments });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments/availability
+// Calculate employee availability for a local date + service
+// ============================================
+router.get(
+  '/:barbershopId/employees/:employeeId/appointments/availability',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const availability = await appointmentService.getAppointmentAvailability({
+        barbershopId: paramBarbershopId(req),
+        employeeId: paramEmployeeId(req),
+        query: parseAvailabilityQuery(req),
+        userId: req.userId,
+        userRole: req.userRole,
+        authenticatedEmployeeId: req.employeeId,
+      });
+      res.json({ success: true, data: availability });
     } catch (error) {
       next(error);
     }

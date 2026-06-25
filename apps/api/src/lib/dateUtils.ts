@@ -112,6 +112,34 @@ export function getLocalDateStringInTimeZone(
   );
 }
 
+export function localDateTimeToUtc(
+  dateStr: string,
+  timeStr: string,
+  timezone: string,
+): Date {
+  const [hours, minutes] = timeStr.split(':').map(Number) as [number, number];
+  const { startUtc } = getUtcRangeForLocalDate(dateStr, timezone);
+
+  return new Date(startUtc.getTime() + ((hours * 60) + minutes) * 60_000);
+}
+
+export function getLocalTimeStringInTimeZone(
+  timezone: string,
+  date: Date,
+): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const hour = parts.find((part) => part.type === 'hour')?.value ?? '00';
+  const minute = parts.find((part) => part.type === 'minute')?.value ?? '00';
+
+  return `${hour}:${minute}`;
+}
+
 export type SummaryPeriod = 'today' | 'week' | 'month' | 'year';
 
 export function getUtcRangeForLocalPeriod(

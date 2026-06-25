@@ -68,9 +68,16 @@ describe('DB Double-Booking Constraint', () => {
       employeeId: overrides.employeeId,
       clientId,
       serviceId,
+      clientName: 'DB Constraint Client',
+      clientPhone: null,
+      serviceName: 'Test Service',
+      servicePriceCents: 2500,
+      serviceDurationMinutes: 30,
+      serviceCurrency: 'ARS',
       startAt,
       endAt,
       status: overrides.status ?? AppointmentStatus.PENDING,
+      notes: null,
     };
   }
 
