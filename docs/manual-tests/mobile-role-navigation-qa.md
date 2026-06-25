@@ -1,6 +1,63 @@
 # Mobile Role Navigation QA (Manual / Physical Device)
 
-This runbook is for the next physical-phone QA pass after the Prompt 3 implementation batch. It does **not** claim phone QA is complete.
+This runbook now includes the recorded physical-device PASS for the multilingual role-navigation batch and remains the checklist for future regression retests.
+
+## Latest execution record
+
+- **Date**: 2026-06-25
+- **Device**: Samsung Galaxy S21
+- **Runtime**: Expo Go
+- **Feature commit tested**: `ceea8ced4efa9782d6fe866e7faef2dabdfe7f9d` (`feat(mobile): add role-based daily navigation`)
+- **Overall result**: PASS
+- **Non-blocking observations**: none reported during the compact multilingual navigation pass
+
+## Recorded PASS summary
+
+### Spanish OWNER
+
+- Tabs showed exactly `Inicio`, `Citas`, `Registrar`, `Gestionar`
+- `Registrar` remained the visually emphasized central action
+- Home hierarchy and spacing were clear, with Revenue moved earlier and no stacked OWNER management cards
+- Appointments remained usable from the tab bar
+- Record opened directly, OWNER employee picker remained present, and the flow stayed usable
+- Manage exposed Services, Employees, Working Hours, and Language with stable back navigation and no duplicate screen implementation
+- Sign-out/navigation behavior remained clean from OWNER-accessible routes
+
+### Spanish BARBER
+
+- Tabs showed exactly `Inicio`, `Citas`, `Registrar`
+- `Gestionar` stayed hidden
+- Home preserved Daily Actions and barber-scoped revenue with no OWNER shortcuts
+- Appointments and Record remained usable
+- Record correctly omitted the employee picker
+- No stale OWNER tab, blank screen, redirect loop, or missing-context error was reported
+
+### German stress check
+
+- Tab labels remained readable with no overlap or clipping
+- Home Daily Actions wrapped correctly and kept spacing
+- Manage descriptions wrapped without clipping
+- Working Hours weekday labels, time fields, and Save remained reachable
+- Appointments controls stayed usable
+
+### Simplified Chinese check
+
+- Chinese glyphs rendered correctly with no missing-glyph boxes
+- Bottom-tab icons and labels stayed aligned
+- Home, Manage, Appointments, and Record remained understandable
+- Language selector remained usable
+
+### Persistence
+
+- Selected non-Spanish language survived a normal Expo app reload
+- App returned to Spanish successfully before concluding QA
+
+### Navigation / safe area / spacing
+
+- Bottom safe area remained stable on device
+- Tab labels did not clip against navigation chrome
+- Home and Manage spacing hierarchy read clearly on the physical device
+- Runtime language switching did not break route state or tab-shell stability
 
 ## Preconditions
 
@@ -17,7 +74,9 @@ This runbook is for the next physical-phone QA pass after the Prompt 3 implement
   - `it`
   - `zh-Hans`
 
-## OWNER tab bar
+## Regression checklist for future reruns
+
+### OWNER tab bar
 
 - [ ] Sign in as OWNER
 - [ ] Confirm tabs are `Home`, `Appointments`, `Record`, `Manage`
@@ -26,7 +85,7 @@ This runbook is for the next physical-phone QA pass after the Prompt 3 implement
 - [ ] Confirm bottom safe area is respected on the device
 - [ ] Confirm switching tabs does not reset stores unexpectedly
 
-## BARBER tab bar
+### BARBER tab bar
 
 - [ ] Sign in as BARBER
 - [ ] Confirm tabs are `Home`, `Appointments`, `Record`
@@ -34,9 +93,9 @@ This runbook is for the next physical-phone QA pass after the Prompt 3 implement
 - [ ] Confirm Record remains visually emphasized
 - [ ] Confirm no OWNER-only destination flashes during app start
 
-## Home hierarchy
+### Home hierarchy
 
-### OWNER
+#### OWNER
 
 - [ ] Confirm Home shows app header plus language access
 - [ ] Confirm current context card is visible
@@ -45,7 +104,7 @@ This runbook is for the next physical-phone QA pass after the Prompt 3 implement
 - [ ] Confirm Revenue appears before Service Records
 - [ ] Confirm OWNER employee revenue filter still works
 
-### BARBER
+#### BARBER
 
 - [ ] Confirm Home shows app header plus language access
 - [ ] Confirm Daily Actions shows `Record Service` and `Appointments`
@@ -53,7 +112,7 @@ This runbook is for the next physical-phone QA pass after the Prompt 3 implement
 - [ ] Confirm barber revenue remains personal/self-scoped
 - [ ] Confirm Service Records still render and refresh correctly
 
-## Manage surface (OWNER only)
+### Manage surface (OWNER only)
 
 - [ ] Open `Manage`
 - [ ] Confirm Services card opens Services
@@ -62,79 +121,3 @@ This runbook is for the next physical-phone QA pass after the Prompt 3 implement
 - [ ] Confirm Language card opens the existing language selector modal
 - [ ] Confirm long descriptions wrap without clipping
 - [ ] Confirm BARBER cannot access Manage content
-
-## Route restrictions
-
-- [ ] While signed in as BARBER, attempt to open `/(tabs)/manage`
-- [ ] Confirm safe fallback to Home or another allowed route
-- [ ] While signed in as BARBER, attempt to open `/(tabs)/services`
-- [ ] While signed in as BARBER, attempt to open `/(tabs)/employees`
-- [ ] While signed in as BARBER, attempt to open `/(tabs)/working-hours`
-- [ ] Confirm no blank screen or redirect loop occurs
-- [ ] Sign out from an OWNER-only route and confirm auth fallback is clean
-
-## Central Record action
-
-- [ ] Open Record from the tab bar
-- [ ] Confirm the screen remains reachable in one tap
-- [ ] Confirm the tab shell stays stable after creating a record and returning
-- [ ] Confirm large font sizes do not break the primary tab affordance
-
-## Appointments
-
-- [ ] Open Appointments from Home
-- [ ] Open Appointments from the tab bar
-- [ ] Confirm both entry points land on the same screen
-- [ ] Confirm date controls and role behavior remain intact
-
-## Language switching
-
-- [ ] Open language settings from Home
-- [ ] Open language settings from Manage
-- [ ] Change language while on Home
-- [ ] Change language while on Appointments
-- [ ] Change language while on Record
-- [ ] Change language while on Manage
-- [ ] Confirm labels update without restart and without losing route state
-
-## Locale-specific checks
-
-### Spanish
-- [ ] Tab labels read naturally
-- [ ] Home and Manage descriptions look balanced
-
-### English
-- [ ] Baseline reference pass
-
-### German
-- [ ] No clipped tab labels
-- [ ] Working-hours and management descriptions wrap cleanly
-
-### French
-- [ ] `Rendez-vous` remains readable in the tab bar
-- [ ] Manage descriptions wrap without truncation
-
-### Italian
-- [ ] Appointments and management labels remain readable
-
-### Simplified Chinese
-- [ ] Glyph rendering is correct
-- [ ] Icon/text alignment remains centered and legible
-
-## Device layout stress checks
-
-- [ ] Small phone width
-- [ ] Large accessibility font size
-- [ ] Keyboard open/close while returning to Home
-- [ ] Android system navigation area
-- [ ] iPhone safe-area bottom inset
-
-## Expected outcome for release readiness
-
-Phone QA should confirm that the role-based shell is stable enough to carry forward toward the release branch, with no additional code batch required unless device testing reveals:
-
-- tab-label clipping
-- route-guard loops
-- safe-area regressions
-- language-switch instability
-- role-flash regressions
