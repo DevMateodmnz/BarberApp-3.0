@@ -64,6 +64,91 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     literal: 'BarberApp',
     reason: 'Approved brand name remains untranslated.',
   },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'employee does not offer this service',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'before opening hours',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'after closing hours',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'barbershop is closed',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'employee is not active',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'employee does not belong',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'employee not found',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'service is not available',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'service does not belong',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'service not found',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'must be scheduled in the future',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: '30-minute interval',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'past date',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'client name',
+    reason: 'Backend error-message matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointmentCreationDomain.ts',
+    literal: 'failed to fetch',
+    reason: 'Generic network-error substring matcher for semantic appointment-creation error normalization.',
+  },
+  {
+    file: 'src/lib/appointments.ts',
+    literal: 'Failed to fetch appointment availability',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/appointments.ts',
+    literal: 'Failed to create appointment',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
 ] as const;
 
 const ALLOWLIST_KEYS = new Set(

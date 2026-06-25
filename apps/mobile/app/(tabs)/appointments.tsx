@@ -23,6 +23,10 @@ import { useContextStore } from '@/lib/store.js';
 import { useAppointmentsStore } from '@/lib/appointmentsStore.js';
 import { useEmployeesStore } from '@/lib/employeesStore.js';
 import {
+  getAppointmentClientDisplayName,
+  getAppointmentServiceDisplayName,
+} from '@/lib/appointmentSelectors.js';
+import {
   getTodayDateString,
   addDaysToDateString,
   isTodayDateString,
@@ -230,8 +234,8 @@ export default function AppointmentsScreen() {
         id: appointment.id,
         timeLabel: formatRecordTime(appointment.startAt) ?? '--:--',
         status: appointment.status,
-        clientLabel: appointment.client.name ?? appointment.client.email,
-        serviceLabel: appointment.service.name,
+        clientLabel: getAppointmentClientDisplayName(appointment),
+        serviceLabel: getAppointmentServiceDisplayName(appointment),
         employeeLabel: context?.role === 'OWNER' && appointment.employee?.user?.name
           ? t('appointments.employeeLabel', { name: appointment.employee.user.name })
           : null,

@@ -208,8 +208,14 @@ export interface Appointment {
   id: string;
   barbershopId: string;
   employeeId: string;
-  clientId: string;
+  clientId: string | null;
   serviceId: string;
+  clientName: string;
+  clientPhone: string | null;
+  serviceName: string;
+  servicePriceCents: number;
+  serviceDurationMinutes: number;
+  serviceCurrency: string;
   startAt: string;
   endAt: string;
   status: AppointmentStatus;
@@ -232,11 +238,42 @@ export interface Appointment {
     id: string;
     name: string | null;
     email: string;
-  };
+  } | null;
   service: {
     id: string;
     name: string;
     durationMinutes: number;
     priceCents: number;
+    currency?: string;
   };
+}
+
+export interface AppointmentAvailabilitySlot {
+  startAt: string;
+  endAt: string;
+  localStartTime: string;
+  localEndTime: string;
+}
+
+export interface AppointmentAvailability {
+  localDate: string;
+  barbershopTimezone: string;
+  slotIntervalMinutes: number;
+  serviceDurationMinutes: number;
+  slots: AppointmentAvailabilitySlot[];
+}
+
+export interface FetchAppointmentAvailabilityInput {
+  employeeId: string;
+  serviceId: string;
+  localDate: string;
+}
+
+export interface CreateStaffAppointmentInput {
+  employeeId?: string;
+  serviceId: string;
+  startAt: string;
+  clientName: string;
+  clientPhone?: string;
+  notes?: string;
 }
