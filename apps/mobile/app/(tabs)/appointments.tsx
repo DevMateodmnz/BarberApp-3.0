@@ -10,7 +10,7 @@
  */
 import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -22,6 +22,7 @@ import {
 import { useContextStore } from '@/lib/store.js';
 import { useAppointmentsStore } from '@/lib/appointmentsStore.js';
 import { useEmployeesStore } from '@/lib/employeesStore.js';
+import { useFlashStore } from '@/lib/flashStore.js';
 import {
   getAppointmentClientDisplayName,
   getAppointmentServiceDisplayName,
@@ -55,6 +56,7 @@ const BARBER_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
 };
 
 export default function AppointmentsScreen() {
+  const router = useRouter();
   const { isSignedIn, getToken, isLoaded } = useAuth();
   const { t } = useTranslation();
 
@@ -78,12 +80,26 @@ export default function AppointmentsScreen() {
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const hasFocusedOnceRef = useRef(false);
+  const flashMessage = useFlashStore((state) => state.message);
+  const clearFlashMessage = useFlashStore((state) => state.clearMessage);
 
   // Load context when signed in
   useEffect(() => {
     if (!isSignedIn || !getTokenRef.current) return;
     loadContext(getTokenRef.current);
   }, [isSignedIn, loadContext]);
+
+  useEffect(() => {
+    if (!flashMessage) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      clearFlashMessage();
+    }, 4000);
+
+    return () => clearTimeout(timer);
+  }, [clearFlashMessage, flashMessage]);
 
   // Load employees for OWNER filter
   useEffect(() => {
@@ -258,10 +274,13 @@ export default function AppointmentsScreen() {
       isAppointmentsLoading={isAppointmentsLoading}
       appointmentsError={appointmentsError}
       isRefreshing={isRefreshing}
+      flashMessage={flashMessage}
+      showCreateAction={context?.role === 'OWNER' || context?.role === 'BARBER'}
       selectedDate={selectedDate}
       isTodaySelected={isTodayDateString(selectedDate)}
       employeeFilters={employeeFilters}
       appointmentRows={appointmentRows}
+      onCreateAppointment={() => router.push('/(tabs)/appointments-create')}
       onRefresh={handleRefresh}
       onPrevDate={handlePrevDate}
       onToday={handleToday}

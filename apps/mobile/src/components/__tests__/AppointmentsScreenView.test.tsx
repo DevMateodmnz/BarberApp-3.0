@@ -125,10 +125,13 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentsScreenView>
     isAppointmentsLoading: false,
     appointmentsError: null,
     isRefreshing: false,
+    flashMessage: null,
+    showCreateAction: true,
     selectedDate: '2026-06-16',
     isTodaySelected: true,
     employeeFilters: makeEmployeeFilters(),
     appointmentRows: makeAppointments(),
+    onCreateAppointment: vi.fn(),
     onRefresh: vi.fn(),
     onPrevDate: vi.fn(),
     onToday: vi.fn(),
@@ -139,7 +142,12 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentsScreenView>
 
 describe('AppointmentsScreenView', () => {
   it('renders the client blocked state', () => {
-    const tree = renderView({ context: CLIENT_CONTEXT, employeeFilters: [], appointmentRows: [] });
+    const tree = renderView({
+      context: CLIENT_CONTEXT,
+      employeeFilters: [],
+      appointmentRows: [],
+      showCreateAction: false,
+    });
     expect(findByTestId(tree, 'appointments-client-blocked')).toBeDefined();
     expect(findByText(tree, 'Appointment management is available only to barbershop owners and barbers.')).toBeDefined();
   });
@@ -196,6 +204,28 @@ describe('AppointmentsScreenView', () => {
 
     press(findByTestId(tree, 'appointments-filter-emp-1'));
     expect(employeePress).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the new appointment action and fires its callback', () => {
+    const onCreateAppointment = vi.fn();
+    const tree = renderView({ onCreateAppointment });
+
+    expect(findByTestId(tree, 'appointments-create-button')).toBeDefined();
+    press(findByTestId(tree, 'appointments-create-button'));
+    expect(onCreateAppointment).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the new appointment action for unsupported roles and renders flash feedback when present', () => {
+    const tree = renderView({
+      context: BARBER_CONTEXT,
+      showCreateAction: false,
+      flashMessage: 'Appointment created successfully.',
+      employeeFilters: [],
+      appointmentRows: makeAppointments([{ employeeLabel: null }]),
+    });
+
+    expect(queryByTestId(tree, 'appointments-create-button')).toBeNull();
+    expect(findByTestId(tree, 'appointments-flash-message')).toBeDefined();
   });
 
   it('renders an appointments loading state', () => {

@@ -106,6 +106,14 @@ export default function TabLayout() {
           options={buildPrimaryTabOptions('appointments', t)}
         />
         <Tabs.Screen
+          name="appointments-create"
+          options={{
+            title: t('appointmentCreation.title'),
+            href: null,
+            tabBarAccessibilityLabel: t('appointmentCreation.accessibility.openCreate'),
+          }}
+        />
+        <Tabs.Screen
           name="record-service"
           options={buildPrimaryTabOptions('record-service', t)}
         />
