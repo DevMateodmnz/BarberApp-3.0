@@ -21,11 +21,12 @@ import {
   getPrimaryDestinationByRouteName,
   resolvePrimaryDestinationCopy,
 } from '@/lib/mobileNavigation.js';
+import { useEmployeesStore } from '@/lib/employeesStore.js';
 import { useContextStore } from '@/lib/store.js';
 import { tokens } from '@/theme/index.js';
 
 export default function TabLayout() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken, userId } = useAuth();
   const { t } = useTranslation();
   const getTokenRef = useRef(getToken);
 
@@ -33,18 +34,53 @@ export default function TabLayout() {
     getTokenRef.current = getToken;
   });
 
-  const { context, isLoading, error, loadContext, clearContext } = useContextStore();
+  const clearEmployeeInvitations = useEmployeesStore((state) => state.clearEmployeeInvitations);
+  const {
+    context,
+    isLoading,
+    error,
+    loadContext,
+    bootstrapAuthenticatedContext,
+    bootstrapStatus,
+    activeClerkUserId,
+    clearContext,
+  } = useContextStore();
 
   useEffect(() => {
-    if (!isSignedIn) {
+    if (!isSignedIn || !userId) {
       clearContext();
+      clearEmployeeInvitations();
       return;
     }
 
-    if (!context && !isLoading && getTokenRef.current) {
-      void loadContext(getTokenRef.current);
+    if (activeClerkUserId && activeClerkUserId !== userId) {
+      clearContext();
+      clearEmployeeInvitations();
+      return;
     }
-  }, [clearContext, context, isLoading, isSignedIn, loadContext]);
+
+    if (
+      !context
+      && !isLoading
+      && bootstrapStatus === 'idle'
+      && getTokenRef.current
+    ) {
+      void bootstrapAuthenticatedContext({
+        clerkUserId: userId,
+        getToken: getTokenRef.current,
+      });
+    }
+  }, [
+    activeClerkUserId,
+    bootstrapAuthenticatedContext,
+    bootstrapStatus,
+    clearContext,
+    clearEmployeeInvitations,
+    context,
+    isLoading,
+    isSignedIn,
+    userId,
+  ]);
 
   if (!isLoaded) {
     return <TabsStateCard message={t('runtime.loadingAppMessage')} testID="tabs-loading" />;
@@ -61,16 +97,30 @@ export default function TabLayout() {
           testID="tabs-error"
           message={error}
           action={
-            <AppButton
-              testID="tabs-error-retry"
-              title={t('common.actions.retry')}
-              variant="secondary"
-              onPress={() => {
-                if (getTokenRef.current) {
-                  void loadContext(getTokenRef.current);
-                }
-              }}
-            />
+            bootstrapStatus === 'retryable_error'
+              ? (
+                  <AppButton
+                    testID="tabs-error-retry"
+                    title={t('common.actions.retry')}
+                    variant="secondary"
+                    onPress={() => {
+                      if (!getTokenRef.current) {
+                        return;
+                      }
+
+                      if (userId) {
+                        void bootstrapAuthenticatedContext({
+                          clerkUserId: userId,
+                          getToken: getTokenRef.current,
+                        });
+                        return;
+                      }
+
+                      void loadContext(getTokenRef.current);
+                    }}
+                  />
+                )
+              : undefined
           }
         />
       );
