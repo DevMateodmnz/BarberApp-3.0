@@ -8,6 +8,7 @@ import { createRateLimiter } from './middleware/rateLimit.js';
 import appointmentRoutes from './routes/appointments.js';
 import barbershopRoutes from './routes/barbershops.js';
 import meRoutes from './routes/me.js';
+import onboardingRoutes from './routes/onboarding.js';
 import webhookRoutes from './routes/webhooks.js';
 
 export function createApp(config: ApiRuntimeConfig): express.Express {
@@ -38,6 +39,7 @@ export function createApp(config: ApiRuntimeConfig): express.Express {
   app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
   app.use('/api/v1/barbershops', barbershopRoutes);
   app.use('/api/v1/me', meRoutes);
+  app.use('/api/v1/onboarding', onboardingRoutes);
   app.use(errorHandler);
 
   return app;

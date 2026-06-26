@@ -7,12 +7,14 @@
  */
 import { Router, Request, Response, NextFunction } from 'express';
 import { Webhook } from 'standardwebhooks';
-import { BadRequestError } from '../lib/errors.js';
+import { AppError, BadRequestError } from '../lib/errors.js';
+import { parseTrustedEmployeeInvitationMetadata } from '../lib/employeeInvitationMetadata.js';
 import {
   handleUserCreated,
   handleUserUpdated,
   handleUserDeleted,
 } from '../services/userSyncService.js';
+import { reconcileEmployeeInvitation } from '../services/employeeInvitationService.js';
 
 const router = Router();
 
@@ -28,6 +30,47 @@ router.use((req: Request, _res: Response, next: NextFunction) => {
     new BadRequestError('Webhook body must be received as raw buffer')
   );
 });
+
+async function maybeRunInvitationReconciliation(
+  payload: Record<string, unknown>
+): Promise<void> {
+  const data =
+    payload.data && typeof payload.data === 'object'
+      ? (payload.data as Record<string, unknown>)
+      : null;
+
+  if (!data || typeof data.id !== 'string') {
+    return;
+  }
+
+  if (!parseTrustedEmployeeInvitationMetadata(data.public_metadata)) {
+    return;
+  }
+
+  try {
+    await reconcileEmployeeInvitation({ clerkUserId: data.id });
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      [
+        'ONBOARDING_INVITATION_REQUIRED',
+        'AMBIGUOUS_EMPLOYEE_INVITATION',
+        'USER_ROLE_NOT_ELIGIBLE',
+        'EMPLOYEE_INVITATION_REVOKED',
+        'EMPLOYEE_INVITATION_EXPIRED',
+        'EMPLOYEE_INVITATION_DELIVERY_FAILED',
+      ].includes(error.code)
+    ) {
+      console.warn('Skipping webhook invitation reconciliation', {
+        clerkUserId: data.id,
+        code: error.code,
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
 
 router.post(
   '/clerk',
@@ -72,8 +115,10 @@ router.post(
       // Dispatch
       if (eventType === 'user.created') {
         await handleUserCreated(payload as never);
+        await maybeRunInvitationReconciliation(payload);
       } else if (eventType === 'user.updated') {
         await handleUserUpdated(payload as never);
+        await maybeRunInvitationReconciliation(payload);
       } else if (eventType === 'user.deleted') {
         await handleUserDeleted(payload as never);
       }

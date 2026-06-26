@@ -21,8 +21,42 @@ declare global {
       userId: string;
       user: User;
       userRole: UserRole;
+      clerkUserId?: string;
     }
   }
+}
+
+async function resolveAuthenticatedClerkUserId(
+  req: Request,
+  res: Response
+): Promise<string> {
+  if (process.env.NODE_ENV === 'test') {
+    const clerkUserId = req.headers['x-test-user-id'] as string | undefined;
+    if (!clerkUserId) {
+      throw new UnauthorizedError('Missing x-test-user-id header in test mode');
+    }
+
+    return clerkUserId;
+  }
+
+  const { requireAuth: clerkRequireAuth } = await import('@clerk/express');
+
+  return await new Promise<string>((resolve, reject) => {
+    const clerkMw = clerkRequireAuth();
+    clerkMw(req, res, (err?: unknown) => {
+      if (err) return reject(err);
+      const auth = (req as unknown as Record<string, unknown>).auth as
+        | { userId?: string }
+        | undefined;
+      const clerkUserId = auth?.userId;
+
+      if (!clerkUserId) {
+        return reject(new UnauthorizedError('Invalid or missing Clerk token'));
+      }
+
+      resolve(clerkUserId);
+    });
+  });
 }
 
 /**
@@ -32,39 +66,12 @@ declare global {
  */
 export async function requireAuth(
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    let clerkUserId: string | undefined;
-
-    if (process.env.NODE_ENV === 'test') {
-      // Test mode: use header-based auth
-      clerkUserId = req.headers['x-test-user-id'] as string | undefined;
-      if (!clerkUserId) {
-        throw new UnauthorizedError('Missing x-test-user-id header in test mode');
-      }
-    } else {
-      // Production: validate via Clerk
-      // Dynamic import to avoid loading Clerk SDK in tests
-      const { requireAuth: clerkRequireAuth } = await import('@clerk/express');
-      // Wrap Clerk middleware in a promise
-      await new Promise<void>((resolve, reject) => {
-        const clerkMw = clerkRequireAuth();
-        clerkMw(req, _res, (err?: unknown) => {
-          if (err) return reject(err);
-          // Clerk sets auth on request - extract userId
-          const auth = (req as unknown as Record<string, unknown>).auth as
-            | { userId?: string }
-            | undefined;
-          clerkUserId = auth?.userId;
-          if (!clerkUserId) {
-            return reject(new UnauthorizedError('Invalid or missing Clerk token'));
-          }
-          resolve();
-        });
-      });
-    }
+    const clerkUserId = await resolveAuthenticatedClerkUserId(req, res);
+    req.clerkUserId = clerkUserId;
 
     // Resolve user from DATABASE (always real, never mocked)
     const user = await prisma.user.findUnique({
@@ -84,6 +91,19 @@ export async function requireAuth(
     req.user = user;
     req.userRole = user.role;
 
+    next();
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function requireClerkSession(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    req.clerkUserId = await resolveAuthenticatedClerkUserId(req, res);
     next();
   } catch (error) {
     next(error);

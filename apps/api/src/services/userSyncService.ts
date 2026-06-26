@@ -14,6 +14,8 @@ import { prisma } from '../lib/prisma.js';
 import { BadRequestError } from '../lib/errors.js';
 import { Prisma } from '@prisma/client';
 import type { User, UserRole } from '@prisma/client';
+import { normalizeEmail } from '../lib/email.js';
+import { parseTrustedEmployeeInvitationMetadata } from '../lib/employeeInvitationMetadata.js';
 
 // ============================================
 // TYPES
@@ -51,11 +53,11 @@ function extractEmail(data: ClerkWebhookData): string {
   // Use primary email if specified
   if (data.primary_email_address_id) {
     const primary = addresses.find((a) => a.id === data.primary_email_address_id);
-    if (primary) return primary.email_address;
+    if (primary) return normalizeEmail(primary.email_address);
   }
 
   // Fallback to first email
-  return addresses[0]!.email_address;
+  return normalizeEmail(addresses[0]!.email_address);
 }
 
 function extractName(data: ClerkWebhookData, email: string): string {
@@ -67,58 +69,32 @@ function extractName(data: ClerkWebhookData, email: string): string {
   return 'User';
 }
 
-/** Allowed roles from Clerk metadata. Mirrors Prisma UserRole enum. */
-const VALID_ROLES: ReadonlySet<string> = new Set(['OWNER', 'BARBER', 'CLIENT']);
-
-/**
- * Extracts a validated UserRole from Clerk's public_metadata.role.
- *
- * - Returns the metadata role if it is a valid UserRole string.
- * - Defaults to CLIENT if public_metadata is absent, not an object,
- *   or contains an unrecognized role value.
- * - unsafe_metadata is intentionally ignored.
- */
-function parseClerkRoleFromPublicMetadata(
-  publicMetadata: unknown
-): UserRole {
-  if (
-    publicMetadata &&
-    typeof publicMetadata === 'object' &&
-    !Array.isArray(publicMetadata)
-  ) {
-    const role = (publicMetadata as Record<string, unknown>).role;
-    if (typeof role === 'string' && VALID_ROLES.has(role)) {
-      return role as UserRole;
-    }
-  }
-  return 'CLIENT';
+function deriveTrustedWebhookRole(publicMetadata: unknown): UserRole {
+  return parseTrustedEmployeeInvitationMetadata(publicMetadata)?.role ?? 'CLIENT';
 }
-
-/**
- * Privilege ordering for role resolution.
- * Higher number = higher privilege. Used to prevent downgrades.
- */
-const PRIVILEGE_ORDER: Record<UserRole, number> = {
-  CLIENT: 0,
-  BARBER: 1,
-  OWNER: 2,
-};
 
 /**
  * Resolves the effective role when updating an existing user.
  *
- * Rule: NEVER downgrade. If the existing DB role has higher privilege
- * than the incoming metadata role, preserve the existing role.
- * Upgrades (CLIENT → BARBER → OWNER) are always allowed.
+ * Rule: NEVER downgrade. OWNER is never granted from generic Clerk metadata.
+ * Only trusted backend-controlled employee-invitation metadata may promote
+ * CLIENT → BARBER.
  */
 function resolveRole(
   existingRole: UserRole | undefined,
   metadataRole: UserRole
 ): UserRole {
   if (!existingRole) return metadataRole;
-  const existingLevel = PRIVILEGE_ORDER[existingRole] ?? 0;
-  const metadataLevel = PRIVILEGE_ORDER[metadataRole] ?? 0;
-  return metadataLevel > existingLevel ? metadataRole : existingRole;
+
+  if (existingRole === 'OWNER') {
+    return 'OWNER';
+  }
+
+  if (existingRole === 'BARBER') {
+    return 'BARBER';
+  }
+
+  return metadataRole === 'BARBER' ? 'BARBER' : existingRole;
 }
 
 // ============================================
@@ -132,7 +108,7 @@ export async function handleUserCreated(
   const clerkUserId = data.id;
   const email = extractEmail(data);
   const name = extractName(data, email);
-  const role = parseClerkRoleFromPublicMetadata(data.public_metadata);
+  const role = deriveTrustedWebhookRole(data.public_metadata);
 
   try {
     return await prisma.user.create({
@@ -173,7 +149,7 @@ export async function handleUserUpdated(
   const clerkUserId = data.id;
   const email = extractEmail(data);
   const name = extractName(data, email);
-  const metadataRole = parseClerkRoleFromPublicMetadata(data.public_metadata);
+  const metadataRole = deriveTrustedWebhookRole(data.public_metadata);
 
   // Fetch existing user to prevent role downgrades
   const existing = await prisma.user.findUnique({

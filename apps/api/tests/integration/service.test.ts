@@ -38,6 +38,7 @@ beforeAll(async () => {
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
   await prisma.service.deleteMany();
+  await prisma.employeeInvitation.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.barbershop.deleteMany();
   await prisma.user.deleteMany();
@@ -102,6 +103,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
+  await prisma.employeeInvitation.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.service.deleteMany();
 });
@@ -112,6 +114,7 @@ afterAll(async () => {
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
   await prisma.service.deleteMany();
+  await prisma.employeeInvitation.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.barbershop.deleteMany();
   await prisma.user.deleteMany();
@@ -743,7 +746,8 @@ describe('DELETE /api/v1/barbershops/:barbershopId/services/:serviceId', () => {
   beforeEach(async () => {
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
     await prisma.workingHours.deleteMany();
     await prisma.service.deleteMany();
     svcA = await createServiceInDb(fixtures.shopA.id, { name: 'Corte Clásico' });
