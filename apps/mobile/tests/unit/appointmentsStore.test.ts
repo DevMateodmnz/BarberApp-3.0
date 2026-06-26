@@ -27,6 +27,12 @@ function makeAppointment(overrides: Partial<Appointment> = {}): Appointment {
     employeeId: 'emp-1',
     clientId: 'client-1',
     serviceId: 'svc-1',
+    clientName: 'John Snapshot',
+    clientPhone: null,
+    serviceName: 'Haircut Snapshot',
+    servicePriceCents: 2500,
+    serviceDurationMinutes: 30,
+    serviceCurrency: 'ARS',
     startAt: '2026-06-15T10:00:00.000Z',
     endAt: '2026-06-15T10:30:00.000Z',
     status: 'PENDING',
@@ -37,7 +43,7 @@ function makeAppointment(overrides: Partial<Appointment> = {}): Appointment {
     barbershop: { id: 'shop-1', name: 'My Shop' },
     employee: { id: 'emp-1', user: { id: 'user-2', name: 'Barber One' } },
     client: { id: 'client-1', name: 'John Doe', email: 'john@example.com' },
-    service: { id: 'svc-1', name: 'Haircut', durationMinutes: 30, priceCents: 2500 },
+    service: { id: 'svc-1', name: 'Haircut', durationMinutes: 30, priceCents: 2500, currency: 'ARS' },
     ...overrides,
   };
 }
@@ -224,5 +230,40 @@ describe('useAppointmentsStore', () => {
     expect(state.appointments).toEqual([]);
     expect(state.isAppointmentsLoading).toBe(false);
     expect(state.appointmentsError).toBeNull();
+  });
+
+  it('recordCreatedAppointment upserts without duplicates and keeps scope intact', async () => {
+    const { useAppointmentsStore } = await importStore();
+    const getToken = vi.fn().mockResolvedValue('token');
+
+    mockFetchAppointments.mockResolvedValueOnce([makeAppointment({ id: 'appt-1' })]);
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext);
+
+    useAppointmentsStore.getState().recordCreatedAppointment(
+      makeAppointment({ id: 'appt-1', startAt: '2026-06-15T11:00:00.000Z' }),
+    );
+    useAppointmentsStore.getState().recordCreatedAppointment(
+      makeAppointment({ id: 'appt-2', startAt: '2026-06-15T12:00:00.000Z' }),
+    );
+
+    const state = useAppointmentsStore.getState();
+    expect(state.appointments).toHaveLength(2);
+    expect(state.appointments[0]?.id).toBe('appt-2');
+    expect(state.appointments[1]?.id).toBe('appt-1');
+  });
+
+  it('recordCreatedAppointment ignores appointments outside the loaded barber scope', async () => {
+    const { useAppointmentsStore } = await importStore();
+    const getToken = vi.fn().mockResolvedValue('token');
+
+    mockFetchEmployeeAppointments.mockResolvedValueOnce([makeAppointment({ id: 'appt-1' })]);
+    await useAppointmentsStore.getState().loadAppointments(getToken, barberContext);
+
+    useAppointmentsStore.getState().recordCreatedAppointment(
+      makeAppointment({ id: 'appt-foreign', employeeId: 'emp-2' }),
+    );
+
+    expect(useAppointmentsStore.getState().appointments).toHaveLength(1);
+    expect(useAppointmentsStore.getState().appointments[0]?.id).toBe('appt-1');
   });
 });

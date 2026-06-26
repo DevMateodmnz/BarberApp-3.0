@@ -141,24 +141,46 @@ export async function createTestService(data: {
 export async function createTestAppointment(data: {
   barbershopId: string;
   employeeId: string;
-  clientId: string;
+  clientId?: string | null;
   serviceId: string;
   startAt?: Date;
   endAt?: Date;
   status?: AppointmentStatus;
+  clientName?: string;
+  clientPhone?: string | null;
+  serviceName?: string;
+  servicePriceCents?: number;
+  serviceDurationMinutes?: number;
+  serviceCurrency?: string;
+  notes?: string | null;
 }): Promise<Awaited<ReturnType<typeof prisma.appointment.create>>> {
   const startAt = data.startAt || new Date();
-  const endAt = data.endAt || new Date(startAt.getTime() + 30 * 60000);
+  const service = await prisma.service.findUniqueOrThrow({
+    where: { id: data.serviceId },
+  });
+  const client = data.clientId
+    ? await prisma.user.findUniqueOrThrow({ where: { id: data.clientId } })
+    : null;
+  const durationMinutes =
+    data.serviceDurationMinutes ?? service.durationMinutes;
+  const endAt = data.endAt || new Date(startAt.getTime() + durationMinutes * 60000);
 
   return prisma.appointment.create({
     data: {
       barbershopId: data.barbershopId,
       employeeId: data.employeeId,
-      clientId: data.clientId,
+      clientId: data.clientId ?? null,
       serviceId: data.serviceId,
+      clientName: data.clientName ?? client?.name ?? client?.email ?? 'Walk-in Client',
+      clientPhone: data.clientPhone ?? null,
+      serviceName: data.serviceName ?? service.name,
+      servicePriceCents: data.servicePriceCents ?? service.priceCents,
+      serviceDurationMinutes: durationMinutes,
+      serviceCurrency: data.serviceCurrency ?? service.currency,
       startAt,
       endAt,
       status: data.status || AppointmentStatus.PENDING,
+      notes: data.notes ?? null,
     },
   });
 }

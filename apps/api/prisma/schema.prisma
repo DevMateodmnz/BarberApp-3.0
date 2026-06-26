@@ -43,21 +43,21 @@ enum PaymentMethod {
 /// User model - represents all authenticated users (owners, barbers, clients)
 /// Each user is tied to a Clerk user via clerkUserId
 model User {
-  id            String    @id @default(cuid())
-  clerkUserId   String    @unique @map("clerk_user_id")
-  email        String    @unique
-  name         String?
-  role         UserRole  @default(CLIENT)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  deletedAt    DateTime? @map("deleted_at")
+  id          String    @id @default(cuid())
+  clerkUserId String    @unique @map("clerk_user_id")
+  email       String    @unique
+  name        String?
+  role        UserRole  @default(CLIENT)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
 
   // Relations
-  ownedBarbershops  Barbershop[]       @relation("BarbershopOwner")
-  employees        Employee[]
-  clientAppointments Appointment[]     @relation("AppointmentClient")
-  uploadedPhotos    Photo[]            @relation("PhotoUploader")
-  clientPhotos      Photo[]            @relation("PhotoClient")
+  ownedBarbershops   Barbershop[]  @relation("BarbershopOwner")
+  employees          Employee[]
+  clientAppointments Appointment[] @relation("AppointmentClient")
+  uploadedPhotos     Photo[]       @relation("PhotoUploader")
+  clientPhotos       Photo[]       @relation("PhotoClient")
 
   @@map("users")
 }
@@ -69,19 +69,19 @@ model User {
 /// Barbershop model - represents a barbershop business
 /// Each barbershop has exactly one owner
 model Barbershop {
-  id        String   @id @default(cuid())
-  ownerId   String   @map("owner_id")
+  id        String    @id @default(cuid())
+  ownerId   String    @map("owner_id")
   name      String
   address   String?
   phone     String?
-  timezone  String   @default("America/Argentina/Tucuman")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  timezone  String    @default("America/Argentina/Tucuman")
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  owner          User              @relation("BarbershopOwner", fields: [ownerId], references: [id])
+  owner          User            @relation("BarbershopOwner", fields: [ownerId], references: [id])
   employees      Employee[]
   services       Service[]
   appointments   Appointment[]
@@ -101,28 +101,27 @@ model Barbershop {
 /// Employee model - represents a barber/employee working at a barbershop
 /// Links a User to a Barbershop
 model Employee {
-  id           String   @id @default(cuid())
-  barbershopId String   @map("barbershop_id")
-  userId       String   @map("user_id")
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(cuid())
+  barbershopId String    @map("barbershop_id")
+  userId       String    @map("user_id")
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
 
   // Relations
-  barbershop       Barbershop          @relation(fields: [barbershopId], references: [id])
+  barbershop       Barbershop        @relation(fields: [barbershopId], references: [id])
   user             User              @relation(fields: [userId], references: [id])
   employeeServices EmployeeService[]
   appointments     Appointment[]
   serviceRecords   ServiceRecord[]
 
+  // Constraint: one employee record per user per barbershop
+  @@unique([barbershopId, userId])
   // Indexes
   @@index([barbershopId])
   @@index([userId])
   @@index([barbershopId, isActive])
-
-  // Constraint: one employee record per user per barbershop
-  @@unique([barbershopId, userId])
   @@map("employees")
 }
 
@@ -132,23 +131,23 @@ model Employee {
 
 /// Service model - represents a service offered by a barbershop
 model Service {
-  id              String   @id @default(cuid())
-  barbershopId    String   @map("barbershop_id")
+  id              String    @id @default(cuid())
+  barbershopId    String    @map("barbershop_id")
   name            String
   description     String?
-  durationMinutes Int      @map("duration_minutes")
-  priceCents      Int      @map("price_cents")
-  currency        String   @default("ARS")
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  durationMinutes Int       @map("duration_minutes")
+  priceCents      Int       @map("price_cents")
+  currency        String    @default("ARS")
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
 
   // Relations
-  barbershop        Barbershop          @relation(fields: [barbershopId], references: [id])
-  employeeServices  EmployeeService[]
-  appointments      Appointment[]
-  serviceRecords    ServiceRecord[]
+  barbershop       Barbershop        @relation(fields: [barbershopId], references: [id])
+  employeeServices EmployeeService[]
+  appointments     Appointment[]
+  serviceRecords   ServiceRecord[]
 
   // Indexes
   @@index([barbershopId])
@@ -184,25 +183,31 @@ model EmployeeService {
 
 /// Appointment model - represents a booked appointment
 model Appointment {
-  id           String             @id @default(cuid())
-  barbershopId String             @map("barbershop_id")
-  employeeId   String             @map("employee_id")
-  clientId     String             @map("client_id")
-  serviceId    String             @map("service_id")
-  startAt      DateTime           @map("start_at")
-  endAt        DateTime           @map("end_at")
-  status       AppointmentStatus  @default(PENDING)
-  notes        String?
-  createdAt    DateTime           @default(now()) @map("created_at")
-  updatedAt    DateTime           @updatedAt @map("updated_at")
-  deletedAt    DateTime?         @map("deleted_at")
+  id                     String            @id @default(cuid())
+  barbershopId           String            @map("barbershop_id")
+  employeeId             String            @map("employee_id")
+  clientId               String?           @map("client_id")
+  serviceId              String            @map("service_id")
+  clientName             String            @map("client_name")
+  clientPhone            String?           @map("client_phone")
+  serviceName            String            @map("service_name")
+  servicePriceCents      Int               @map("service_price_cents")
+  serviceDurationMinutes Int               @map("service_duration_minutes")
+  serviceCurrency        String            @map("service_currency")
+  startAt                DateTime          @map("start_at")
+  endAt                  DateTime          @map("end_at")
+  status                 AppointmentStatus @default(PENDING)
+  notes                  String?
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
+  deletedAt              DateTime?         @map("deleted_at")
 
   // Relations
-  barbershop      Barbershop      @relation(fields: [barbershopId], references: [id])
-  employee        Employee        @relation(fields: [employeeId], references: [id])
-  client          User            @relation("AppointmentClient", fields: [clientId], references: [id])
-  service         Service         @relation(fields: [serviceId], references: [id])
-  serviceRecords  ServiceRecord[]
+  barbershop     Barbershop      @relation(fields: [barbershopId], references: [id])
+  employee       Employee        @relation(fields: [employeeId], references: [id])
+  client         User?           @relation("AppointmentClient", fields: [clientId], references: [id])
+  service        Service         @relation(fields: [serviceId], references: [id])
+  serviceRecords ServiceRecord[]
 
   // Indexes for common queries
   @@index([barbershopId])
@@ -211,7 +216,6 @@ model Appointment {
   @@index([startAt])
   @@index([barbershopId, employeeId, startAt])
   @@index([employeeId, startAt, status])
-
   @@map("appointments")
 }
 
@@ -260,14 +264,14 @@ model ServiceRecord {
 /// openTime/closeTime in "HH:mm" 24h format in the barbershop's local timezone
 /// Absence of a row for a given dayOfWeek means the shop is closed that day
 model WorkingHours {
-  id            String   @id @default(cuid())
-  barbershopId  String   @map("barbershop_id")
-  dayOfWeek     Int      @map("day_of_week")
-  openTime      String   @map("open_time")
-  closeTime     String   @map("close_time")
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(cuid())
+  barbershopId String   @map("barbershop_id")
+  dayOfWeek    Int      @map("day_of_week")
+  openTime     String   @map("open_time")
+  closeTime    String   @map("close_time")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   // Relations
   barbershop Barbershop @relation(fields: [barbershopId], references: [id])
@@ -284,20 +288,19 @@ model WorkingHours {
 
 /// Photo model - represents a photo uploaded by/for a client
 model Photo {
-  id          String   @id @default(cuid())
-  clientId    String   @map("client_id")
-  url         String
-  uploadedById String  @map("uploaded_by_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  deletedAt   DateTime? @map("deleted_at")
+  id           String    @id @default(cuid())
+  clientId     String    @map("client_id")
+  url          String
+  uploadedById String    @map("uploaded_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
 
   // Relations
-  client    User @relation("PhotoClient", fields: [clientId], references: [id])
+  client     User @relation("PhotoClient", fields: [clientId], references: [id])
   uploadedBy User @relation("PhotoUploader", fields: [uploadedById], references: [id])
 
   // Indexes
   @@index([clientId])
   @@index([uploadedById])
-
   @@map("photos")
 }

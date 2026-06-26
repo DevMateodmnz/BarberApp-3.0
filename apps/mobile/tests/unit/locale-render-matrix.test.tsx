@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { AppointmentCreateScreenView } from '@/components/AppointmentCreateScreenView.js';
 import { AppointmentsScreenView } from '@/components/AppointmentsScreenView.js';
 import { EmployeesScreenView } from '@/components/EmployeesScreenView.js';
 import { HomeContent } from '@/components/HomeContent.js';
@@ -192,10 +193,13 @@ describe('locale render smoke matrix', () => {
         isAppointmentsLoading: false,
         appointmentsError: null,
         isRefreshing: false,
+        flashMessage: null,
+        showCreateAction: true,
         selectedDate: '2026-06-24',
         isTodaySelected: true,
         employeeFilters: [],
         appointmentRows: [],
+        onCreateAppointment: () => undefined,
         onRefresh: () => undefined,
         onPrevDate: () => undefined,
         onToday: () => undefined,
@@ -204,6 +208,76 @@ describe('locale render smoke matrix', () => {
       expect(findByTestId(appointmentsTree, 'appointments-empty')).toBeDefined();
       expect(findByText(appointmentsTree, mobileLocalizationRuntime.i18n.t('appointments.title'))).toBeDefined();
       assertNoTranslationKeys(appointmentsTree);
+
+      const appointmentCreateTree = AppointmentCreateScreenView({
+        context: OWNER_CONTEXT,
+        isContextLoading: false,
+        contextError: null,
+        blockingTitle: null,
+        blockingMessage: null,
+        employeesStatus: 'success',
+        employeesError: null,
+        employeeOptions: [
+          {
+            id: 'emp-1',
+            label: 'Carlos',
+            selected: true,
+            testID: 'appointment-create-employee-emp-1',
+            accessibilityLabel: mobileLocalizationRuntime.i18n.t('appointmentCreation.accessibility.employeeOption', { name: 'Carlos' }),
+            onPress: () => undefined,
+          },
+        ],
+        servicesStatus: 'success',
+        servicesError: null,
+        serviceOptions: [
+          {
+            id: 'svc-1',
+            label: 'Classic Cut',
+            detail: mobileLocalizationRuntime.i18n.t('services.durationLabel', { count: 30 }),
+            selected: true,
+            testID: 'appointment-create-service-svc-1',
+            accessibilityLabel: mobileLocalizationRuntime.i18n.t('appointmentCreation.accessibility.serviceOption', { name: 'Classic Cut' }),
+            onPress: () => undefined,
+          },
+        ],
+        selectedEmployeeName: 'Carlos',
+        selectedDate: '2026-06-24',
+        canMoveToPreviousDate: true,
+        isDateSectionEnabled: true,
+        availabilityStatus: 'success',
+        availabilityErrorKey: null,
+        slotOptions: [
+          {
+            startAt: '2026-06-24T13:00:00.000Z',
+            label: '10:00',
+            selected: false,
+            testID: 'appointment-create-slot-1',
+            accessibilityLabel: mobileLocalizationRuntime.i18n.t('appointmentCreation.accessibility.timeOption', { time: '10:00' }),
+            onPress: () => undefined,
+          },
+        ],
+        clientName: 'Mateo',
+        clientPhone: '',
+        notes: '',
+        fieldErrors: {},
+        submissionErrorKey: null,
+        summary: null,
+        isSubmitting: false,
+        onBack: () => undefined,
+        onRetryEmployees: () => undefined,
+        onRetryServices: () => undefined,
+        onSelectToday: () => undefined,
+        onSelectPreviousDate: () => undefined,
+        onSelectNextDate: () => undefined,
+        onRetryAvailability: () => undefined,
+        onClientNameChange: () => undefined,
+        onClientPhoneChange: () => undefined,
+        onNotesChange: () => undefined,
+        onSubmit: () => undefined,
+      });
+      expect(findByTestId(appointmentCreateTree, 'appointment-create-screen')).toBeDefined();
+      expect(findByText(appointmentCreateTree, mobileLocalizationRuntime.i18n.t('appointmentCreation.title'))).toBeDefined();
+      assertNoTranslationKeys(appointmentCreateTree);
 
       const recordServiceTree = ServiceRecordCreateSectionView({
         testID: 'service-record-create',

@@ -49,10 +49,13 @@ export interface AppointmentsScreenViewProps {
   isAppointmentsLoading: boolean;
   appointmentsError: string | null;
   isRefreshing: boolean;
+  flashMessage: string | null;
+  showCreateAction: boolean;
   selectedDate: string;
   isTodaySelected: boolean;
   employeeFilters: EmployeeFilterOption[];
   appointmentRows: AppointmentRowViewModel[];
+  onCreateAppointment: () => void;
   onRefresh: () => void;
   onPrevDate: () => void;
   onToday: () => void;
@@ -65,10 +68,13 @@ export function AppointmentsScreenView({
   isAppointmentsLoading,
   appointmentsError,
   isRefreshing,
+  flashMessage,
+  showCreateAction,
   selectedDate,
   isTodaySelected,
   employeeFilters,
   appointmentRows,
+  onCreateAppointment,
   onRefresh,
   onPrevDate,
   onToday,
@@ -113,6 +119,12 @@ export function AppointmentsScreenView({
         rightAction={context ? <RoleBadge role={context.role} /> : undefined}
       />
 
+      {flashMessage ? (
+        <AppCard testID="appointments-flash-message" style={styles.flashBanner}>
+          <Text style={styles.flashText}>{flashMessage}</Text>
+        </AppCard>
+      ) : null}
+
       {context && (
         <AppCard testID="appointments-context" variant="outlined" style={styles.contextCard}>
           <Text style={styles.contextEyebrow}>{t('common.labels.scheduleScope')}</Text>
@@ -141,6 +153,15 @@ export function AppointmentsScreenView({
 
       {context && !isContextLoading && (
         <>
+          {showCreateAction ? (
+            <AppButton
+              testID="appointments-create-button"
+              title={t('appointments.newAction')}
+              accessibilityLabel={t('appointmentCreation.accessibility.openCreate')}
+              onPress={onCreateAppointment}
+            />
+          ) : null}
+
           <AppCard testID="appointments-date-controls" variant="outlined" style={styles.dateCard}>
             <Text style={styles.dateEyebrow}>{t('common.labels.selectedDate')}</Text>
             <Text style={styles.dateDisplay} testID="appointments-date-display">
@@ -291,6 +312,14 @@ export function AppointmentsScreenView({
 const styles = StyleSheet.create({
   blockedCard: {
     marginTop: tokens.spacing[6],
+  },
+  flashBanner: {
+    marginBottom: tokens.spacing[4],
+  },
+  flashText: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textPrimary,
+    textAlign: 'center',
   },
   contextCard: {
     marginBottom: tokens.spacing[4],

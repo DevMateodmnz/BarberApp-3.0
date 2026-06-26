@@ -2,7 +2,16 @@
  * AppButton primitive — primary/secondary/ghost/danger variants with sizes,
  * disabled, and loading states.
  */
-import { ActivityIndicator, Pressable, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  StyleSheet,
+  type AccessibilityRole,
+  type AccessibilityState,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { tokens, minTouchTarget } from '@/theme/index.js';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -25,6 +34,8 @@ interface AppButtonProps {
   loadingText?: string;
   onPress?: () => void;
   accessibilityLabel?: string;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityState?: AccessibilityState;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -38,6 +49,8 @@ export function AppButton({
   loadingText,
   onPress,
   accessibilityLabel,
+  accessibilityRole,
+  accessibilityState,
   style,
 }: AppButtonProps) {
   const isDisabled = disabled || loading;
@@ -49,6 +62,8 @@ export function AppButton({
       onPress={isDisabled ? undefined : onPress}
       disabled={isDisabled}
       accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole}
+      accessibilityState={accessibilityState}
       style={({ pressed }) => [
         styles.root,
         styles[size],

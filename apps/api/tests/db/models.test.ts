@@ -329,6 +329,12 @@ describe('WorkingHours Default Setup', () => {
         employeeId: employee.id,
         clientId: client.user.id,
         serviceId: service.id,
+        clientName: client.user.name!,
+        clientPhone: null,
+        serviceName: service.name,
+        servicePriceCents: service.priceCents,
+        serviceDurationMinutes: service.durationMinutes,
+        serviceCurrency: service.currency,
         startAt: monday,
         endAt: new Date(monday.getTime() + 30 * 60000),
         status: AppointmentStatus.PENDING,
@@ -585,6 +591,12 @@ describe('Appointment Model', () => {
         employeeId: employee.id,
         clientId: client.id,
         serviceId: service.id,
+        clientName: client.name!,
+        clientPhone: null,
+        serviceName: service.name,
+        servicePriceCents: service.priceCents,
+        serviceDurationMinutes: service.durationMinutes,
+        serviceCurrency: service.currency,
         startAt,
         endAt,
         status: AppointmentStatus.PENDING,
@@ -596,6 +608,12 @@ describe('Appointment Model', () => {
     expect(appointment.employeeId).toBe(employee.id);
     expect(appointment.clientId).toBe(client.id);
     expect(appointment.serviceId).toBe(service.id);
+    expect(appointment.clientName).toBe(client.name);
+    expect(appointment.clientPhone).toBeNull();
+    expect(appointment.serviceName).toBe(service.name);
+    expect(appointment.servicePriceCents).toBe(service.priceCents);
+    expect(appointment.serviceDurationMinutes).toBe(service.durationMinutes);
+    expect(appointment.serviceCurrency).toBe(service.currency);
     expect(appointment.status).toBe(AppointmentStatus.PENDING);
     expect(appointment.notes).toBe('Test appointment');
   });
@@ -623,6 +641,12 @@ describe('Appointment Model', () => {
           employeeId: employee.id,
           clientId: client.id,
           serviceId: service.id,
+          clientName: client.name!,
+          clientPhone: null,
+          serviceName: service.name,
+          servicePriceCents: service.priceCents,
+          serviceDurationMinutes: service.durationMinutes,
+          serviceCurrency: service.currency,
           startAt,
           endAt: new Date(startAt.getTime() + 30 * 60000),
           status: statuses[i],
@@ -645,6 +669,12 @@ describe('Appointment Model', () => {
         employeeId: employee.id,
         clientId: client.id,
         serviceId: service.id,
+        clientName: client.name!,
+        clientPhone: null,
+        serviceName: service.name,
+        servicePriceCents: service.priceCents,
+        serviceDurationMinutes: service.durationMinutes,
+        serviceCurrency: service.currency,
         startAt,
         endAt: new Date(startAt.getTime() + 30 * 60000),
         notes: 'Cliente prefiere cabello corto',
@@ -667,12 +697,49 @@ describe('Appointment Model', () => {
         employeeId: employee.id,
         clientId: client.id,
         serviceId: service.id,
+        clientName: client.name!,
+        clientPhone: null,
+        serviceName: service.name,
+        servicePriceCents: service.priceCents,
+        serviceDurationMinutes: service.durationMinutes,
+        serviceCurrency: service.currency,
         startAt,
         endAt: new Date(startAt.getTime() + 30 * 60000),
       },
     });
 
     expect(appointment.notes).toBeNull();
+  });
+
+  it('supports guest appointments with nullable client relation and frozen snapshots', async () => {
+    const { barbershop } = await createTestBarbershop();
+    const { employee } = await createTestEmployee({ barbershopId: barbershop.id });
+    const { service } = await createTestService({ barbershopId: barbershop.id, durationMinutes: 45, priceCents: 4200 });
+
+    const startAt = new Date();
+    const appointment = await prisma.appointment.create({
+      data: {
+        barbershopId: barbershop.id,
+        employeeId: employee.id,
+        clientId: null,
+        serviceId: service.id,
+        clientName: 'Walk-in Guest',
+        clientPhone: '+54 381 555-1234',
+        serviceName: service.name,
+        servicePriceCents: service.priceCents,
+        serviceDurationMinutes: service.durationMinutes,
+        serviceCurrency: service.currency,
+        startAt,
+        endAt: new Date(startAt.getTime() + 45 * 60000),
+        notes: 'Guest appointment',
+      },
+    });
+
+    expect(appointment.clientId).toBeNull();
+    expect(appointment.clientName).toBe('Walk-in Guest');
+    expect(appointment.clientPhone).toBe('+54 381 555-1234');
+    expect(appointment.serviceDurationMinutes).toBe(45);
+    expect(appointment.servicePriceCents).toBe(4200);
   });
 });
 

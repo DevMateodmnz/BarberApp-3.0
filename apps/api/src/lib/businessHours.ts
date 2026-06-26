@@ -30,7 +30,7 @@ export function timeToMinutes(time: string): number {
  * Extracts day-of-week (0=Sunday, 1=Monday, ...) and time-of-day in minutes
  * from a UTC Date, converted to the given IANA timezone.
  */
-function getLocalDayAndTime(
+export function getLocalDayAndTime(
   utcDate: Date,
   timezone: string
 ): { dayOfWeek: number; minutesSinceMidnight: number } {

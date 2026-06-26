@@ -9,6 +9,10 @@
 import { create } from 'zustand';
 import { localizeUnknownError } from '@/i18n/errors.js';
 import {
+  appointmentMatchesContext,
+  upsertAppointmentById,
+} from './appointmentCreationDomain.js';
+import {
   fetchAppointments,
   fetchEmployeeAppointments,
   transitionAppointmentStatus,
@@ -51,6 +55,13 @@ interface AppointmentsState {
     getToken: () => Promise<string | null>,
     appointmentId: string,
   ) => Promise<void>;
+
+  /**
+   * Upserts a newly created appointment into the current cached list when it
+   * belongs to the loaded context. Used by the future create flow to avoid a
+   * stale list after navigating back.
+   */
+  recordCreatedAppointment: (appointment: Appointment) => void;
 
   /** Resets appointments state to initial values. */
   clearAppointments: () => void;
@@ -117,6 +128,20 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
       const { loadAppointments } = get();
       await loadAppointments(getToken, _lastContext);
     }
+  },
+
+  recordCreatedAppointment: (appointment) => {
+    if (
+      _lastContext &&
+      !appointmentMatchesContext(appointment, _lastContext)
+    ) {
+      return;
+    }
+
+    set((state) => ({
+      appointments: upsertAppointmentById(state.appointments, appointment),
+      appointmentsError: null,
+    }));
   },
 
   clearAppointments: () => {
