@@ -19,6 +19,25 @@
 
 > Note: the mobile redesign has a fresh automated baseline. A redesign-specific physical-device regression pass still needs to be executed and recorded.
 
+## 2026-06-26 staff appointment-creation acceptance update
+
+Staff appointment creation is now **accepted for the MVP**.
+
+### Acceptance summary
+
+| Topic | Decision |
+|-------|----------|
+| Manual result | Mateo manually reviewed the OWNER and BARBER creation workflows on Android and accepted the implementation for the MVP |
+| Visual issues | Minor placement/layout imperfections remain, but they were explicitly accepted as **non-blocking UI debt** |
+| Functional fixes | No functional source fix was required during Batch 4 |
+| Automated baseline | API **422/422**, Mobile **567/567**, both clean at acceptance time |
+
+### Accepted feature commits
+
+- `c2b50aa feat(api): add staff appointment booking and availability`
+- `772065e feat(mobile): add appointment creation domain layer`
+- `eb0ed1d feat(mobile): add staff appointment creation flow`
+
 ## Operational Release Notes
 
 - Production API startup and credentialed CORS now have a dedicated runbook: [`docs/releases/api-production-runbook.md`](./api-production-runbook.md)
@@ -69,6 +88,7 @@ Detailed checklist: [`docs/manual-tests/mobile-mvp-final-qa.md`](../manual-tests
 | Working Hours — view week schedule, edit day hours, toggle on/off, persist | OWNER | ✅ Functionally validated + visually redesigned |
 | Appointments — view by date, filter by employee, status transitions (confirm, start, complete, cancel) | OWNER | ✅ Functionally validated + visually redesigned |
 | Appointments — view own appointments, status transitions | BARBER | ✅ Functionally validated + visually redesigned |
+| Appointments — create guest appointments from mobile with availability-driven slot selection | OWNER, BARBER | ✅ Functionally validated; Android-reviewed and accepted for MVP |
 | Service Record creation — select employee, service, payment, client name | OWNER | ✅ Functionally validated + visually redesigned |
 | Service Record creation — own assigned services, price override | BARBER | ✅ Functionally validated + visually redesigned |
 | Home summary (total records, revenue, employee breakdown) | OWNER | ✅ Functionally validated + visually redesigned |
@@ -80,7 +100,6 @@ Detailed checklist: [`docs/manual-tests/mobile-mvp-final-qa.md`](../manual-tests
 | Feature | Reason |
 |---------|--------|
 | **CLIENT role** | Out of scope for functional MVP. No client sign-in, no client dashboard, no client booking. |
-| Appointment creation from mobile | Backend endpoint exists; mobile UI deferred. |
 | Calendar/timeline view for appointments | UI enhancement post-MVP. |
 | Push notifications | Requires Expo push service integration. |
 | Offline queue / sync | Infrastructure complexity. |
@@ -111,7 +130,7 @@ Current redesign checklist: [`docs/manual-tests/mobile-mvp-final-qa.md`](../manu
 3. **Broader tab/header normalization is deferred**: PR-UI-008 intentionally stayed low risk and did not rework all navigation presentation patterns.
 4. **RN mock-renderer tests have limits**: Vitest + React 19 RN component tests help guard structure/behavior but are not a substitute for device-level layout/keyboard verification.
 5. **Test DB requires port 5433**: Backend tests need a separate PostgreSQL instance on port 5433. The main DB runs on 5432 via Docker.
-6. **Appointment creation is API-only**: No mobile UI to create appointments; must use API or seed script.
+6. **Appointment-create layout polish remains deferred**: Minor placement/layout imperfections were observed during manual Android review, but they were explicitly accepted as non-blocking UI debt for the MVP.
 7. **No date filtering on API**: `listAppointments` returns up to 100 records ordered by `startAt DESC` with no query parameters. Mobile filters client-side.
 8. **Clerk Expo `getToken` instability**: Worked around with `getTokenRef` pattern across all screens. Upgrade to `@clerk/clerk-expo` v3+ may resolve natively.
 
@@ -137,12 +156,11 @@ Only **P0** (crash, sign-in failure, data loss, security bypass) or **P1** (core
 3. Tab/header consistency audit
 4. CLIENT role — booking flow, client dashboard, photo gallery
 5. Dark mode / further visual polish
-6. Appointment creation from mobile
-7. Calendar/timeline UI for appointments
-8. Push notifications via Expo push service
-9. Offline support and sync queue
-10. Performance optimization and bundle size reduction
-11. E2E test suite (Detox or Maestro)
+6. Calendar/timeline UI for appointments
+7. Push notifications via Expo push service
+8. Offline support and sync queue
+9. Performance optimization and bundle size reduction
+10. E2E test suite (Detox or Maestro)
 
 ---
 

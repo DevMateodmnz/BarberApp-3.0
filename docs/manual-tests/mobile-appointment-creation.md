@@ -1,6 +1,29 @@
 # Mobile Appointment Creation — Manual QA Runbook
 
-This is a **future QA checklist** for the appointment-create feature. It is **not** evidence of completed QA.
+Use this runbook for future reruns of the mobile appointment-create flow. The latest accepted Android review for the MVP feature is recorded below.
+
+## Latest acceptance result
+
+- **Date**: 2026-06-26
+- **Reviewer**: Mateo
+- **Device/runtime**: Physical Android device
+- **Feature HEAD reviewed**: `eb0ed1d feat(mobile): add staff appointment creation flow`
+- **Overall result**: Accepted for the MVP
+
+### Acceptance notes
+
+- OWNER and BARBER appointment-creation workflows were manually reviewed on Android.
+- Minor placement/layout imperfections were observed, but Mateo explicitly accepted them as **non-blocking UI debt**.
+- No functional source fix was required during Batch 4 validation.
+- Automated validation baseline at acceptance time:
+  - API: **422/422**
+  - Mobile: **567/567**
+
+### Feature commits
+
+- `c2b50aa feat(api): add staff appointment booking and availability`
+- `772065e feat(mobile): add appointment creation domain layer`
+- `eb0ed1d feat(mobile): add staff appointment creation flow`
 
 ## Scope
 
