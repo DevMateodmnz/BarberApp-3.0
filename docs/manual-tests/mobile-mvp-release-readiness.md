@@ -16,13 +16,41 @@ Use this checklist for the **current MVP** on a physical Samsung Galaxy S21 with
 
 | Field | Value |
 |------|-------|
-| Date | |
+| Date | 2026-06-27 |
 | Device | Samsung Galaxy S21 |
 | Runtime | Expo Go |
-| Branch / commit | |
-| API URL | |
-| Expo URL | |
-| Tester | |
+| Branch / commit | `main` (post-`aa7bf33` local onboarding-fix retest, pre-commit) |
+| API URL | `http://192.168.100.158:3000/api/v1` |
+| Expo URL | `exp://192.168.100.158:8081` |
+| Tester | Mateo |
+
+## Recorded evidence — 2026-06-27 focused physical retest
+
+This focused retest was triggered by a release-critical OWNER sign-in blocker discovered at the start of the phone QA pass.
+
+### Fixed blocker
+
+- **Symptom on device**: OWNER sign-in showed _"a valid employee invitation is required to complete onboarding"_ before the app could load `/me/context`.
+- **Root cause**: backend onboarding reconciliation was rejecting already-local OWNER/BARBER users before `/me/context`.
+- **Durable fix**: `reconcileEmployeeInvitation(...)` now returns `ready` for:
+  - existing local OWNER users; and
+  - existing local BARBER users with an active employee membership when no invitation needs reconciling.
+
+### Physical retest result
+
+| Area | Result | Evidence |
+|------|--------|----------|
+| OWNER login | PASS | `mateogabrieldominguez@gmail.com` completed Clerk email-code sign-in and entered the app successfully. |
+| OWNER `/me/context` visible behavior | PASS | `QA Barbershop` loaded and the app entered OWNER context without the previous onboarding error. |
+| OWNER role/navigation | PASS | `Manage` tab is visible for OWNER on the Samsung Galaxy S21 physical device. |
+| BARBER login | PASS | `devmateodmnz@gmail.com` completed sign-in successfully. |
+| BARBER `/me/context` visible behavior | PASS | BARBER entered the app successfully with barber-scoped context. |
+| BARBER role restrictions | PASS | `Manage` is hidden for BARBER, confirming role-aware navigation on device. |
+
+### Scope note
+
+- This recorded evidence confirms the release-critical auth/onboarding blocker is fixed on the physical phone.
+- The broader checklist below remains the source of truth for the rest of the MVP pass; phases not explicitly marked in the table above still need full physical execution/evidence before calling the whole checklist complete.
 
 ## Roles / accounts to prepare
 
@@ -397,8 +425,8 @@ Use this checklist for the **current MVP** on a physical Samsung Galaxy S21 with
 
 ### Blocking issues
 
-- 
+- None from the focused 2026-06-27 OWNER/BARBER sign-in retest after the onboarding reconciliation fix.
 
 ### Non-blocking issues / UI debt
 
-- 
+- Full checklist completion is still pending beyond the focused auth/role-gating retest recorded above.

@@ -161,8 +161,8 @@ export type EmployeeInvitationCreateOutcome =
 export interface EmployeeInvitationReconciliationResult {
   outcome: 'ready' | 'reconciled' | 'already_reconciled';
   userId: string;
-  employeeId: string;
-  barbershopId: string;
+  employeeId: string | null;
+  barbershopId: string | null;
 }
 
 export interface Service {

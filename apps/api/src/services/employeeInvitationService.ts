@@ -52,12 +52,17 @@ interface CreateEmployeeInvitationResult {
 interface ReconcileEmployeeInvitationResult {
   outcome: 'ready' | 'reconciled' | 'already_reconciled';
   userId: string;
-  employeeId: string;
-  barbershopId: string;
+  employeeId: string | null;
+  barbershopId: string | null;
 }
 
 interface ReconcileOptions {
   clerkUserId: string;
+}
+
+interface ExistingReadyUserContext {
+  employeeId: string | null;
+  barbershopId: string | null;
 }
 
 function addDays(now: Date, days: number): Date {
@@ -666,32 +671,24 @@ function getVerifiedEmails(clerkUser: ClerkUserRecord): string[] {
 }
 
 async function resolveInvitationForReconcile(input: {
-  clerkUser: ClerkUserRecord;
   now: Date;
+  trustedInvitationId: string | null;
+  verifiedEmails: string[];
 }): Promise<EmployeeInvitation> {
-  const metadata = parseTrustedEmployeeInvitationMetadata(
-    input.clerkUser.publicMetadata
-  );
-  const verifiedEmails = getVerifiedEmails(input.clerkUser);
-
-  if (verifiedEmails.length === 0) {
-    throwOnboardingRequired('A verified email is required to complete employee onboarding');
-  }
-
   const invitations = await findReconciliationCandidates({
-    verifiedEmails,
-    trustedInvitationId: metadata?.employeeInvitationId ?? null,
+    verifiedEmails: input.verifiedEmails,
+    trustedInvitationId: input.trustedInvitationId,
     now: input.now,
   });
 
-  if (metadata?.employeeInvitationId) {
+  if (input.trustedInvitationId) {
     const invitation = invitations[0];
 
     if (!invitation) {
       throwOnboardingRequired();
     }
 
-    if (!verifiedEmails.includes(invitation.emailNormalized)) {
+    if (!input.verifiedEmails.includes(invitation.emailNormalized)) {
       throwOnboardingRequired('Verified Clerk email does not match the employee invitation');
     }
 
@@ -699,7 +696,7 @@ async function resolveInvitationForReconcile(input: {
   }
 
   const pending = invitations.filter(
-    (invitation) => invitation.status === 'PENDING' && verifiedEmails.includes(invitation.emailNormalized)
+    (invitation) => invitation.status === 'PENDING' && input.verifiedEmails.includes(invitation.emailNormalized)
   );
 
   if (pending.length === 0) {
@@ -987,14 +984,6 @@ export async function reconcileEmployeeInvitation(
     throwOnboardingRequired('A verified email is required to complete employee onboarding');
   }
 
-  const invitation = await resolveInvitationForReconcile({
-    clerkUser,
-    now,
-  });
-
-  assertInvitationStillValid(invitation, verifiedEmails, now);
-
-  const metadataRole = getClerkMetadataRole(clerkUser.publicMetadata);
   let existingLocalUser = await prisma.user.findUnique({
     where: { clerkUserId: options.clerkUserId },
   });
@@ -1003,7 +992,51 @@ export async function reconcileEmployeeInvitation(
     throwRoleNotEligible('Deactivated users are not eligible for employee invitation onboarding');
   }
 
-  if (existingLocalUser && (existingLocalUser.role === 'CLIENT' || existingLocalUser.role === 'OWNER')) {
+  const existingReadyContext = existingLocalUser
+    ? await resolveExistingReadyUserContext(existingLocalUser)
+    : null;
+
+  if (existingLocalUser?.role === 'OWNER') {
+    return {
+      outcome: 'ready',
+      userId: existingLocalUser.id,
+      employeeId: existingReadyContext?.employeeId ?? null,
+      barbershopId: existingReadyContext?.barbershopId ?? null,
+    };
+  }
+
+  const trustedInvitationId = parseTrustedEmployeeInvitationMetadata(
+    clerkUser.publicMetadata
+  )?.employeeInvitationId ?? null;
+
+  if (existingLocalUser?.role === 'BARBER' && existingReadyContext) {
+    const invitations = await findReconciliationCandidates({
+      verifiedEmails,
+      trustedInvitationId,
+      now,
+    });
+
+    if (invitations.length === 0) {
+      return {
+        outcome: 'ready',
+        userId: existingLocalUser.id,
+        employeeId: existingReadyContext.employeeId,
+        barbershopId: existingReadyContext.barbershopId,
+      };
+    }
+  }
+
+  const invitation = await resolveInvitationForReconcile({
+    now,
+    trustedInvitationId,
+    verifiedEmails,
+  });
+
+  assertInvitationStillValid(invitation, verifiedEmails, now);
+
+  const metadataRole = getClerkMetadataRole(clerkUser.publicMetadata);
+
+  if (existingLocalUser?.role === 'CLIENT') {
     throwRoleNotEligible();
   }
 
@@ -1093,4 +1126,51 @@ export async function reconcileEmployeeInvitation(
   }
 
   return result;
+}
+
+async function resolveExistingReadyUserContext(
+  user: User
+): Promise<ExistingReadyUserContext | null> {
+  if (user.role === 'OWNER') {
+    const ownedBarbershop = await prisma.barbershop.findFirst({
+      where: {
+        ownerId: user.id,
+        isActive: true,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    return {
+      employeeId: null,
+      barbershopId: ownedBarbershop?.id ?? null,
+    };
+  }
+
+  if (user.role === 'BARBER') {
+    const employee = await prisma.employee.findFirst({
+      where: {
+        userId: user.id,
+        isActive: true,
+        deletedAt: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        barbershopId: true,
+      },
+    });
+
+    if (!employee) {
+      return null;
+    }
+
+    return {
+      employeeId: employee.id,
+      barbershopId: employee.barbershopId,
+    };
+  }
+
+  return null;
 }

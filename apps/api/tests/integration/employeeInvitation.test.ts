@@ -560,6 +560,57 @@ describe('Employee invitation reconciliation', () => {
     expect(updatedInvitation.status).toBe('ACCEPTED');
   });
 
+  it('returns ready for an existing local OWNER without requiring an invitation', async () => {
+    vi.mocked(mockGateway.getUserById).mockResolvedValue(
+      mockClerkUser({
+        clerkUserId: fixtures.ownerUser.clerkUserId,
+        email: fixtures.ownerUser.email,
+      })
+    );
+
+    const res = await request(app)
+      .post('/api/v1/onboarding/employee-invitations/reconcile')
+      .set(authHeader(fixtures.ownerUser.clerkUserId))
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({
+      outcome: 'ready',
+      userId: fixtures.ownerUser.id,
+      employeeId: null,
+      barbershopId: null,
+    });
+    expect(mockGateway.updateUserPublicMetadata).not.toHaveBeenCalled();
+  });
+
+  it('returns ready for an existing local BARBER with an active employee membership even without an invitation', async () => {
+    await prisma.employee.create({
+      data: {
+        barbershopId: fixtures.shopA.id,
+        userId: fixtures.barberUser.id,
+      },
+    });
+
+    vi.mocked(mockGateway.getUserById).mockResolvedValue(
+      mockClerkUser({
+        clerkUserId: fixtures.barberUser.clerkUserId,
+        email: fixtures.barberUser.email,
+      })
+    );
+
+    const res = await request(app)
+      .post('/api/v1/onboarding/employee-invitations/reconcile')
+      .set(authHeader(fixtures.barberUser.clerkUserId))
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.outcome).toBe('ready');
+    expect(res.body.data.userId).toBe(fixtures.barberUser.id);
+    expect(res.body.data.employeeId).toBeTruthy();
+    expect(res.body.data.barbershopId).toBe(fixtures.shopA.id);
+    expect(mockGateway.updateUserPublicMetadata).not.toHaveBeenCalled();
+  });
+
   it('rejects existing local CLIENT users during reconciliation', async () => {
     const localClient = await prisma.user.create({
       data: {
