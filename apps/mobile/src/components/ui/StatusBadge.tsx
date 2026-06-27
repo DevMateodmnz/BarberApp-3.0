@@ -4,7 +4,10 @@
 import { Text, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { tokens } from '@/theme/index.js';
 import type { AppointmentStatus } from '@/lib/types.js';
-import { getAppointmentStatusLabel } from '@/i18n/index.js';
+import {
+  getAppointmentStatusLabel,
+  getEmployeeInvitationStatusLabel,
+} from '@/i18n/index.js';
 import { getStatusLabel } from '@/i18n/helpers.js';
 
 interface StatusBadgeProps {
@@ -19,7 +22,14 @@ interface StatusConfig {
 }
 
 const STATUS_CONFIG: Record<
-  AppointmentStatus | 'ACTIVE' | 'INACTIVE' | 'UNKNOWN',
+  | AppointmentStatus
+  | 'ACTIVE'
+  | 'INACTIVE'
+  | 'ACCEPTED'
+  | 'REVOKED'
+  | 'EXPIRED'
+  | 'DELIVERY_FAILED'
+  | 'UNKNOWN',
   StatusConfig
 > = {
   PENDING: { ...tokens.states.pending },
@@ -30,6 +40,13 @@ const STATUS_CONFIG: Record<
   NO_SHOW: { ...tokens.states.noShow },
   ACTIVE: { ...tokens.states.active },
   INACTIVE: { ...tokens.states.inactive },
+  ACCEPTED: { ...tokens.states.completed },
+  REVOKED: { ...tokens.states.cancelled },
+  EXPIRED: { ...tokens.states.noShow },
+  DELIVERY_FAILED: {
+    background: tokens.colors.surfaceVariant,
+    text: tokens.colors.warning,
+  },
   UNKNOWN: {
     background: tokens.colors.surfaceVariant,
     text: tokens.colors.textSecondary,
@@ -41,6 +58,10 @@ function resolveStatusConfig(status: string): StatusConfig {
     | AppointmentStatus
     | 'ACTIVE'
     | 'INACTIVE'
+    | 'ACCEPTED'
+    | 'REVOKED'
+    | 'EXPIRED'
+    | 'DELIVERY_FAILED'
     | 'UNKNOWN';
   return STATUS_CONFIG[key] ?? STATUS_CONFIG.UNKNOWN;
 }
@@ -51,6 +72,8 @@ export function StatusBadge({ testID, status, style }: StatusBadgeProps) {
   const label =
     normalized === 'ACTIVE' || normalized === 'INACTIVE'
       ? getStatusLabel(normalized)
+      : ['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED', 'DELIVERY_FAILED'].includes(normalized)
+        ? getEmployeeInvitationStatusLabel(normalized)
       : getAppointmentStatusLabel(normalized);
 
   return (

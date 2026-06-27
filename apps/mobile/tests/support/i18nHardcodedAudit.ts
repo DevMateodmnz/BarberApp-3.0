@@ -50,6 +50,11 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Time-format mask placeholder shared across locales.',
   },
   {
+    file: 'app/(tabs)/employees.tsx',
+    literal: '2-digit',
+    reason: 'Intl date-format option value for localized invitation timestamps, not interface copy.',
+  },
+  {
     file: 'src/i18n/errors.ts',
     literal: 'User not found',
     reason: 'Legacy backend message matcher used only for structured localization fallback.',
