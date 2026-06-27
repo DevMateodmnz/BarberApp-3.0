@@ -43,6 +43,7 @@ beforeAll(async () => {
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
   await prisma.service.deleteMany();
+  await prisma.employeeInvitation.deleteMany();
   await prisma.employee.deleteMany();
   await prisma.barbershop.deleteMany();
   await prisma.user.deleteMany();
@@ -174,7 +175,8 @@ function addEmployeeByEmail(shopId: string, email: string, asClerkId: string) {
 
 describe('POST /api/v1/barbershops/:barbershopId/employees', () => {
   beforeEach(async () => {
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
   });
   it('OWNER adds employee successfully — 201', async () => {
     const res = await addEmployee(
@@ -475,7 +477,8 @@ describe('POST /api/v1/barbershops/:barbershopId/employees/:employeeId/services'
 
   beforeEach(async () => {
     await prisma.employeeService.deleteMany();
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
     employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
   });
 
@@ -629,7 +632,8 @@ describe('DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/service
 
   beforeEach(async () => {
     await prisma.employeeService.deleteMany();
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
     employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
   });
 
@@ -726,7 +730,8 @@ describe('Appointment booking with assigned/unassigned services', () => {
     await prisma.photo.deleteMany();
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
     employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
     // Set up working hours so appointments can be booked (idempotent)
     await prisma.workingHours.createMany({
@@ -790,7 +795,8 @@ describe('Appointment booking with assigned/unassigned services', () => {
 describe('GET /api/v1/barbershops/:barbershopId/employees', () => {
   beforeEach(async () => {
     await prisma.employeeService.deleteMany();
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
   });
 
   function listEmployees(shopId: string, asClerkId: string) {
@@ -891,7 +897,8 @@ describe('DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId', () =>
     await prisma.photo.deleteMany();
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
     employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
     // Set up working hours for booking tests
     await prisma.workingHours.createMany({
@@ -1149,7 +1156,8 @@ describe('PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactiva
     await prisma.photo.deleteMany();
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
   });
 
   it('OWNER reactivates deactivated employee successfully — 200', async () => {
@@ -1371,7 +1379,8 @@ describe('GET /api/v1/barbershops/:barbershopId/employees/:employeeId/services',
 
   beforeEach(async () => {
     await prisma.employeeService.deleteMany();
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
     employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
   });
 
@@ -1549,7 +1558,8 @@ describe('GET /api/v1/barbershops/:barbershopId/me/services', () => {
 
   beforeEach(async () => {
     await prisma.employeeService.deleteMany();
-    await prisma.employee.deleteMany();
+    await prisma.employeeInvitation.deleteMany();
+  await prisma.employee.deleteMany();
     employeeA = await createEmployeeInDb(fixtures.shopA.id, fixtures.barberUser.id);
   });
 

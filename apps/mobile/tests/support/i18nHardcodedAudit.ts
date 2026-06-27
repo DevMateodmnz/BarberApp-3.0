@@ -50,6 +50,11 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Time-format mask placeholder shared across locales.',
   },
   {
+    file: 'app/(tabs)/employees.tsx',
+    literal: '2-digit',
+    reason: 'Intl date-format option value for localized invitation timestamps, not interface copy.',
+  },
+  {
     file: 'src/i18n/errors.ts',
     literal: 'User not found',
     reason: 'Legacy backend message matcher used only for structured localization fallback.',
@@ -140,6 +145,21 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Generic network-error substring matcher for semantic appointment-creation error normalization.',
   },
   {
+    file: 'src/lib/employeeInvitationDomain.ts',
+    literal: 'network error',
+    reason: 'Generic network-error substring matcher for semantic employee-invitation error normalization.',
+  },
+  {
+    file: 'src/lib/employeeInvitationDomain.ts',
+    literal: 'timeout',
+    reason: 'Generic network-error substring matcher for semantic employee-invitation error normalization.',
+  },
+  {
+    file: 'src/lib/employeeInvitationDomain.ts',
+    literal: 'failed to fetch',
+    reason: 'Generic network-error substring matcher for semantic employee-invitation error normalization.',
+  },
+  {
     file: 'src/lib/appointments.ts',
     literal: 'Failed to fetch appointment availability',
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
@@ -147,6 +167,31 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
   {
     file: 'src/lib/appointments.ts',
     literal: 'Failed to create appointment',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeInvitations.ts',
+    literal: 'Failed to create employee invitation',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeInvitations.ts',
+    literal: 'Failed to fetch employee invitations',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeInvitations.ts',
+    literal: 'Failed to resend employee invitation',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeInvitations.ts',
+    literal: 'Failed to revoke employee invitation',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeInvitations.ts',
+    literal: 'Failed to reconcile employee invitation onboarding',
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
   },
 ] as const;

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   EmployeesScreenView,
+  type EmployeeInvitationRowViewModel,
   type EmployeeRowViewModel,
   type EmployeeServiceActionViewModel,
 } from '@/components/EmployeesScreenView.js';
@@ -83,6 +84,36 @@ function makeServiceActions(
   return base.map((item, index) => ({ ...item, ...overrides[index] }));
 }
 
+function makeInvitationRows(
+  overrides: Partial<EmployeeInvitationRowViewModel>[] = [],
+): EmployeeInvitationRowViewModel[] {
+  const base: EmployeeInvitationRowViewModel[] = [
+    {
+      id: 'inv-1',
+      email: 'barber@example.com',
+      status: 'PENDING',
+      expiresAtLabel: 'Expires: Jul 1, 2026',
+      lastSentAtLabel: 'Last sent: Jun 27, 2026, 9:00 AM',
+      resendCountLabel: '2 resends',
+      canResend: true,
+      canRevoke: true,
+      isResending: false,
+      isRevoking: false,
+      isHighlighted: true,
+      resendActionLabel: 'Resend',
+      resendLoadingLabel: 'Resending…',
+      resendAccessibilityLabel: 'Resend invitation for barber@example.com',
+      revokeActionLabel: 'Revoke',
+      revokeLoadingLabel: 'Revoking…',
+      revokeAccessibilityLabel: 'Revoke invitation for barber@example.com',
+      onResend: vi.fn(),
+      onRevoke: vi.fn(),
+    },
+  ];
+
+  return base.map((item, index) => ({ ...item, ...overrides[index] }));
+}
+
 function makeEmployeeRows(
   overrides: Partial<EmployeeRowViewModel>[] = [],
 ): EmployeeRowViewModel[] {
@@ -132,19 +163,26 @@ function renderView(overrides: Partial<Parameters<typeof EmployeesScreenView>[0]
     isContextLoading: false,
     contextError: null,
     isOwner: true,
+    isRefreshing: false,
     isEmployeesLoading: false,
     employeesError: null,
-    showAddForm: false,
-    newUserId: '',
-    createError: null,
-    isCreating: false,
+    showInvitationForm: false,
+    invitationEmail: '',
+    invitationEmailError: null,
+    invitationFormError: null,
+    isSubmittingInvitation: false,
+    invitationRows: [],
+    invitationListStatus: 'empty',
+    invitationListError: null,
+    invitationActionError: null,
     employeeRows: makeEmployeeRows(),
     onRefresh: vi.fn(),
     onBack: vi.fn(),
-    onShowAddForm: vi.fn(),
-    onCancelAddForm: vi.fn(),
-    onNewUserIdChange: vi.fn(),
-    onSubmitAddForm: vi.fn(),
+    onShowInvitationForm: vi.fn(),
+    onCancelInvitationForm: vi.fn(),
+    onInvitationEmailChange: vi.fn(),
+    onSubmitInvitationForm: vi.fn(),
+    onRetryInvitationList: vi.fn(),
     ...overrides,
   });
 }
@@ -172,69 +210,140 @@ describe('EmployeesScreenView', () => {
     const tree = renderView({ context: BARBER_CONTEXT, isOwner: false, employeeRows: [] });
     expect(findByTestId(tree, 'employees-blocked')).toBeDefined();
     expect(findByText(tree, 'Only owners can manage the employee roster.')).toBeDefined();
+    expect(queryByTestId(tree, 'employees-invite-button')).toBeNull();
   });
 
   it('renders the client blocked state', () => {
     const tree = renderView({ context: CLIENT_CONTEXT, isOwner: false, employeeRows: [] });
     expect(findByTestId(tree, 'employees-blocked')).toBeDefined();
     expect(findByText(tree, 'Only owners can manage the employee roster.')).toBeDefined();
+    expect(queryByTestId(tree, 'employees-invite-button')).toBeNull();
   });
 
-  it('renders the add employee button and back action', () => {
-    const onShowAddForm = vi.fn();
+  it('renders the invite barber button and back action', () => {
+    const onShowInvitationForm = vi.fn();
     const onBack = vi.fn();
-    const tree = renderView({ onShowAddForm, onBack });
+    const tree = renderView({ onShowInvitationForm, onBack });
 
-    press(findByTestId(tree, 'employees-add-button'));
-    expect(onShowAddForm).toHaveBeenCalledTimes(1);
+    press(findByTestId(tree, 'employees-invite-button'));
+    expect(onShowInvitationForm).toHaveBeenCalledTimes(1);
 
     press(findByTestId(tree, 'employees-back'));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the add employee form, input, and callbacks', () => {
-    const onNewUserIdChange = vi.fn();
-    const onSubmitAddForm = vi.fn();
-    const onCancelAddForm = vi.fn();
+  it('renders the invite form, email keyboard, validation, and callbacks', () => {
+    const onInvitationEmailChange = vi.fn();
+    const onSubmitInvitationForm = vi.fn();
+    const onCancelInvitationForm = vi.fn();
     const tree = renderView({
-      showAddForm: true,
-      newUserId: 'barber@example.com',
-      createError: 'Email or User ID is required.',
-      onNewUserIdChange,
-      onSubmitAddForm,
-      onCancelAddForm,
+      showInvitationForm: true,
+      invitationEmail: 'barber@example.com',
+      invitationEmailError: 'Enter a valid email address.',
+      invitationFormError: 'This account cannot be invited as a barber in this MVP.',
+      onInvitationEmailChange,
+      onSubmitInvitationForm,
+      onCancelInvitationForm,
     });
 
-    expect(findByTestId(tree, 'employees-add-form')).toBeDefined();
-    expect(findByTestId(tree, 'employees-add-error')).toBeDefined();
-    expect(findByText(tree, 'Email or User ID is required.')).toBeDefined();
+    expect(findByTestId(tree, 'employees-invite-form')).toBeDefined();
+    expect(findByTestId(tree, 'employees-invite-error')).toBeDefined();
+    expect(findByText(tree, 'Enter a valid email address.')).toBeDefined();
+    expect(findByText(tree, 'This account cannot be invited as a barber in this MVP.')).toBeDefined();
 
-    const input = findByDisplayName(findByTestId(tree, 'employees-add-userid'), 'TextInput');
-    expect((input as { props: { value: string } }).props.value).toBe('barber@example.com');
+    const input = findByDisplayName(findByTestId(tree, 'employees-invite-email'), 'TextInput');
+    expect((input as { props: { value: string; keyboardType: string } }).props.value).toBe(
+      'barber@example.com',
+    );
+    expect((input as { props: { keyboardType: string } }).props.keyboardType).toBe('email-address');
     changeText(input, 'new@example.com');
-    expect(onNewUserIdChange).toHaveBeenCalledWith('new@example.com');
+    expect(onInvitationEmailChange).toHaveBeenCalledWith('new@example.com');
 
-    press(findByTestId(tree, 'employees-add-submit'));
-    expect(onSubmitAddForm).toHaveBeenCalledTimes(1);
+    press(findByTestId(tree, 'employees-invite-submit'));
+    expect(onSubmitInvitationForm).toHaveBeenCalledTimes(1);
 
-    press(findByTestId(tree, 'employees-add-cancel'));
-    expect(onCancelAddForm).toHaveBeenCalledTimes(1);
+    press(findByTestId(tree, 'employees-invite-cancel'));
+    expect(onCancelInvitationForm).toHaveBeenCalledTimes(1);
   });
 
-  it('disables the add form buttons while creating', () => {
-    const onSubmitAddForm = vi.fn();
-    const onCancelAddForm = vi.fn();
+  it('disables the invitation form buttons while submitting', () => {
+    const onSubmitInvitationForm = vi.fn();
+    const onCancelInvitationForm = vi.fn();
     const tree = renderView({
-      showAddForm: true,
-      isCreating: true,
-      onSubmitAddForm,
-      onCancelAddForm,
+      showInvitationForm: true,
+      isSubmittingInvitation: true,
+      onSubmitInvitationForm,
+      onCancelInvitationForm,
     });
 
-    pressButton(tree, 'employees-add-submit');
-    pressButton(tree, 'employees-add-cancel');
-    expect(onSubmitAddForm).not.toHaveBeenCalled();
-    expect(onCancelAddForm).not.toHaveBeenCalled();
+    pressButton(tree, 'employees-invite-submit');
+    pressButton(tree, 'employees-invite-cancel');
+    expect(onSubmitInvitationForm).not.toHaveBeenCalled();
+    expect(onCancelInvitationForm).not.toHaveBeenCalled();
+  });
+
+  it('renders invitation loading, error, empty, and retry states', () => {
+    const loadingTree = renderView({
+      employeeRows: [],
+      invitationListStatus: 'loading',
+    });
+    expect(findByTestId(loadingTree, 'employees-invitations-loading')).toBeDefined();
+    expect(findByText(loadingTree, 'Loading invitations…')).toBeDefined();
+
+    const onRetryInvitationList = vi.fn();
+    const errorTree = renderView({
+      employeeRows: [],
+      invitationListStatus: 'error',
+      invitationListError: 'Network error. Check your connection and try again.',
+      onRetryInvitationList,
+    });
+    expect(findByTestId(errorTree, 'employees-invitations-error')).toBeDefined();
+    press(findByTestId(errorTree, 'employees-invitations-retry'));
+    expect(onRetryInvitationList).toHaveBeenCalledTimes(1);
+
+    const emptyTree = renderView({ employeeRows: [], invitationListStatus: 'empty' });
+    expect(findByTestId(emptyTree, 'employees-invitations-empty')).toBeDefined();
+    expect(findByText(emptyTree, 'No pending invitations')).toBeDefined();
+  });
+
+  it('renders invitation rows, long emails, row action callbacks, and hides accepted actions', () => {
+    const onResend = vi.fn();
+    const onRevoke = vi.fn();
+    const tree = renderView({
+      invitationListStatus: 'success',
+      invitationRows: [
+        makeInvitationRows([
+          {
+            email: 'very.long.employee.email.address.for.mobile.layout@example.com',
+            onResend,
+            onRevoke,
+          },
+        ])[0]!,
+        makeInvitationRows([
+          {
+            id: 'inv-2',
+            email: 'accepted@example.com',
+            status: 'ACCEPTED',
+            canResend: false,
+            canRevoke: false,
+            isHighlighted: false,
+          },
+        ])[0]!,
+      ],
+    });
+
+    expect(findByText(tree, 'very.long.employee.email.address.for.mobile.layout@example.com')).toBeDefined();
+    expect(findByText(tree, 'Pending')).toBeDefined();
+    expect(findByText(tree, 'Accepted')).toBeDefined();
+
+    press(findByTestId(tree, 'employee-invitation-resend-inv-1'));
+    expect(onResend).toHaveBeenCalledTimes(1);
+
+    press(findByTestId(tree, 'employee-invitation-revoke-inv-1'));
+    expect(onRevoke).toHaveBeenCalledTimes(1);
+
+    expect(queryByTestId(tree, 'employee-invitation-resend-inv-2')).toBeNull();
+    expect(queryByTestId(tree, 'employee-invitation-revoke-inv-2')).toBeNull();
   });
 
   it('renders employee rows with active and inactive statuses', () => {

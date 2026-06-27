@@ -36,6 +36,14 @@ enum PaymentMethod {
   OTHER
 }
 
+enum EmployeeInvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+  DELIVERY_FAILED
+}
+
 // ============================================
 // USER
 // ============================================
@@ -53,11 +61,13 @@ model User {
   deletedAt   DateTime? @map("deleted_at")
 
   // Relations
-  ownedBarbershops   Barbershop[]  @relation("BarbershopOwner")
-  employees          Employee[]
-  clientAppointments Appointment[] @relation("AppointmentClient")
-  uploadedPhotos     Photo[]       @relation("PhotoUploader")
-  clientPhotos       Photo[]       @relation("PhotoClient")
+  ownedBarbershops    Barbershop[]         @relation("BarbershopOwner")
+  employees           Employee[]
+  clientAppointments  Appointment[]        @relation("AppointmentClient")
+  uploadedPhotos      Photo[]              @relation("PhotoUploader")
+  clientPhotos        Photo[]              @relation("PhotoClient")
+  sentInvitations     EmployeeInvitation[] @relation("EmployeeInvitationInvitedBy")
+  acceptedInvitations EmployeeInvitation[] @relation("EmployeeInvitationUser")
 
   @@map("users")
 }
@@ -81,12 +91,13 @@ model Barbershop {
   deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  owner          User            @relation("BarbershopOwner", fields: [ownerId], references: [id])
-  employees      Employee[]
-  services       Service[]
-  appointments   Appointment[]
-  workingHours   WorkingHours[]
-  serviceRecords ServiceRecord[]
+  owner               User                 @relation("BarbershopOwner", fields: [ownerId], references: [id])
+  employees           Employee[]
+  services            Service[]
+  appointments        Appointment[]
+  workingHours        WorkingHours[]
+  serviceRecords      ServiceRecord[]
+  employeeInvitations EmployeeInvitation[]
 
   // Indexes
   @@index([ownerId])
@@ -110,11 +121,12 @@ model Employee {
   deletedAt    DateTime? @map("deleted_at")
 
   // Relations
-  barbershop       Barbershop        @relation(fields: [barbershopId], references: [id])
-  user             User              @relation(fields: [userId], references: [id])
-  employeeServices EmployeeService[]
-  appointments     Appointment[]
-  serviceRecords   ServiceRecord[]
+  barbershop          Barbershop           @relation(fields: [barbershopId], references: [id])
+  user                User                 @relation(fields: [userId], references: [id])
+  employeeServices    EmployeeService[]
+  appointments        Appointment[]
+  serviceRecords      ServiceRecord[]
+  acceptedInvitations EmployeeInvitation[] @relation("EmployeeInvitationEmployee")
 
   // Constraint: one employee record per user per barbershop
   @@unique([barbershopId, userId])
@@ -123,6 +135,45 @@ model Employee {
   @@index([userId])
   @@index([barbershopId, isActive])
   @@map("employees")
+}
+
+// ============================================
+// EMPLOYEE INVITATION
+// ============================================
+
+/// EmployeeInvitation model - tracks the invitation lifecycle for BARBER onboarding
+model EmployeeInvitation {
+  id                  String                   @id @default(cuid())
+  barbershopId        String                   @map("barbershop_id")
+  invitedByUserId     String                   @map("invited_by_user_id")
+  emailNormalized     String                   @map("email_normalized")
+  invitedRole         UserRole                 @default(BARBER) @map("invited_role")
+  status              EmployeeInvitationStatus @default(PENDING)
+  clerkInvitationId   String?                  @unique @map("clerk_invitation_id")
+  expiresAt           DateTime?                @map("expires_at")
+  lastSentAt          DateTime?                @map("last_sent_at")
+  resendCount         Int                      @default(0) @map("resend_count")
+  deliveryFailureCode String?                  @map("delivery_failure_code")
+  acceptedAt          DateTime?                @map("accepted_at")
+  revokedAt           DateTime?                @map("revoked_at")
+  userId              String?                  @map("user_id")
+  employeeId          String?                  @map("employee_id")
+  createdAt           DateTime                 @default(now()) @map("created_at")
+  updatedAt           DateTime                 @updatedAt @map("updated_at")
+
+  // Relations
+  barbershop    Barbershop @relation(fields: [barbershopId], references: [id])
+  invitedByUser User       @relation("EmployeeInvitationInvitedBy", fields: [invitedByUserId], references: [id])
+  user          User?      @relation("EmployeeInvitationUser", fields: [userId], references: [id], onDelete: SetNull)
+  employee      Employee?  @relation("EmployeeInvitationEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@unique([barbershopId, emailNormalized])
+  @@index([barbershopId])
+  @@index([invitedByUserId])
+  @@index([userId])
+  @@index([employeeId])
+  @@index([barbershopId, status])
+  @@map("employee_invitations")
 }
 
 // ============================================

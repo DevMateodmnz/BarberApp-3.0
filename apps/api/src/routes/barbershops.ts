@@ -22,11 +22,14 @@
  * - GET    /api/v1/barbershops/:barbershopId/employees/:employeeId/service-records  OWNER, BARBER (list employee records)
  */
 import { Router, Request, Response, NextFunction } from 'express';
+import { readApiRuntimeConfig } from '../config/runtime.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { requireBarbershopAccess } from '../middleware/tenant.js';
+import { createRateLimiter } from '../middleware/rateLimit.js';
 import { validateBody } from '../middleware/validate.js';
 import { CreateEmployeeSchema } from '../schemas/employee.js';
+import { CreateEmployeeInvitationSchema } from '../schemas/employeeInvitation.js';
 import { AssignServiceSchema } from '../schemas/employeeService.js';
 import {
   AppointmentAvailabilityQuerySchema,
@@ -34,6 +37,7 @@ import {
 } from '../schemas/appointment.js';
 import { CreateServiceSchema, UpdateServiceSchema } from '../schemas/service.js';
 import * as employeeService from '../services/employeeService.js';
+import * as employeeInvitationService from '../services/employeeInvitationService.js';
 import * as serviceService from '../services/serviceService.js';
 import * as appointmentService from '../services/appointmentService.js';
 import * as workingHoursService from '../services/workingHoursService.js';
@@ -42,6 +46,7 @@ import { CreateServiceRecordSchema, ServiceRecordDateSchema, SummaryPeriodSchema
 import { UpdateWorkingHoursSchema } from '../schemas/workingHours.js';
 import { BadRequestError } from '../lib/errors.js';
 import { ValidationError } from '../lib/errors.js';
+import { normalizeEmail } from '../lib/email.js';
 
 /** Extracts barbershopId route param with validation */
 function paramBarbershopId(req: Request): string {
@@ -110,6 +115,29 @@ function parseAvailabilityQuery(
 }
 
 const router = Router();
+const runtimeConfig = readApiRuntimeConfig(process.env);
+const employeeInvitationCreateRateLimit = createRateLimiter(
+  runtimeConfig.rateLimit,
+  {
+    code: 'EMPLOYEE_INVITATION_RATE_LIMITED',
+    message: 'Too many employee invitation attempts, please try again later',
+    max: Math.min(runtimeConfig.rateLimit.max, 5),
+    keyGenerator: (req) =>
+      `${req.userId}:${req.params.barbershopId ?? ''}:${normalizeEmail(
+        typeof req.body?.email === 'string' ? req.body.email : ''
+      )}`,
+  }
+);
+const employeeInvitationResendRateLimit = createRateLimiter(
+  runtimeConfig.rateLimit,
+  {
+    code: 'EMPLOYEE_INVITATION_RATE_LIMITED',
+    message: 'Too many employee invitation resend attempts, please try again later',
+    max: Math.min(runtimeConfig.rateLimit.max, 5),
+    keyGenerator: (req) =>
+      `${req.userId}:${req.params.barbershopId ?? ''}:${req.params.invitationId ?? ''}`,
+  }
+);
 
 // All barbershop routes require authentication
 router.use(requireAuth);
@@ -150,6 +178,100 @@ router.post(
         req.body
       );
       res.status(201).json({ success: true, data: employee });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/employee-invitations
+// Create employee immediately for local BARBER, otherwise create invitation (OWNER only)
+// ============================================
+router.post(
+  '/:barbershopId/employee-invitations',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  employeeInvitationCreateRateLimit,
+  validateBody(CreateEmployeeInvitationSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await employeeInvitationService.createEmployeeInvitation(
+        paramBarbershopId(req),
+        req.userId,
+        req.body
+      );
+
+      const statusCode =
+        result.outcome === 'employee_created' || result.outcome === 'invitation_created'
+          ? 201
+          : 200;
+
+      res.status(statusCode).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employee-invitations
+// List local invitation lifecycle rows (OWNER only)
+// ============================================
+router.get(
+  '/:barbershopId/employee-invitations',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const invitations = await employeeInvitationService.listEmployeeInvitations(
+        paramBarbershopId(req)
+      );
+      res.json({ success: true, data: invitations });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/employee-invitations/:invitationId/resend
+// Resend or retry an employee invitation (OWNER only)
+// ============================================
+router.post(
+  '/:barbershopId/employee-invitations/:invitationId/resend',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  employeeInvitationResendRateLimit,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const invitation = await employeeInvitationService.resendEmployeeInvitation({
+        barbershopId: paramBarbershopId(req),
+        invitationId: req.params.invitationId ?? '',
+        invitedByUserId: req.userId,
+      });
+      res.json({ success: true, data: invitation });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// DELETE /api/v1/barbershops/:barbershopId/employee-invitations/:invitationId
+// Revoke an employee invitation (OWNER only)
+// ============================================
+router.delete(
+  '/:barbershopId/employee-invitations/:invitationId',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const invitation = await employeeInvitationService.revokeEmployeeInvitation({
+        barbershopId: paramBarbershopId(req),
+        invitationId: req.params.invitationId ?? '',
+      });
+      res.json({ success: true, data: invitation });
     } catch (error) {
       next(error);
     }

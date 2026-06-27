@@ -73,6 +73,19 @@ export function getAppointmentTransitionLabel(status: string): string {
   }
 }
 
+export function getEmployeeInvitationStatusLabel(status: string): string {
+  switch (status) {
+    case 'PENDING':
+    case 'ACCEPTED':
+    case 'REVOKED':
+    case 'EXPIRED':
+    case 'DELIVERY_FAILED':
+      return t(`employees.invitationStatuses.${status}`);
+    default:
+      return t('common.states.unknown');
+  }
+}
+
 export function getLocalizedLanguageLabel(locale: LocalePreference): string {
   if (locale === SYSTEM_LOCALE_PREFERENCE) {
     return t('languages.system');

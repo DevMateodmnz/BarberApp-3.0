@@ -362,6 +362,10 @@ describe('StatusBadge', () => {
     ['COMPLETED', 'Completed'],
     ['CANCELLED', 'Cancelled'],
     ['NO_SHOW', 'No Show'],
+    ['ACCEPTED', 'Accepted'],
+    ['REVOKED', 'Revoked'],
+    ['EXPIRED', 'Expired'],
+    ['DELIVERY_FAILED', 'Delivery failed'],
   ])('renders readable label for %s', (status, expectedLabel) => {
     const tree = StatusBadge({ testID: `badge-${status}`, status });
     expect(findByTestId(tree, `badge-${status}`)).toBeDefined();

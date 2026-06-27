@@ -1,13 +1,22 @@
 # Employee Onboarding — Design Investigation
 
 Date: 2026-06-08 · Based on codebase inspection through PR-062A (fa2c44c).
-**Status: Option A (Email Lookup) implemented in PR-065A (8292af2). Option B (Clerk Invitation) remains as future work.**
+**Status: Option A (Email Lookup) was implemented in PR-065A (8292af2). Option B (Clerk Invitation) is now implemented on `feat/employee-invitation-onboarding` through `6c8e9e5`, `56bb6de`, and `7feb09b`, and Batch 4 accepted it for merge review on 2026-06-27.**
 
 ## Purpose
 
 The current employee add flow requires the OWNER to know and paste a raw Clerk user ID (`user_<clerk-id>...`). This document investigates options for improving this UX toward invite-by-email or user lookup, assessing security, complexity, and MVP value.
 
-**Update (PR-065A)**: Email lookup is now implemented. OWNERs can add employees by email (`barber@shop.com`) in addition to userId. The remaining gap is "user doesn't exist yet" — solved by Option B (Clerk invitation, not yet implemented).
+**Update (PR-065A)**: Email lookup is now implemented. OWNERs can add employees by email (`barber@shop.com`) in addition to userId.
+
+**Update (Employee Invitation Onboarding)**: the "user doesn't exist yet" gap is now covered by the invitation flow. OWNERs can create a pending invitation by email, duplicate pending creates are idempotent, resend revokes-and-recreates the provider invitation while preserving the local row, revoke preserves local history, and accepted invitees reconcile into local BARBER user/employee records before `/me/context`.
+
+**Current QA classification (2026-06-27)**:
+- Accepted for merge review / MVP continuation
+- Automated validation passed at the accepted baseline: API **441/441**, Mobile **593/593**
+- Live Clerk/provider/API reconciliation behavior was validated successfully
+- Literal inbox receipt, full browser UI driving, and full physical mobile tap-through remained limited from the CLI environment
+- Live webhook-specific verification remained limited locally because `CLERK_WEBHOOK_SECRET` was missing
 
 ---
 

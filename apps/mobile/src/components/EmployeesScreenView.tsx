@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/index.js';
 import { getRoleLabel } from '@/i18n/index.js';
 import { tokens } from '@/theme/index.js';
+import type { EmployeeInvitationLoadStatus } from '@/lib/employeeInvitationDomain.js';
 import type { CurrentUserContext } from '@/lib/types.js';
 
 export interface EmployeeServiceActionViewModel {
@@ -45,24 +46,178 @@ export interface EmployeeRowViewModel {
   availableServices: EmployeeServiceActionViewModel[];
 }
 
+export interface EmployeeInvitationRowViewModel {
+  id: string;
+  email: string;
+  status: string;
+  expiresAtLabel: string | null;
+  lastSentAtLabel: string | null;
+  resendCountLabel: string | null;
+  canResend: boolean;
+  canRevoke: boolean;
+  isResending: boolean;
+  isRevoking: boolean;
+  isHighlighted: boolean;
+  resendActionLabel: string;
+  resendLoadingLabel: string;
+  resendAccessibilityLabel: string;
+  revokeActionLabel: string;
+  revokeLoadingLabel: string;
+  revokeAccessibilityLabel: string;
+  onResend: () => void;
+  onRevoke: () => void;
+}
+
 export interface EmployeesScreenViewProps {
   context: CurrentUserContext | null;
   isContextLoading: boolean;
   contextError: string | null;
   isOwner: boolean;
+  isRefreshing: boolean;
   isEmployeesLoading: boolean;
   employeesError: string | null;
-  showAddForm: boolean;
-  newUserId: string;
-  createError: string | null;
-  isCreating: boolean;
+  showInvitationForm: boolean;
+  invitationEmail: string;
+  invitationEmailError: string | null;
+  invitationFormError: string | null;
+  isSubmittingInvitation: boolean;
+  invitationRows: EmployeeInvitationRowViewModel[];
+  invitationListStatus: EmployeeInvitationLoadStatus;
+  invitationListError: string | null;
+  invitationActionError: string | null;
   employeeRows: EmployeeRowViewModel[];
   onRefresh: () => void;
   onBack: () => void;
-  onShowAddForm: () => void;
-  onCancelAddForm: () => void;
-  onNewUserIdChange: (value: string) => void;
-  onSubmitAddForm: () => void;
+  onShowInvitationForm: () => void;
+  onCancelInvitationForm: () => void;
+  onInvitationEmailChange: (value: string) => void;
+  onSubmitInvitationForm: () => void;
+  onRetryInvitationList: () => void;
+}
+
+function renderInvitationListState(
+  status: EmployeeInvitationLoadStatus,
+  rows: EmployeeInvitationRowViewModel[],
+  listError: string | null,
+  actionError: string | null,
+  onRetry: () => void,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  if (status === 'loading') {
+    return (
+      <View style={styles.invitationStateContent} testID="employees-invitations-loading">
+        <ActivityIndicator size="small" color={tokens.colors.primary} />
+        <Text style={styles.stateText}>{t('employees.invitationSection.loading')}</Text>
+      </View>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <View style={styles.invitationStateContent} testID="employees-invitations-error">
+        <Text style={styles.errorText}>{listError ?? t('errors.unknownApi')}</Text>
+        <AppButton
+          testID="employees-invitations-retry"
+          title={t('employees.invitationSection.retry')}
+          variant="secondary"
+          onPress={onRetry}
+        />
+      </View>
+    );
+  }
+
+  if ((status === 'empty' || (status === 'success' && rows.length === 0))) {
+    return (
+      <EmptyState
+        testID="employees-invitations-empty"
+        title={t('employees.invitationSection.emptyTitle')}
+        message={t('employees.invitationSection.emptyMessage')}
+      />
+    );
+  }
+
+  return (
+    <View style={styles.invitationListContent}>
+      {actionError && (
+        <Text style={styles.errorText} testID="employees-invitations-action-error">
+          {actionError}
+        </Text>
+      )}
+
+      {rows.map((invitation) => (
+        <AppCard
+          key={invitation.id}
+          testID={`employee-invitation-${invitation.id}`}
+          variant="outlined"
+          style={[
+            styles.invitationCard,
+            invitation.isHighlighted && styles.invitationCardHighlighted,
+          ]}
+        >
+          <ListItem
+            title={invitation.email}
+            subtitle={invitation.lastSentAtLabel ?? invitation.expiresAtLabel ?? undefined}
+            trailing={<StatusBadge status={invitation.status} />}
+          />
+
+          <View style={styles.invitationMetaList}>
+            {invitation.expiresAtLabel && (
+              <Text style={styles.invitationMetaText}>{invitation.expiresAtLabel}</Text>
+            )}
+            {invitation.lastSentAtLabel && (
+              <Text style={styles.invitationMetaText}>{invitation.lastSentAtLabel}</Text>
+            )}
+            {invitation.resendCountLabel && (
+              <Text style={styles.invitationMetaText}>{invitation.resendCountLabel}</Text>
+            )}
+          </View>
+
+          {(invitation.canResend || invitation.canRevoke) && (
+            <ActionRow
+              label={t('employees.invitationSection.actionsLabel')}
+              style={styles.actionsRow}
+            >
+              {invitation.canResend && (
+                <AppButton
+                  testID={`employee-invitation-resend-${invitation.id}`}
+                  title={invitation.resendActionLabel}
+                  loading={invitation.isResending}
+                  loadingText={invitation.resendLoadingLabel}
+                  accessibilityLabel={invitation.resendAccessibilityLabel}
+                  accessibilityState={{
+                    busy: invitation.isResending,
+                    disabled: invitation.isResending || invitation.isRevoking,
+                  }}
+                  variant="secondary"
+                  size="sm"
+                  onPress={invitation.onResend}
+                  disabled={invitation.isResending || invitation.isRevoking}
+                />
+              )}
+
+              {invitation.canRevoke && (
+                <AppButton
+                  testID={`employee-invitation-revoke-${invitation.id}`}
+                  title={invitation.revokeActionLabel}
+                  loading={invitation.isRevoking}
+                  loadingText={invitation.revokeLoadingLabel}
+                  accessibilityLabel={invitation.revokeAccessibilityLabel}
+                  accessibilityState={{
+                    busy: invitation.isRevoking,
+                    disabled: invitation.isRevoking || invitation.isResending,
+                  }}
+                  variant="ghost"
+                  size="sm"
+                  onPress={invitation.onRevoke}
+                  disabled={invitation.isRevoking || invitation.isResending}
+                />
+              )}
+            </ActionRow>
+          )}
+        </AppCard>
+      ))}
+    </View>
+  );
 }
 
 export function EmployeesScreenView({
@@ -70,24 +225,31 @@ export function EmployeesScreenView({
   isContextLoading,
   contextError,
   isOwner,
+  isRefreshing,
   isEmployeesLoading,
   employeesError,
-  showAddForm,
-  newUserId,
-  createError,
-  isCreating,
+  showInvitationForm,
+  invitationEmail,
+  invitationEmailError,
+  invitationFormError,
+  isSubmittingInvitation,
+  invitationRows,
+  invitationListStatus,
+  invitationListError,
+  invitationActionError,
   employeeRows,
   onRefresh,
   onBack,
-  onShowAddForm,
-  onCancelAddForm,
-  onNewUserIdChange,
-  onSubmitAddForm,
+  onShowInvitationForm,
+  onCancelInvitationForm,
+  onInvitationEmailChange,
+  onSubmitInvitationForm,
+  onRetryInvitationList,
 }: EmployeesScreenViewProps) {
   const { t } = useTranslation();
   const refreshControl = (
     <RefreshControl
-      refreshing={isEmployeesLoading}
+      refreshing={isRefreshing}
       onRefresh={onRefresh}
       testID="employees-refresh"
     />
@@ -165,50 +327,86 @@ export function EmployeesScreenView({
 
       {isOwner && (
         <>
-          {!showAddForm ? (
+          {!showInvitationForm ? (
             <AppButton
-              testID="employees-add-button"
-              title={t('employees.addButton')}
-              onPress={onShowAddForm}
+              testID="employees-invite-button"
+              title={t('employees.inviteAction')}
+              accessibilityLabel={t('employees.accessibility.openInvitationForm')}
+              onPress={onShowInvitationForm}
             />
           ) : (
-            <AppCard testID="employees-add-form">
+            <AppCard testID="employees-invite-form">
               <FormSection
-                title={t('employees.newEmployeeTitle')}
-                helper={t('employees.newEmployeeHelper')}
+                title={t('employees.inviteForm.title')}
+                helper={t('employees.inviteForm.helper')}
               >
                 <AppTextInput
-                  testID="employees-add-userid"
-                  label={t('employees.identifierLabel')}
-                  value={newUserId}
-                  onChangeText={onNewUserIdChange}
-                  placeholder={t('employees.identifierPlaceholder')}
+                  testID="employees-invite-email"
+                  label={t('employees.inviteForm.emailLabel')}
+                  value={invitationEmail}
+                  onChangeText={onInvitationEmailChange}
+                  placeholder={t('employees.inviteForm.emailPlaceholder')}
+                  error={invitationEmailError ?? undefined}
+                  keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  textContentType="emailAddress"
+                  autoComplete="email"
+                  inputMode="email"
                 />
 
-                {createError && (
-                  <Text style={styles.errorText} testID="employees-add-error">{createError}</Text>
+                {invitationFormError && (
+                  <Text style={styles.errorText} testID="employees-invite-error">
+                    {invitationFormError}
+                  </Text>
                 )}
 
                 <AppButton
-                  testID="employees-add-submit"
-                  title={t('employees.addButton')}
-                  onPress={onSubmitAddForm}
-                  loading={isCreating}
-                  loadingText={t('common.states.genericLoading')}
-                  disabled={isCreating}
+                  testID="employees-invite-submit"
+                  title={t('employees.inviteForm.submit')}
+                  loading={isSubmittingInvitation}
+                  loadingText={t('employees.inviteForm.submitting')}
+                  accessibilityLabel={t('employees.accessibility.submitInvitation')}
+                  accessibilityState={{
+                    busy: isSubmittingInvitation,
+                    disabled: isSubmittingInvitation,
+                  }}
+                  onPress={onSubmitInvitationForm}
+                  disabled={isSubmittingInvitation}
                 />
                 <AppButton
-                  testID="employees-add-cancel"
+                  testID="employees-invite-cancel"
                   title={t('common.actions.cancel')}
                   variant="ghost"
-                  onPress={onCancelAddForm}
-                  disabled={isCreating}
+                  accessibilityLabel={t('employees.accessibility.cancelInvitation')}
+                  onPress={onCancelInvitationForm}
+                  disabled={isSubmittingInvitation}
                 />
               </FormSection>
             </AppCard>
           )}
+
+          <AppCard testID="employees-invitations-section">
+            <SectionHeader
+              title={t('employees.invitationSection.title')}
+              action={(
+                invitationRows.length > 0
+                  ? <Text style={styles.sectionCount}>{invitationRows.length}</Text>
+                  : undefined
+              )}
+            />
+            <Text style={styles.sectionHelper}>
+              {t('employees.invitationSection.helper')}
+            </Text>
+            {renderInvitationListState(
+              invitationListStatus,
+              invitationRows,
+              invitationListError,
+              invitationActionError,
+              onRetryInvitationList,
+              t,
+            )}
+          </AppCard>
 
           {isEmployeesLoading && (
             <AppCard style={styles.stateCard}>
@@ -393,6 +591,34 @@ const styles = StyleSheet.create({
   sectionCount: {
     ...tokens.typography.variant.caption,
     color: tokens.colors.textSecondary,
+  },
+  sectionHelper: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textSecondary,
+    marginBottom: tokens.spacing[3],
+  },
+  invitationStateContent: {
+    alignItems: 'center',
+    gap: tokens.spacing[3],
+  },
+  invitationListContent: {
+    gap: tokens.spacing[3],
+  },
+  invitationCard: {
+    padding: tokens.spacing[3],
+  },
+  invitationCardHighlighted: {
+    borderColor: tokens.colors.primary,
+  },
+  invitationMetaList: {
+    marginTop: tokens.spacing[2],
+    paddingHorizontal: tokens.spacing[3],
+    gap: tokens.spacing[1],
+  },
+  invitationMetaText: {
+    ...tokens.typography.variant.caption,
+    color: tokens.colors.textSecondary,
+    flexShrink: 1,
   },
   listContent: {
     gap: tokens.spacing[3],

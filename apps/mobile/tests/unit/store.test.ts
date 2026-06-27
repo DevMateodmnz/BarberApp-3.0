@@ -1,19 +1,22 @@
 /**
- * Unit tests for context store — PR-028C
- *
- * Tests Zustand store behavior: loadContext, clearContext,
- * loading states, and error handling.
+ * Unit tests for context store bootstrap + context loading.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CurrentUserContext } from '../../src/lib/types.js';
 
-// Mock the context fetcher before importing store
+const mockFetchCurrentUserContext = vi.fn();
+const mockReconcileEmployeeInvitationOnboarding = vi.fn();
+
 vi.mock('../../src/lib/context.js', () => ({
-  fetchCurrentUserContext: vi.fn(),
+  fetchCurrentUserContext: (...args: unknown[]) => mockFetchCurrentUserContext(...args),
 }));
 
-// Mock axios so api.ts doesn't fail
+vi.mock('../../src/lib/employeeInvitations.js', () => ({
+  reconcileEmployeeInvitationOnboarding: (...args: unknown[]) =>
+    mockReconcileEmployeeInvitationOnboarding(...args),
+}));
+
 vi.mock('axios', () => ({
   default: {
     create: vi.fn(() => ({
@@ -27,223 +30,378 @@ vi.mock('axios', () => ({
   },
 }));
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushMicrotasks(times = 5): Promise<void> {
+  for (let index = 0; index < times; index += 1) {
+    await Promise.resolve();
+  }
+}
+
+function makeContext(
+  overrides: Partial<CurrentUserContext> = {},
+): CurrentUserContext {
+  return {
+    userId: 'user-1',
+    role: 'OWNER',
+    barbershopId: 'shop-1',
+    barbershopName: 'Main Shop',
+    employeeId: null,
+    employeeName: null,
+    ...overrides,
+  };
+}
+
+async function importStore() {
+  return import('../../src/lib/store.js');
+}
+
 describe('useContextStore', () => {
   beforeEach(() => {
     vi.resetModules();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
-  it('has correct initial state', async () => {
-    const { useContextStore } = await import('../../src/lib/store.js');
-    const state = useContextStore.getState();
-    expect(state.context).toBeNull();
-    expect(state.isLoading).toBe(false);
-    expect(state.error).toBeNull();
+  it('has the expected initial state', async () => {
+    const { useContextStore } = await importStore();
+    expect(useContextStore.getState()).toMatchObject({
+      context: null,
+      isLoading: false,
+      error: null,
+      bootstrapStatus: 'idle',
+      bootstrapErrorKey: null,
+      activeClerkUserId: null,
+      lastBootstrapOutcome: null,
+    });
   });
 
   it('loadContext sets context on success', async () => {
-    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
-    const { useContextStore } = await import('../../src/lib/store.js');
-
-    const fakeContext = {
-      userId: 'user-1',
-      role: 'OWNER' as const,
-      barbershopId: 'shop-1',
-      barbershopName: 'Test Shop',
-      employeeId: null,
-      employeeName: null,
-    };
-    vi.mocked(fetchCurrentUserContext).mockResolvedValueOnce(fakeContext);
+    const { useContextStore } = await importStore();
+    mockFetchCurrentUserContext.mockResolvedValueOnce(makeContext());
 
     const getToken = vi.fn().mockResolvedValue('token');
     await useContextStore.getState().loadContext(getToken);
 
-    const state = useContextStore.getState();
-    expect(state.context).toEqual(fakeContext);
-    expect(state.isLoading).toBe(false);
-    expect(state.error).toBeNull();
+    expect(mockFetchCurrentUserContext).toHaveBeenCalledWith(getToken);
+    expect(useContextStore.getState()).toMatchObject({
+      context: makeContext(),
+      isLoading: false,
+      error: null,
+      bootstrapStatus: 'ready',
+    });
   });
 
-  it('loadContext sets error on failure', async () => {
-    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
-    const { useContextStore } = await import('../../src/lib/store.js');
-
-    vi.mocked(fetchCurrentUserContext).mockRejectedValueOnce(new Error('Network Error'));
+  it('loadContext sets retryable error state on failure', async () => {
+    const { useContextStore } = await importStore();
+    mockFetchCurrentUserContext.mockRejectedValueOnce(new Error('Network Error'));
 
     const getToken = vi.fn().mockResolvedValue('token');
     await useContextStore.getState().loadContext(getToken);
 
-    const state = useContextStore.getState();
-    expect(state.context).toBeNull();
-    expect(state.error).toBe('Network Error');
-    expect(state.isLoading).toBe(false);
+    expect(useContextStore.getState()).toMatchObject({
+      context: null,
+      error: 'Network Error',
+      isLoading: false,
+      bootstrapStatus: 'retryable_error',
+      bootstrapErrorKey: 'networkError',
+    });
   });
 
-  it('loadContext sets isLoading during fetch', async () => {
-    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
-    const { useContextStore } = await import('../../src/lib/store.js');
+  it('recovers from stale loading state but does not break a real bootstrap reconciliation', async () => {
+    const { useContextStore } = await importStore();
+    const pendingContext = deferred<CurrentUserContext>();
 
-    let resolvePromise!: (value: unknown) => void;
-    const pending = new Promise((resolve) => { resolvePromise = resolve; });
-    vi.mocked(fetchCurrentUserContext).mockReturnValueOnce(pending as Promise<CurrentUserContext>);
+    useContextStore.setState({
+      isLoading: true,
+      context: null,
+      error: null,
+      bootstrapStatus: 'idle',
+    });
+    mockFetchCurrentUserContext.mockReturnValueOnce(pendingContext.promise);
 
     const getToken = vi.fn().mockResolvedValue('token');
     const loadPromise = useContextStore.getState().loadContext(getToken);
-
-    // While loading, isLoading should be true
     expect(useContextStore.getState().isLoading).toBe(true);
 
-    resolvePromise({
-      userId: 'u1', role: 'CLIENT', barbershopId: null,
-      barbershopName: null, employeeId: null, employeeName: null,
+    pendingContext.resolve(makeContext({ barbershopName: 'Recovered Shop' }));
+    await loadPromise;
+    expect(useContextStore.getState().context?.barbershopName).toBe('Recovered Shop');
+
+    useContextStore.setState({
+      isLoading: true,
+      context: null,
+      error: null,
+      bootstrapStatus: 'reconciling',
+    });
+    await useContextStore.getState().loadContext(getToken);
+    expect(mockFetchCurrentUserContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('clearContext resets bootstrap and context state', async () => {
+    const { useContextStore } = await importStore();
+    useContextStore.setState({
+      context: makeContext(),
+      isLoading: true,
+      error: 'oops',
+      bootstrapStatus: 'terminal_error',
+      bootstrapErrorKey: 'userRoleNotEligible',
+      activeClerkUserId: 'clerk-user-1',
+      lastBootstrapOutcome: 'reconciled',
     });
 
-    await loadPromise;
-
-    expect(useContextStore.getState().isLoading).toBe(false);
+    useContextStore.getState().clearContext();
+    expect(useContextStore.getState()).toMatchObject({
+      context: null,
+      isLoading: false,
+      error: null,
+      bootstrapStatus: 'idle',
+      bootstrapErrorKey: null,
+      activeClerkUserId: null,
+      lastBootstrapOutcome: null,
+    });
   });
 
-  it('clearContext resets store state', async () => {
-    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
-    const { useContextStore } = await import('../../src/lib/store.js');
-
-    const fakeContext = {
-      userId: 'user-1', role: 'OWNER' as const,
-      barbershopId: 'shop-1', barbershopName: 'Test Shop',
-      employeeId: null, employeeName: null,
-    };
-    vi.mocked(fetchCurrentUserContext).mockResolvedValueOnce(fakeContext);
+  it('reconciles before loading /me/context for existing users', async () => {
+    const { useContextStore } = await importStore();
+    mockReconcileEmployeeInvitationOnboarding.mockResolvedValueOnce({
+      outcome: 'ready',
+      userId: 'user-1',
+      employeeId: 'emp-1',
+      barbershopId: 'shop-1',
+    });
+    mockFetchCurrentUserContext.mockResolvedValueOnce(makeContext());
 
     const getToken = vi.fn().mockResolvedValue('token');
-    await useContextStore.getState().loadContext(getToken);
-    expect(useContextStore.getState().context).toEqual(fakeContext);
+    await useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-1',
+      getToken,
+    });
+
+    expect(mockReconcileEmployeeInvitationOnboarding).toHaveBeenCalledTimes(1);
+    expect(mockFetchCurrentUserContext).toHaveBeenCalledTimes(1);
+    expect(
+      mockReconcileEmployeeInvitationOnboarding.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockFetchCurrentUserContext.mock.invocationCallOrder[0]);
+    expect(useContextStore.getState()).toMatchObject({
+      context: makeContext(),
+      bootstrapStatus: 'ready',
+      activeClerkUserId: 'clerk-user-1',
+      lastBootstrapOutcome: 'ready',
+    });
+  });
+
+  it('treats reconciled and already_reconciled as successful bootstrap outcomes', async () => {
+    const { useContextStore } = await importStore();
+
+    mockReconcileEmployeeInvitationOnboarding.mockResolvedValueOnce({
+      outcome: 'reconciled',
+      userId: 'user-2',
+      employeeId: 'emp-2',
+      barbershopId: 'shop-2',
+    });
+    mockFetchCurrentUserContext.mockResolvedValueOnce(
+      makeContext({
+        userId: 'user-2',
+        role: 'BARBER',
+        employeeId: 'emp-2',
+        employeeName: 'Invited Barber',
+      }),
+    );
+
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-2',
+      getToken,
+    });
+    expect(useContextStore.getState().lastBootstrapOutcome).toBe('reconciled');
 
     useContextStore.getState().clearContext();
-    expect(useContextStore.getState().context).toBeNull();
-    expect(useContextStore.getState().error).toBeNull();
+    mockReconcileEmployeeInvitationOnboarding.mockResolvedValueOnce({
+      outcome: 'already_reconciled',
+      userId: 'user-3',
+      employeeId: 'emp-3',
+      barbershopId: 'shop-3',
+    });
+    mockFetchCurrentUserContext.mockResolvedValueOnce(
+      makeContext({ userId: 'user-3', employeeId: 'emp-3' }),
+    );
+    await useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-3',
+      getToken,
+    });
+
+    expect(useContextStore.getState().lastBootstrapOutcome).toBe('already_reconciled');
+    expect(mockFetchCurrentUserContext).toHaveBeenCalledTimes(2);
   });
 
-  // ---- Stale-state recovery tests ----
-  // The Zustand store survives Expo Go hot reloads. If a previous render
-  // cycle left isLoading: true (set but never cleared because the promise
-  // chain was severed by a hot reload), the re-entrancy guard would
-  // permanently block all future loadContext calls.  The stale-state
-  // recovery heuristic must detect this and reset isLoading → false.
-
-  it('recovers from stale loading state (isLoading=true, ctx=null, err=null)', async () => {
-    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
-    const { useContextStore } = await import('../../src/lib/store.js');
-
-    // Simulate a stale store — set({ isLoading: true }) was called
-    // but the promise was severed before resolve/reject.
-    useContextStore.setState({ isLoading: true, context: null, error: null });
-
-    const fakeContext = {
-      userId: 'u1', role: 'OWNER' as const,
-      barbershopId: 's1', barbershopName: 'Recovered Shop',
-      employeeId: null, employeeName: null,
-    };
-    vi.mocked(fetchCurrentUserContext).mockResolvedValueOnce(fakeContext);
-
+  it('does not call /me/context after onboarding-required or role-ineligible reconcile failures', async () => {
+    const { useContextStore } = await importStore();
+    const { ApiError } = await import('../../src/lib/api.js');
     const getToken = vi.fn().mockResolvedValue('token');
-    await useContextStore.getState().loadContext(getToken);
 
-    const state = useContextStore.getState();
-    // Should have recovered: isLoading reset, then fetch proceeded
-    expect(state.context).toEqual(fakeContext);
-    expect(state.isLoading).toBe(false);
-    expect(state.error).toBeNull();
-    expect(fetchCurrentUserContext).toHaveBeenCalledTimes(1);
+    mockReconcileEmployeeInvitationOnboarding.mockRejectedValueOnce(
+      new ApiError('Need invitation', 'ONBOARDING_INVITATION_REQUIRED', 409),
+    );
+    await useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-1',
+      getToken,
+    });
+    expect(useContextStore.getState()).toMatchObject({
+      bootstrapStatus: 'onboarding_required',
+      bootstrapErrorKey: 'onboardingInvitationRequired',
+      context: null,
+    });
+    expect(mockFetchCurrentUserContext).not.toHaveBeenCalled();
+
+    useContextStore.getState().clearContext();
+    mockReconcileEmployeeInvitationOnboarding.mockRejectedValueOnce(
+      new ApiError('Wrong role', 'USER_ROLE_NOT_ELIGIBLE', 409),
+    );
+    await useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-2',
+      getToken,
+    });
+    expect(useContextStore.getState()).toMatchObject({
+      bootstrapStatus: 'terminal_error',
+      bootstrapErrorKey: 'userRoleNotEligible',
+      context: null,
+    });
+    expect(mockFetchCurrentUserContext).not.toHaveBeenCalled();
   });
 
-  it('re-entrancy guard still blocks active call (isLoading=true, has error)', async () => {
-    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
-    const { useContextStore } = await import('../../src/lib/store.js');
+  it('allows retry after a retryable reconciliation failure', async () => {
+    const { useContextStore } = await importStore();
+    const { ApiError } = await import('../../src/lib/api.js');
 
-    // This is NOT stale — it has an error (a real loading cycle completed
-    // with failure).  The guard should still block.
-    useContextStore.setState({ isLoading: true, context: null, error: 'Previous failure' });
-
-    // NOTE: no mockResolvedValueOnce — the guard should block, so
-    // fetchCurrentUserContext will never be called.
+    mockReconcileEmployeeInvitationOnboarding.mockRejectedValueOnce(
+      new ApiError('rate limited', 'EMPLOYEE_INVITATION_RATE_LIMITED', 429),
+    );
+    mockReconcileEmployeeInvitationOnboarding.mockResolvedValueOnce({
+      outcome: 'ready',
+      userId: 'user-1',
+      employeeId: 'emp-1',
+      barbershopId: 'shop-1',
+    });
+    mockFetchCurrentUserContext.mockResolvedValueOnce(makeContext());
 
     const getToken = vi.fn().mockResolvedValue('token');
-    await useContextStore.getState().loadContext(getToken);
+    await useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-1',
+      getToken,
+    });
+    expect(useContextStore.getState().bootstrapStatus).toBe('retryable_error');
 
-    const state = useContextStore.getState();
-    // Guard should have blocked — state remains unchanged
-    expect(state.context).toBeNull();
-    expect(state.isLoading).toBe(true);
-    expect(state.error).toBe('Previous failure');
-    expect(fetchCurrentUserContext).not.toHaveBeenCalled();
+    await useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-1',
+      getToken,
+    });
+    expect(useContextStore.getState()).toMatchObject({
+      bootstrapStatus: 'ready',
+      context: makeContext(),
+    });
+    expect(mockReconcileEmployeeInvitationOnboarding).toHaveBeenCalledTimes(2);
   });
 
-  it('re-entrancy guard still blocks active call (isLoading=true, has context)', async () => {
-    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
-    const { useContextStore } = await import('../../src/lib/store.js');
+  it('deduplicates simultaneous bootstrap calls for the same Clerk identity', async () => {
+    const { useContextStore } = await importStore();
+    const pendingReconcile = deferred<{
+      outcome: 'ready';
+      userId: string;
+      employeeId: string;
+      barbershopId: string;
+    }>();
 
-    const existingCtx = {
-      userId: 'u1', role: 'OWNER' as const,
-      barbershopId: 's1', barbershopName: 'Existing',
-      employeeId: null, employeeName: null,
-    };
-    // isLoading=true WITH context — a real concurrent call is in progress
-    useContextStore.setState({ isLoading: true, context: existingCtx, error: null });
+    mockReconcileEmployeeInvitationOnboarding.mockReturnValueOnce(pendingReconcile.promise);
+    mockFetchCurrentUserContext.mockResolvedValueOnce(makeContext());
 
     const getToken = vi.fn().mockResolvedValue('token');
-    await useContextStore.getState().loadContext(getToken);
+    const first = useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-1',
+      getToken,
+    });
+    const second = useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-1',
+      getToken,
+    });
 
-    const state = useContextStore.getState();
-    expect(state.context).toEqual(existingCtx);
-    expect(state.isLoading).toBe(true);
-    expect(fetchCurrentUserContext).not.toHaveBeenCalled();
+    pendingReconcile.resolve({
+      outcome: 'ready',
+      userId: 'user-1',
+      employeeId: 'emp-1',
+      barbershopId: 'shop-1',
+    });
+    await Promise.all([first, second]);
+
+    expect(mockReconcileEmployeeInvitationOnboarding).toHaveBeenCalledTimes(1);
+    expect(mockFetchCurrentUserContext).toHaveBeenCalledTimes(1);
   });
 
-  it('stale-state recovery does not interfere with normal first load', async () => {
-    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
-    const { useContextStore } = await import('../../src/lib/store.js');
+  it('ignores stale prior-user results after sign-out and Clerk identity change', async () => {
+    const { useContextStore } = await importStore();
+    const firstReconcile = deferred<{
+      outcome: 'ready';
+      userId: string;
+      employeeId: string;
+      barbershopId: string;
+    }>();
+    const secondReconcile = deferred<{
+      outcome: 'reconciled';
+      userId: string;
+      employeeId: string;
+      barbershopId: string;
+    }>();
+    const firstContext = deferred<CurrentUserContext>();
+    const secondContext = deferred<CurrentUserContext>();
 
-    // Fresh store: everything null, isLoading false
-    const fakeContext = {
-      userId: 'u1', role: 'OWNER' as const,
-      barbershopId: 's1', barbershopName: 'Normal Load',
-      employeeId: null, employeeName: null,
-    };
-    vi.mocked(fetchCurrentUserContext).mockResolvedValueOnce(fakeContext);
-
-    const getToken = vi.fn().mockResolvedValue('token');
-    await useContextStore.getState().loadContext(getToken);
-
-    const state = useContextStore.getState();
-    expect(state.context).toEqual(fakeContext);
-    expect(state.isLoading).toBe(false);
-    expect(state.error).toBeNull();
-  });
-
-  it('loadContext does not overwrite context on second successful call', async () => {
-    const { fetchCurrentUserContext } = await import('../../src/lib/context.js');
-    const { useContextStore } = await import('../../src/lib/store.js');
-
-    const firstContext = {
-      userId: 'u1', role: 'OWNER' as const,
-      barbershopId: 's1', barbershopName: 'Shop One',
-      employeeId: null, employeeName: null,
-    };
-    const secondContext = {
-      userId: 'u1', role: 'OWNER' as const,
-      barbershopId: 's2', barbershopName: 'Shop Two',
-      employeeId: null, employeeName: null,
-    };
-
-    vi.mocked(fetchCurrentUserContext)
-      .mockResolvedValueOnce(firstContext)
-      .mockResolvedValueOnce(secondContext);
+    mockReconcileEmployeeInvitationOnboarding
+      .mockReturnValueOnce(firstReconcile.promise)
+      .mockReturnValueOnce(secondReconcile.promise);
+    mockFetchCurrentUserContext
+      .mockReturnValueOnce(firstContext.promise)
+      .mockReturnValueOnce(secondContext.promise);
 
     const getToken = vi.fn().mockResolvedValue('token');
-    await useContextStore.getState().loadContext(getToken);
-    expect(useContextStore.getState().context?.barbershopName).toBe('Shop One');
+    const firstBootstrap = useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-1',
+      getToken,
+    });
+    firstReconcile.resolve({
+      outcome: 'ready',
+      userId: 'user-1',
+      employeeId: 'emp-1',
+      barbershopId: 'shop-1',
+    });
+    await flushMicrotasks();
+    expect(mockFetchCurrentUserContext).toHaveBeenCalledTimes(1);
+    useContextStore.getState().clearContext();
+    const secondBootstrap = useContextStore.getState().bootstrapAuthenticatedContext({
+      clerkUserId: 'clerk-user-2',
+      getToken,
+    });
 
-    await useContextStore.getState().loadContext(getToken);
-    expect(useContextStore.getState().context?.barbershopName).toBe('Shop Two');
+    secondReconcile.resolve({
+      outcome: 'reconciled',
+      userId: 'user-2',
+      employeeId: 'emp-2',
+      barbershopId: 'shop-2',
+    });
+    firstContext.resolve(makeContext({ userId: 'user-1', barbershopName: 'Old Shop' }));
+    secondContext.resolve(makeContext({ userId: 'user-2', barbershopName: 'Current Shop' }));
+
+    await Promise.all([firstBootstrap, secondBootstrap]);
+
+    expect(useContextStore.getState()).toMatchObject({
+      context: makeContext({ userId: 'user-2', barbershopName: 'Current Shop' }),
+      activeClerkUserId: 'clerk-user-2',
+      lastBootstrapOutcome: 'reconciled',
+    });
   });
 });

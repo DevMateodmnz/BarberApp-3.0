@@ -113,6 +113,58 @@ export interface EmployeeListItem {
   };
 }
 
+export type EmployeeInvitationStatus =
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'REVOKED'
+  | 'EXPIRED'
+  | 'DELIVERY_FAILED';
+
+export interface EmployeeInvitation {
+  id: string;
+  email: string;
+  invitedRole: UserRole;
+  status: EmployeeInvitationStatus;
+  expiresAt: string | null;
+  lastSentAt: string | null;
+  resendCount: number;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  userId: string | null;
+  employeeId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EmployeeInvitationCreateOutcome =
+  | {
+      outcome: 'employee_created';
+      employee: EmployeeListItem;
+      invitation: null;
+    }
+  | {
+      outcome: 'employee_reactivated';
+      employee: EmployeeListItem;
+      invitation: null;
+    }
+  | {
+      outcome: 'invitation_created';
+      employee: null;
+      invitation: EmployeeInvitation;
+    }
+  | {
+      outcome: 'invitation_pending';
+      employee: null;
+      invitation: EmployeeInvitation;
+    };
+
+export interface EmployeeInvitationReconciliationResult {
+  outcome: 'ready' | 'reconciled' | 'already_reconciled';
+  userId: string;
+  employeeId: string;
+  barbershopId: string;
+}
+
 export interface Service {
   id: string;
   barbershopId?: string;

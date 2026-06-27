@@ -25,6 +25,7 @@ import { localizeApiError, localizeUnknownError } from './errors.js';
 import {
   getAppointmentStatusLabel,
   getAppointmentTransitionLabel,
+  getEmployeeInvitationStatusLabel,
   getLocalizedLanguageLabel,
   getNavigationLabel,
   getPaymentMethodLabel,
@@ -120,6 +121,7 @@ export {
   mobileLocalizationRuntime,
   getAppointmentStatusLabel,
   getAppointmentTransitionLabel,
+  getEmployeeInvitationStatusLabel,
   getLocalizedLanguageLabel,
   getNavigationLabel,
   getPaymentMethodLabel,
