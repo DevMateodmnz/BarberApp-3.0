@@ -1,6 +1,36 @@
 # Employee Onboarding — Manual QA Checklist
 
-This checklist covers the employee-by-email flow (PR-065A) and subsequent UX/error-handling improvements (PR-067A through PR-069A). It should be run manually on a real device or in Expo Go.
+This checklist originally covered the existing-user employee-by-email flow (PR-065A through PR-069A). It now also serves as the release-facing manual QA reference for the newer employee invitation onboarding flow on `feat/employee-invitation-onboarding`.
+
+## Current status (2026-06-27)
+
+- **Employee invitation onboarding is accepted for merge review / MVP continuation.**
+- Batch 4 completed with:
+  - API full suite passing: **441/441**
+  - Mobile full suite passing: **593/593**
+  - Live validation of:
+    - pending invitation lifecycle rows
+    - duplicate pending idempotency
+    - resend revoke-and-recreate behavior
+    - revoke history preservation
+    - accepted invitee reconciliation into local BARBER user/employee records
+    - reconciliation before `/me/context`
+    - repeated reconciliation idempotency
+    - OWNER accepted-state refresh
+- Honest limitations from the accepted run:
+  - literal inbox receipt was **not** directly verified from CLI
+  - the Clerk acceptance page HTML and provider acceptance URL were validated, but a full manual browser UI drive was limited
+  - first invitee sign-in was validated through a real Clerk invitee account/session and local API reconciliation, not a full physical mobile tap-through
+  - live webhook-specific verification was limited because local `CLERK_WEBHOOK_SECRET` was missing
+  - a physical Samsung Galaxy S21 follow-up remains recommended before a public/customer demo, but this was **not** treated as a code-merge blocker
+
+## Scope note
+
+- The legacy sections below still describe the older "existing local user by email or Clerk user ID" manual flow.
+- The current product now also supports **new-user invitation onboarding** for OWNERs.
+- If this checklist is rerun in full, include both:
+  1. legacy existing-user add/reactivation coverage, and
+  2. invitation lifecycle coverage (create, duplicate pending, resend, revoke, reconcile, accepted OWNER refresh).
 
 **Related docs**: [`mobile-daily-operations-e2e.md`](./mobile-daily-operations-e2e.md) covers the full daily-operations loop that depends on this onboarding flow.
 
@@ -210,10 +240,11 @@ These checks verify the fix from PR-069A: the form must **not** reset and must *
 
 Documented for testers and future PRs:
 
-- [ ] **No invite flow**: the user must already exist in the `User` table (created via Clerk webhook or seed). There is no "send invitation" button.
+- [x] **Invite flow now exists**: OWNERs can now send invitation emails for new users, and accepted invitees reconcile into local BARBER context before `/me/context`.
 - [ ] **No email autocomplete/search**: a single text field for email or user ID. No user search suggestions.
-- [ ] **No i18n**: all labels, help text, and error messages are in English only.
-- [ ] **No RNTL / component tests**: all employee onboarding checks are manual. No automated component or E2E tests exist.
+- [ ] **Physical invitation UX evidence is still limited**: the accepted Batch 4 run validated provider/API state and reconciliation, but did not include a full CLI-driven mailbox/browser/device tap-through.
+- [ ] **Live webhook proof is still environment-limited**: local `CLERK_WEBHOOK_SECRET` is missing, so webhook-specific live verification remains partial even though automated webhook tests pass.
+- [ ] **No dedicated E2E/device automation**: invitation onboarding still relies on automated unit/integration tests plus manual/device/provider validation rather than a full automated E2E harness.
 - [ ] **No bulk add**: employees must be added one at a time.
 - [ ] **Employee list shows raw role**: e.g. `BARBER` / `OWNER` (not a human-readable label).
 - [ ] **Deactivated employees disappear from the list**: the list endpoint filters by `deletedAt: null`. Reactivation requires a direct API call (`PATCH /employees/:id/reactivate`) because there is no "show inactive" toggle.

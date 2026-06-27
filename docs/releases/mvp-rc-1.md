@@ -38,6 +38,46 @@ Staff appointment creation is now **accepted for the MVP**.
 - `772065e feat(mobile): add appointment creation domain layer`
 - `eb0ed1d feat(mobile): add staff appointment creation flow`
 
+## 2026-06-27 employee invitation onboarding acceptance update
+
+Employee invitation onboarding is now **accepted for merge review / MVP continuation**.
+
+### Acceptance summary
+
+| Topic | Decision |
+|-------|----------|
+| Manual / live result | Automated validation plus live Clerk/provider/API reconciliation validated the feature for merge review |
+| Functional fixes | No functional source fix was required during Batch 4 |
+| Feature-branch state at acceptance | Clean `feat/employee-invitation-onboarding` at `7feb09b` with no Batch 4 code commit required |
+| Automated baseline | API **441/441**, Mobile **593/593**, both clean at acceptance time |
+
+### Validated behavior
+
+- Local invitation lifecycle exists
+- OWNER can create a pending invitation by email
+- Duplicate pending invite is idempotent
+- Resend preserves the local row and rotates the provider invitation
+- Revoke marks the local row revoked and does not create a user/employee
+- Accepted invitee reconciliation creates the local BARBER user/employee
+- Reconciliation runs before `/me/context`
+- Repeated reconciliation is idempotent
+- OWNER refresh shows the accepted invitation
+- Existing BARBER/OWNER flows remained covered by automated validation
+
+### Acceptance limitations
+
+- Literal inbox receipt was not directly verified from the CLI environment
+- The Clerk/browser acceptance page HTML and provider acceptance URL were validated, but not a full manually-driven browser UI flow
+- First invitee sign-in was validated through a real Clerk invitee account/session and local reconciliation, not a full physical mobile tap-through
+- Live webhook-specific verification remained limited because local `CLERK_WEBHOOK_SECRET` was missing
+- Physical Samsung Galaxy S21 follow-up remains recommended before a public/customer demo, but was not treated as a merge blocker for the code change
+
+### Accepted feature commits
+
+- `6c8e9e5 feat(api): add employee invitation onboarding`
+- `56bb6de feat(mobile): add employee invitation domain layer`
+- `7feb09b feat(mobile): add employee invitation UI`
+
 ## Operational Release Notes
 
 - Production API startup and credentialed CORS now have a dedicated runbook: [`docs/releases/api-production-runbook.md`](./api-production-runbook.md)
@@ -85,6 +125,7 @@ Detailed checklist: [`docs/manual-tests/mobile-mvp-final-qa.md`](../manual-tests
 | Home dashboard | OWNER, BARBER | ✅ Functionally validated + visually redesigned |
 | Services CRUD (create, edit, deactivate, reactivate, search, filter) | OWNER | ✅ Functionally validated + visually redesigned |
 | Employees — add, view, manage service assignments | OWNER | ✅ Functionally validated + visually redesigned |
+| Employees — invite new BARBER by email, manage pending/resend/revoke, reconcile accepted invitee into local BARBER context | OWNER, invited BARBER | ✅ Functionally validated; live provider/API reconciliation accepted for merge review |
 | Working Hours — view week schedule, edit day hours, toggle on/off, persist | OWNER | ✅ Functionally validated + visually redesigned |
 | Appointments — view by date, filter by employee, status transitions (confirm, start, complete, cancel) | OWNER | ✅ Functionally validated + visually redesigned |
 | Appointments — view own appointments, status transitions | BARBER | ✅ Functionally validated + visually redesigned |
@@ -133,6 +174,8 @@ Current redesign checklist: [`docs/manual-tests/mobile-mvp-final-qa.md`](../manu
 6. **Appointment-create layout polish remains deferred**: Minor placement/layout imperfections were observed during manual Android review, but they were explicitly accepted as non-blocking UI debt for the MVP.
 7. **No date filtering on API**: `listAppointments` returns up to 100 records ordered by `startAt DESC` with no query parameters. Mobile filters client-side.
 8. **Clerk Expo `getToken` instability**: Worked around with `getTokenRef` pattern across all screens. Upgrade to `@clerk/clerk-expo` v3+ may resolve natively.
+9. **Invitation QA still has environment-limited evidence**: the accepted onboarding run proved live Clerk/provider/API reconciliation behavior, but inbox proof, full browser driving, and full physical invitee tap-through were not captured from the CLI-only environment.
+10. **Live webhook verification still depends on local secret configuration**: `CLERK_WEBHOOK_SECRET` must be present to reproduce end-to-end webhook acceptance evidence locally.
 
 ---
 
