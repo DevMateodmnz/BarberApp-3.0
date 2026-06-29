@@ -22,22 +22,25 @@ docker compose up -d postgres
 # 2. Install deps (first time only)
 npm install
 
-# 3. Reset or sync the local dev schema as needed
-npm run db:push --workspace @barberapp/api
+# 3. Apply the committed migration chain to the local dev DB
+npm run db:migrate:deploy --workspace @barberapp/api
 
-# 4. Seed demo data
+# 4. Generate Prisma client if needed
+npm run db:generate --workspace @barberapp/api
+
+# 5. Seed demo data
 npm run db:seed --workspace @barberapp/api
 
-# 5. Create ignored local QA config from the tracked template
+# 6. Create ignored local QA config from the tracked template
 cp apps/api/.env.qa.local.example apps/api/.env.qa.local
 
-# 6. Fill the two real Clerk user IDs in apps/api/.env.qa.local
+# 7. Fill the two real Clerk user IDs in apps/api/.env.qa.local
 
-# 7. Reconcile deterministic local QA mappings
+# 8. Reconcile deterministic local QA mappings
 npm run qa:bootstrap --workspace @barberapp/api
 npm run qa:verify --workspace @barberapp/api
 
-# 8. Start API and mobile
+# 9. Start API and mobile
 npm run dev --workspace @barberapp/api
 npm run dev --workspace @barberapp/mobile
 ```
@@ -66,10 +69,11 @@ Verify:
 docker ps --filter "name=postgres" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
 
-Apply the current schema:
+Apply the committed migration chain first:
 
 ```bash
-npm run db:push --workspace @barberapp/api
+npm run db:migrate:deploy --workspace @barberapp/api
+npm run db:generate --workspace @barberapp/api
 ```
 
 If you intentionally want a fresh local demo baseline, run the demo seed again:
@@ -79,6 +83,13 @@ npm run db:seed --workspace @barberapp/api
 ```
 
 > The demo seed uses fake/demo Clerk IDs on purpose. After any reseed, run the QA bootstrap again so the real local OWNER/BARBER Clerk mappings are restored deterministically.
+
+### Migration-first safety note
+
+- For normal local release QA, prefer the committed migration chain (`prisma migrate deploy`) over `db:push`.
+- `db:push` is useful for rapid schema prototyping, but it is **not** the normal release-QA path because it can make the schema look correct while leaving Prisma migration history unapplied.
+- If your local database already matches the current schema but `_prisma_migrations` is missing, first verify schema parity carefully. Only then consider `prisma migrate resolve --applied ...` to rebuild migration history without changing real data.
+- If you are not sure whether the schema and migration history match, stop and inspect the database before doing anything destructive.
 
 ---
 

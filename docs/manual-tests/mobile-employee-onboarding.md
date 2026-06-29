@@ -2,11 +2,12 @@
 
 This checklist originally covered the existing-user employee-by-email flow (PR-065A through PR-069A). It now also serves as the release-facing manual QA reference for the newer employee invitation onboarding flow on `feat/employee-invitation-onboarding`.
 
-## Current status (2026-06-27)
+## Current status (2026-06-29)
 
-- **Employee invitation onboarding is accepted for merge review / MVP continuation.**
-- Batch 4 completed with:
-  - API full suite passing: **441/441**
+- **Employee invitation onboarding is merged on `main` and included in the MVP QA-passed build.**
+- The broader Samsung Galaxy S21 / Expo Go release-readiness pass is now complete.
+- Validation history for this flow includes:
+  - API full suite passing at final closeout: **443/443**
   - Mobile full suite passing: **593/593**
   - Live validation of:
     - pending invitation lifecycle rows
@@ -22,7 +23,7 @@ This checklist originally covered the existing-user employee-by-email flow (PR-0
   - the Clerk acceptance page HTML and provider acceptance URL were validated, but a full manual browser UI drive was limited
   - first invitee sign-in was validated through a real Clerk invitee account/session and local API reconciliation, not a full physical mobile tap-through
   - live webhook-specific verification was limited because local `CLERK_WEBHOOK_SECRET` was missing
-  - a physical Samsung Galaxy S21 follow-up remains recommended before a public/customer demo, but this was **not** treated as a code-merge blocker
+  - direct Clerk webhook proof remained environment-limited locally when `CLERK_WEBHOOK_SECRET` was absent, but the authoritative mobile reconciliation path was later verified on Samsung Galaxy S21 during the merged-`main` MVP QA pass
 
 ## Scope note
 
@@ -61,15 +62,17 @@ Before starting, confirm:
 - [ ] If testing the User ID fallback, you also know the BARBER's Clerk user ID (e.g. `user_<clerk-id>…`).
 - [ ] The barbershop has no pre-existing employees (clean state), or you are aware of which employees already exist.
 
-### How to create a BARBER user if one doesn't exist
+### How to prepare a BARBER user when one doesn't exist yet
 
-The app does **not** have an invitation flow. Create the user via one of:
+The app **does** support invitation onboarding now. For a brand-new barber, prefer the OWNER invitation flow from the Employees screen and then verify mobile reconciliation before `/me/context`.
+
+If you specifically need a pre-existing BARBER account for the legacy add/reactivation checks in this checklist, you can still prepare one via one of these paths:
 
 - Clerk Dashboard → Users → Add user → set public metadata `{ "role": "BARBER" }`.
 - Seed script (if one exists in the repo) that creates a User row with `role = 'BARBER'`.
-- Sign up in the mobile app with a new Clerk account and manually set the role in Clerk metadata, then ensure the Clerk webhook creates the User row.
+- Sign up in the mobile app with a new Clerk account and manually set the role in Clerk metadata, then ensure the local system reconciles that user correctly.
 
-**Important**: the user must be present in the `User` table (`email` must exist). A Clerk account alone is not enough — the webhook must have run.
+**Important**: for legacy existing-user checks, the person must already exist in the local `User` table. A Clerk account alone is not enough until webhook sync or reconciliation has created the local user row.
 
 ---
 
@@ -242,8 +245,8 @@ Documented for testers and future PRs:
 
 - [x] **Invite flow now exists**: OWNERs can now send invitation emails for new users, and accepted invitees reconcile into local BARBER context before `/me/context`.
 - [ ] **No email autocomplete/search**: a single text field for email or user ID. No user search suggestions.
-- [ ] **Physical invitation UX evidence is still limited**: the accepted Batch 4 run validated provider/API state and reconciliation, but did not include a full CLI-driven mailbox/browser/device tap-through.
-- [ ] **Live webhook proof is still environment-limited**: local `CLERK_WEBHOOK_SECRET` is missing, so webhook-specific live verification remains partial even though automated webhook tests pass.
+- [ ] **Direct webhook proof may still be environment-limited locally**: if `CLERK_WEBHOOK_SECRET` is missing, webhook-specific live verification remains partial even though automated webhook tests pass.
+- [x] **Mobile reconciliation is the authoritative local QA path**: for local device QA, the key proof is that accepted invitees reconcile into local BARBER context correctly before `/me/context`.
 - [ ] **No dedicated E2E/device automation**: invitation onboarding still relies on automated unit/integration tests plus manual/device/provider validation rather than a full automated E2E harness.
 - [ ] **No bulk add**: employees must be added one at a time.
 - [ ] **Employee list shows raw role**: e.g. `BARBER` / `OWNER` (not a human-readable label).

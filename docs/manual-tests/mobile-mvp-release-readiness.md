@@ -40,10 +40,10 @@ This focused retest was triggered by a release-critical OWNER sign-in blocker di
 
 | Area | Result | Evidence |
 |------|--------|----------|
-| OWNER login | PASS | `mateogabrieldominguez@gmail.com` completed Clerk email-code sign-in and entered the app successfully. |
+| OWNER login | PASS | `<QA_OWNER_EMAIL>` completed Clerk email-code sign-in and entered the app successfully. |
 | OWNER `/me/context` visible behavior | PASS | `QA Barbershop` loaded and the app entered OWNER context without the previous onboarding error. |
 | OWNER role/navigation | PASS | `Manage` tab is visible for OWNER on the Samsung Galaxy S21 physical device. |
-| BARBER login | PASS | `devmateodmnz@gmail.com` completed sign-in successfully. |
+| BARBER login | PASS | `<QA_BARBER_EMAIL>` completed sign-in successfully. |
 | BARBER `/me/context` visible behavior | PASS | BARBER entered the app successfully with barber-scoped context. |
 | BARBER role restrictions | PASS | `Manage` is hidden for BARBER, confirming role-aware navigation on device. |
 
