@@ -16,10 +16,10 @@ Use this checklist for the **current MVP** on a physical Samsung Galaxy S21 with
 
 | Field | Value |
 |------|-------|
-| Date | 2026-06-27 |
+| Date | 2026-06-29 |
 | Device | Samsung Galaxy S21 |
 | Runtime | Expo Go |
-| Branch / commit | `main` (post-`aa7bf33` local onboarding-fix retest, pre-commit) |
+| Branch / commit | `main` (`021e57a fix(onboarding): allow existing staff bootstrap` baseline for full physical QA closeout) |
 | API URL | `http://192.168.100.158:3000/api/v1` |
 | Expo URL | `exp://192.168.100.158:8081` |
 | Tester | Mateo |
@@ -51,6 +51,33 @@ This focused retest was triggered by a release-critical OWNER sign-in blocker di
 
 - This recorded evidence confirms the release-critical auth/onboarding blocker is fixed on the physical phone.
 - The broader checklist below remains the source of truth for the rest of the MVP pass; phases not explicitly marked in the table above still need full physical execution/evidence before calling the whole checklist complete.
+
+## Recorded evidence — 2026-06-29 full physical MVP pass
+
+This follow-up pass completed the remaining merged-`main` MVP checklist on the same Samsung Galaxy S21 physical device in Expo Go after the onboarding fix from commit `021e57a fix(onboarding): allow existing staff bootstrap`.
+
+| Area | Result | Evidence |
+|------|--------|----------|
+| Services management | PASS | OWNER managed services successfully on device without broken forms, clipping, or refresh issues. |
+| Employees management | PASS | OWNER employee list loaded, refreshed, and supported expected existing-employee actions successfully. |
+| Employee invitations | PASS | Invitation creation, pending state, resend/revoke handling, acceptance reconciliation, and OWNER refresh behavior all passed on device. |
+| Working hours | PASS | OWNER-only working-hours screen loaded and saved correctly on the physical phone. |
+| Appointments list | PASS | OWNER saw shop-scoped appointments and BARBER saw barber-scoped appointments without leakage. |
+| OWNER appointment creation | PASS | OWNER created a mobile appointment successfully, including employee/service/date/time/client flow. |
+| BARBER appointment creation | PASS | BARBER created an appointment from the barber-scoped flow with correct employee scoping and allowed services only. |
+| Appointment cancellation / slot reuse | PASS | Cancellation succeeded and the released slot became reusable as expected. |
+| Service record creation | PASS | OWNER and BARBER both created supported service records successfully from mobile. |
+| Daily summary / revenue updates | PASS | Home summaries refreshed correctly after appointment/service-record activity, with OWNER shop totals and BARBER scoped totals behaving correctly. |
+| Role restrictions | PASS | OWNER-only screens/actions remained hidden from BARBER while OWNER retained full management visibility. |
+| Pull-to-refresh / loading / error states | PASS | Refresh and transient loading/error handling behaved correctly across the checked screens. |
+| Keyboard/layout on Galaxy S21 | PASS | Forms remained usable with the Samsung Galaxy S21 keyboard open; inputs/buttons stayed visible and tappable. |
+| Localization smoke | PASS | Six-language smoke checks passed without visible untranslated keys or unusable wrapping issues. |
+| Offline/network smoke | PASS | Temporary network loss failed gracefully and the app recovered correctly after reconnect. |
+
+### Completion note
+
+- This evidence completes the broader physical MVP checklist that remained open after the focused 2026-06-27 auth/role-gating retest.
+- Combined with the earlier blocker fix, the current merged `main` build passed the full release-readiness phone QA flow on Samsung Galaxy S21 / Expo Go for the current MVP scope.
 
 ## Roles / accounts to prepare
 
@@ -420,13 +447,13 @@ This focused retest was triggered by a release-critical OWNER sign-in blocker di
 
 | Decision | Mark |
 |---------|------|
-| Ready for controlled demo / pilot | ☐ |
+| Ready for controlled demo / pilot | ☑ |
 | Not ready — blockers remain | ☐ |
 
 ### Blocking issues
 
-- None from the focused 2026-06-27 OWNER/BARBER sign-in retest after the onboarding reconciliation fix.
+- None observed in the combined 2026-06-27 focused onboarding retest and 2026-06-29 full Samsung Galaxy S21 / Expo Go MVP pass.
 
 ### Non-blocking issues / UI debt
 
-- Full checklist completion is still pending beyond the focused auth/role-gating retest recorded above.
+- Live Clerk webhook-specific proof remains locally limited if `CLERK_WEBHOOK_SECRET` is absent, but the authoritative mobile reconciliation path and full invitation QA passed on device.
