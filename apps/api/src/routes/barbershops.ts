@@ -33,6 +33,7 @@ import { CreateEmployeeInvitationSchema } from '../schemas/employeeInvitation.js
 import { AssignServiceSchema } from '../schemas/employeeService.js';
 import {
   AppointmentAvailabilityQuerySchema,
+  AppointmentListQuerySchema,
   StaffCreateAppointmentSchema,
 } from '../schemas/appointment.js';
 import { CreateServiceSchema, UpdateServiceSchema } from '../schemas/service.js';
@@ -109,6 +110,19 @@ function parseAvailabilityQuery(
 
   if (!parsed.success) {
     throw new ValidationError('Invalid availability query parameters', parsed.error.flatten());
+  }
+
+  return parsed.data;
+}
+
+function parseAppointmentListQuery(req: Request) {
+  const parsed = AppointmentListQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid appointment list query parameters',
+      parsed.error.flatten()
+    );
   }
 
   return parsed.data;
@@ -425,7 +439,8 @@ router.get(
         paramBarbershopId(req),
         paramEmployeeId(req),
         req.userId,
-        req.userRole
+        req.userRole,
+        parseAppointmentListQuery(req)
       );
       res.json({ success: true, data: appointments });
     } catch (error) {

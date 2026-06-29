@@ -35,6 +35,7 @@ import type {
 import { Prisma } from '@prisma/client';
 import type {
   AppointmentAvailabilityQuery,
+  AppointmentListQuery,
   CreateAppointmentInput,
   StaffCreateAppointmentInput,
 } from '../schemas/appointment.js';
@@ -85,6 +86,11 @@ interface AvailabilityInput {
   userRole: UserRole;
   authenticatedEmployeeId?: string;
   now?: Date;
+}
+
+interface OwnerAppointmentListContext {
+  barbershopId: string;
+  timezone: string;
 }
 
 // ============================================
@@ -247,6 +253,44 @@ async function getBarbershopTimezone(barbershopId: string): Promise<string> {
   }
 
   return barbershop.timezone;
+}
+
+async function getOwnerAppointmentListContext(
+  userId: string
+): Promise<OwnerAppointmentListContext | null> {
+  const barbershop = await prisma.barbershop.findFirst({
+    where: { ownerId: userId },
+    select: { id: true, timezone: true },
+  });
+
+  if (!barbershop) {
+    return null;
+  }
+
+  return {
+    barbershopId: barbershop.id,
+    timezone: barbershop.timezone,
+  };
+}
+
+function withLocalDateRange(
+  where: Prisma.AppointmentWhereInput,
+  date: string | undefined,
+  timezone: string
+): Prisma.AppointmentWhereInput {
+  if (!date) {
+    return where;
+  }
+
+  const { startUtc, endUtc } = getUtcRangeForLocalDate(date, timezone);
+
+  return {
+    ...where,
+    startAt: {
+      gte: startUtc,
+      lt: endUtc,
+    },
+  };
 }
 
 async function validateServiceBelongsToBarbershop(
@@ -705,37 +749,45 @@ export async function getAppointmentAvailability(input: AvailabilityInput) {
 /**
  * Lists appointments filtered by role and tenant.
  * - OWNER: sees all appointments for their barbershop
- * - BARBER: sees appointments assigned to them (scope: their employee record).
- *           Requires employeeId to be set by upstream middleware.
- *           Fails closed if employeeId is missing (no broad data leak).
+ * - BARBER: must use the employee-scoped listing endpoint
  * - CLIENT: sees only their own appointments
  */
 export async function listAppointments(
   userId: string,
   role: UserRole,
-  employeeId?: string
+  query: AppointmentListQuery
 ) {
-  if (role === 'BARBER' && !employeeId) {
+  if (role === 'BARBER') {
     throw new ForbiddenError(
-      'Employee context required for barber appointment listing'
+      'Barbers must use the employee-scoped appointments endpoint'
     );
   }
 
-  const where: Record<string, unknown> = {};
+  const where: Prisma.AppointmentWhereInput = {};
 
   if (role === 'OWNER') {
     where.barbershop = { ownerId: userId };
-  } else if (role === 'BARBER') {
-    where.employeeId = employeeId;
   } else if (role === 'CLIENT') {
     where.clientId = userId;
   }
 
+  let scopedWhere = where;
+
+  if (role === 'OWNER' && query.date) {
+    const ownerContext = await getOwnerAppointmentListContext(userId);
+    if (!ownerContext) {
+      return [];
+    }
+
+    scopedWhere = withLocalDateRange(where, query.date, ownerContext.timezone);
+  }
+
   return prisma.appointment.findMany({
-    where,
+    where: scopedWhere,
     include: APPOINTMENT_INCLUDE,
     orderBy: { startAt: 'desc' },
-    take: 100,
+    skip: query.offset,
+    take: query.limit,
   });
 }
 
@@ -747,15 +799,17 @@ export async function listEmployeeAppointments(
   barbershopId: string,
   employeeId: string,
   userId: string,
-  userRole: UserRole
+  userRole: UserRole,
+  query: AppointmentListQuery
 ) {
   await validateEmployeeInBarbershop(employeeId, barbershopId);
 
   if (userRole === 'BARBER') {
-    const employee = await prisma.employee.findUnique({
-      where: { id: employeeId },
-    });
-    if (!employee || employee.userId !== userId) {
+    const employee = await findActiveBarberEmployeeForBarbershop(
+      userId,
+      barbershopId
+    );
+    if (!employee || employee.id !== employeeId) {
       throw new ForbiddenError('You can only view your own appointments');
     }
   }
@@ -764,14 +818,23 @@ export async function listEmployeeAppointments(
     throw new ForbiddenError('Clients cannot access employee appointments');
   }
 
+  const timezone = query.date
+    ? await getBarbershopTimezone(barbershopId)
+    : null;
+
   return prisma.appointment.findMany({
-    where: {
-      barbershopId,
-      employeeId,
-    },
+    where: withLocalDateRange(
+      {
+        barbershopId,
+        employeeId,
+      },
+      query.date,
+      timezone ?? 'UTC'
+    ),
     include: APPOINTMENT_INCLUDE,
     orderBy: { startAt: 'desc' },
-    take: 100,
+    skip: query.offset,
+    take: query.limit,
   });
 }
 

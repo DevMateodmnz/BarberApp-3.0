@@ -11,6 +11,12 @@ import type {
   FetchAppointmentAvailabilityInput,
 } from './types.js';
 
+export interface AppointmentListQuery {
+  date?: string;
+  limit?: number;
+  offset?: number;
+}
+
 function trimOptionalText(value?: string): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
@@ -37,48 +43,52 @@ function ensureSuccess<T>(
  * Fetches all appointments for the current user based on role.
  *
  * GET /appointments
- * Requires OWNER role on the backend.
+ * Supported by the backend for OWNER and CLIENT roles.
  */
 export async function fetchAppointments(
   getToken: GetToken,
+  query?: AppointmentListQuery,
 ): Promise<Appointment[]> {
   const token = await getToken();
   const response = await api.get<ApiResponse<Appointment[]>>(
     '/appointments',
-    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: query,
+    },
   );
 
-  const { data } = response;
-  if (!data.success || !data.data) {
-    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch appointments'));
-  }
-
-  return data.data;
+  return ensureSuccess(
+    response,
+    localizeUnknownError('Failed to fetch appointments'),
+  );
 }
 
 /**
  * Fetches appointments for a specific employee (BARBER view).
  *
  * GET /barbershops/:barbershopId/employees/:employeeId/appointments
- * Requires BARBER role on the backend.
+ * Used by OWNER and BARBER on the scoped employee appointments route.
  */
 export async function fetchEmployeeAppointments(
   getToken: GetToken,
   barbershopId: string,
   employeeId: string,
+  query?: AppointmentListQuery,
 ): Promise<Appointment[]> {
   const token = await getToken();
   const response = await api.get<ApiResponse<Appointment[]>>(
     `/barbershops/${barbershopId}/employees/${employeeId}/appointments`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: query,
+    },
   );
 
-  const { data } = response;
-  if (!data.success || !data.data) {
-    throw new Error(localizeUnknownError(data.error?.message ?? 'Failed to fetch employee appointments'));
-  }
-
-  return data.data;
+  return ensureSuccess(
+    response,
+    localizeUnknownError('Failed to fetch employee appointments'),
+  );
 }
 
 /**

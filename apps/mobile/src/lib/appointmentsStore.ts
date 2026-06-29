@@ -34,6 +34,7 @@ interface AppointmentsState {
   loadAppointments: (
     getToken: () => Promise<string | null>,
     context: CurrentUserContext,
+    selectedDate: string,
   ) => Promise<void>;
 
   /**
@@ -69,17 +70,21 @@ interface AppointmentsState {
 
 /** Module-level cache of last load context so mutation methods can refetch. */
 let _lastContext: CurrentUserContext | null = null;
+let _lastSelectedDate: string | null = null;
 
 async function doLoadAppointments(
   getToken: () => Promise<string | null>,
   context: CurrentUserContext,
+  selectedDate: string,
 ): Promise<Appointment[]> {
   if (context.role === 'OWNER') {
-    return fetchAppointments(getToken);
+    return fetchAppointments(getToken, { date: selectedDate });
   }
 
   // BARBER
-  return fetchEmployeeAppointments(getToken, context.barbershopId!, context.employeeId!);
+  return fetchEmployeeAppointments(getToken, context.barbershopId!, context.employeeId!, {
+    date: selectedDate,
+  });
 }
 
 export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
@@ -87,7 +92,7 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
   isAppointmentsLoading: false,
   appointmentsError: null,
 
-  loadAppointments: async (getToken, context) => {
+  loadAppointments: async (getToken, context, selectedDate) => {
     if (context.role === 'CLIENT') {
       return;
     }
@@ -101,10 +106,11 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
     }
 
     _lastContext = context;
+    _lastSelectedDate = selectedDate;
     set({ isAppointmentsLoading: true, appointmentsError: null });
 
     try {
-      const appointments = await doLoadAppointments(getToken, context);
+      const appointments = await doLoadAppointments(getToken, context, selectedDate);
       set({ appointments, isAppointmentsLoading: false, appointmentsError: null });
     } catch (err) {
       const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
@@ -115,18 +121,18 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
   transitionStatus: async (getToken, appointmentId, newStatus) => {
     await transitionAppointmentStatus(getToken, appointmentId, newStatus);
     // Refetch the full list after status change
-    if (_lastContext) {
+    if (_lastContext && _lastSelectedDate) {
       const { loadAppointments } = get();
-      await loadAppointments(getToken, _lastContext);
+      await loadAppointments(getToken, _lastContext, _lastSelectedDate);
     }
   },
 
   cancelAppointment: async (getToken, appointmentId) => {
     await cancelAppointmentApi(getToken, appointmentId);
     // Refetch the full list — cancel endpoint doesn't return nested includes
-    if (_lastContext) {
+    if (_lastContext && _lastSelectedDate) {
       const { loadAppointments } = get();
-      await loadAppointments(getToken, _lastContext);
+      await loadAppointments(getToken, _lastContext, _lastSelectedDate);
     }
   },
 
@@ -146,6 +152,7 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
 
   clearAppointments: () => {
     _lastContext = null;
+    _lastSelectedDate = null;
     set({ appointments: [], isAppointmentsLoading: false, appointmentsError: null });
   },
 }));

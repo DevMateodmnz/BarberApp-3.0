@@ -75,6 +75,9 @@ const clientContext: CurrentUserContext = {
   employeeName: null,
 };
 
+const selectedDate = '2026-06-15';
+const nextSelectedDate = '2026-06-16';
+
 describe('useAppointmentsStore', () => {
   beforeEach(async () => {
     const { useAppointmentsStore } = await importStore();
@@ -100,9 +103,9 @@ describe('useAppointmentsStore', () => {
     mockFetchAppointments.mockResolvedValueOnce(fakeAppointments);
 
     const getToken = vi.fn().mockResolvedValue('token');
-    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext);
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, selectedDate);
 
-    expect(mockFetchAppointments).toHaveBeenCalledWith(getToken);
+    expect(mockFetchAppointments).toHaveBeenCalledWith(getToken, { date: selectedDate });
     expect(mockFetchEmployeeAppointments).not.toHaveBeenCalled();
 
     const state = useAppointmentsStore.getState();
@@ -117,9 +120,11 @@ describe('useAppointmentsStore', () => {
     mockFetchEmployeeAppointments.mockResolvedValueOnce(fakeAppointments);
 
     const getToken = vi.fn().mockResolvedValue('token');
-    await useAppointmentsStore.getState().loadAppointments(getToken, barberContext);
+    await useAppointmentsStore.getState().loadAppointments(getToken, barberContext, selectedDate);
 
-    expect(mockFetchEmployeeAppointments).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1');
+    expect(mockFetchEmployeeAppointments).toHaveBeenCalledWith(getToken, 'shop-1', 'emp-1', {
+      date: selectedDate,
+    });
     expect(mockFetchAppointments).not.toHaveBeenCalled();
 
     const state = useAppointmentsStore.getState();
@@ -130,7 +135,7 @@ describe('useAppointmentsStore', () => {
     const { useAppointmentsStore } = await importStore();
     const getToken = vi.fn();
 
-    await useAppointmentsStore.getState().loadAppointments(getToken, clientContext);
+    await useAppointmentsStore.getState().loadAppointments(getToken, clientContext, selectedDate);
 
     expect(mockFetchAppointments).not.toHaveBeenCalled();
     expect(mockFetchEmployeeAppointments).not.toHaveBeenCalled();
@@ -142,7 +147,7 @@ describe('useAppointmentsStore', () => {
     mockFetchAppointments.mockRejectedValueOnce(new Error('Network error'));
 
     const getToken = vi.fn().mockResolvedValue('token');
-    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext);
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, selectedDate);
 
     const state = useAppointmentsStore.getState();
     expect(state.appointments).toEqual([]);
@@ -155,7 +160,7 @@ describe('useAppointmentsStore', () => {
     const contextWithoutShop: CurrentUserContext = { ...ownerContext, barbershopId: null };
     const getToken = vi.fn();
 
-    await useAppointmentsStore.getState().loadAppointments(getToken, contextWithoutShop);
+    await useAppointmentsStore.getState().loadAppointments(getToken, contextWithoutShop, selectedDate);
 
     expect(mockFetchAppointments).not.toHaveBeenCalled();
     expect(useAppointmentsStore.getState().appointments).toEqual([]);
@@ -166,7 +171,7 @@ describe('useAppointmentsStore', () => {
     const contextWithoutEmp: CurrentUserContext = { ...barberContext, employeeId: null };
     const getToken = vi.fn();
 
-    await useAppointmentsStore.getState().loadAppointments(getToken, contextWithoutEmp);
+    await useAppointmentsStore.getState().loadAppointments(getToken, contextWithoutEmp, selectedDate);
 
     expect(mockFetchEmployeeAppointments).not.toHaveBeenCalled();
     expect(useAppointmentsStore.getState().appointments).toEqual([]);
@@ -179,7 +184,7 @@ describe('useAppointmentsStore', () => {
     const initialAppts = [makeAppointment({ id: 'appt-1', status: 'PENDING' })];
     mockFetchAppointments.mockResolvedValueOnce(initialAppts);
     const getToken = vi.fn().mockResolvedValue('token');
-    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext);
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, selectedDate);
 
     // Now transition
     mockTransitionStatus.mockResolvedValueOnce({});
@@ -191,6 +196,7 @@ describe('useAppointmentsStore', () => {
     expect(mockTransitionStatus).toHaveBeenCalledWith(getToken, 'appt-1', 'CONFIRMED');
     // Should refetch after transition
     expect(mockFetchAppointments).toHaveBeenCalledTimes(2);
+    expect(mockFetchAppointments).toHaveBeenNthCalledWith(2, getToken, { date: selectedDate });
     expect(useAppointmentsStore.getState().appointments).toEqual(updatedAppts);
   });
 
@@ -201,7 +207,7 @@ describe('useAppointmentsStore', () => {
     const initialAppts = [makeAppointment({ id: 'appt-1', status: 'PENDING' })];
     mockFetchAppointments.mockResolvedValueOnce(initialAppts);
     const getToken = vi.fn().mockResolvedValue('token');
-    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext);
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, selectedDate);
 
     // Now cancel
     mockCancelAppointment.mockResolvedValueOnce({});
@@ -213,7 +219,26 @@ describe('useAppointmentsStore', () => {
     expect(mockCancelAppointment).toHaveBeenCalledWith(getToken, 'appt-1');
     // Should refetch after cancel
     expect(mockFetchAppointments).toHaveBeenCalledTimes(2);
+    expect(mockFetchAppointments).toHaveBeenNthCalledWith(2, getToken, { date: selectedDate });
     expect(useAppointmentsStore.getState().appointments).toEqual(updatedAppts);
+  });
+
+  it('reloading with a different selected date triggers a date-scoped fetch for the new day', async () => {
+    const { useAppointmentsStore } = await importStore();
+    const getToken = vi.fn().mockResolvedValue('token');
+
+    mockFetchAppointments
+      .mockResolvedValueOnce([makeAppointment({ id: 'appt-1' })])
+      .mockResolvedValueOnce([makeAppointment({ id: 'appt-2', startAt: '2026-06-16T10:00:00.000Z' })]);
+
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, selectedDate);
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, nextSelectedDate);
+
+    expect(mockFetchAppointments).toHaveBeenNthCalledWith(1, getToken, { date: selectedDate });
+    expect(mockFetchAppointments).toHaveBeenNthCalledWith(2, getToken, {
+      date: nextSelectedDate,
+    });
+    expect(useAppointmentsStore.getState().appointments[0]?.id).toBe('appt-2');
   });
 
   it('clearAppointments resets state', async () => {
@@ -237,7 +262,7 @@ describe('useAppointmentsStore', () => {
     const getToken = vi.fn().mockResolvedValue('token');
 
     mockFetchAppointments.mockResolvedValueOnce([makeAppointment({ id: 'appt-1' })]);
-    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext);
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, selectedDate);
 
     useAppointmentsStore.getState().recordCreatedAppointment(
       makeAppointment({ id: 'appt-1', startAt: '2026-06-15T11:00:00.000Z' }),
@@ -257,7 +282,7 @@ describe('useAppointmentsStore', () => {
     const getToken = vi.fn().mockResolvedValue('token');
 
     mockFetchEmployeeAppointments.mockResolvedValueOnce([makeAppointment({ id: 'appt-1' })]);
-    await useAppointmentsStore.getState().loadAppointments(getToken, barberContext);
+    await useAppointmentsStore.getState().loadAppointments(getToken, barberContext, selectedDate);
 
     useAppointmentsStore.getState().recordCreatedAppointment(
       makeAppointment({ id: 'appt-foreign', employeeId: 'emp-2' }),

@@ -5,8 +5,8 @@
  * BARBER sees their own appointments.
  * CLIENT is blocked.
  *
- * Date navigation uses client-side filtering: appointments whose
- * startAt starts with the selected date string are shown.
+ * Date navigation keeps the UI stable while fetching date-scoped
+ * appointments from the API.
  */
 import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
@@ -110,8 +110,8 @@ export default function AppointmentsScreen() {
   // Load appointments when context is ready
   useEffect(() => {
     if (!context || !getTokenRef.current) return;
-    loadAppointments(getTokenRef.current, context);
-  }, [context, loadAppointments]);
+    void loadAppointments(getTokenRef.current, context, selectedDate);
+  }, [context, loadAppointments, selectedDate]);
 
   // Reload on focus
   useFocusEffect(
@@ -125,10 +125,10 @@ export default function AppointmentsScreen() {
         return undefined;
       }
 
-      void loadAppointments(getTokenRef.current, context);
+      void loadAppointments(getTokenRef.current, context, selectedDate);
       return undefined;
     // getToken intentionally NOT in deps
-    }, [context, loadAppointments])
+    }, [context, loadAppointments, selectedDate])
   );
 
   // Pull-to-refresh
@@ -137,12 +137,12 @@ export default function AppointmentsScreen() {
     await loadContext(getTokenRef.current);
     const { context: freshContext } = useContextStore.getState();
     if (freshContext) {
-      await loadAppointments(getTokenRef.current, freshContext);
+      await loadAppointments(getTokenRef.current, freshContext, selectedDate);
       if (freshContext.role === 'OWNER' && freshContext.barbershopId) {
         await loadEmployees(getTokenRef.current, freshContext.barbershopId);
       }
     }
-  }, [loadContext, loadAppointments, loadEmployees]);
+  }, [loadContext, loadAppointments, loadEmployees, selectedDate]);
 
   // Handle status transition
   const handleTransition = useCallback(
@@ -170,16 +170,11 @@ export default function AppointmentsScreen() {
     [cancelAppointment],
   );
 
-  // Client-side filtering by date
-  const dateFiltered = useMemo(() => {
-    return appointments.filter((a) => a.startAt.startsWith(selectedDate));
-  }, [appointments, selectedDate]);
-
   // Employee filter for OWNER
   const filtered = useMemo(() => {
-    if (!context || context.role !== 'OWNER' || !selectedEmployeeId) return dateFiltered;
-    return dateFiltered.filter((a) => a.employeeId === selectedEmployeeId);
-  }, [context, dateFiltered, selectedEmployeeId]);
+    if (!context || context.role !== 'OWNER' || !selectedEmployeeId) return appointments;
+    return appointments.filter((a) => a.employeeId === selectedEmployeeId);
+  }, [appointments, context, selectedEmployeeId]);
 
   // Get available transitions for an appointment based on role
   const getTransitions = useCallback(

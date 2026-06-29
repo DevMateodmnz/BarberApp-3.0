@@ -39,6 +39,14 @@ export const AppointmentAvailabilityQuerySchema = z
   })
   .strict();
 
+export const AppointmentListQuerySchema = z
+  .object({
+    date: ServiceRecordDateSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(100),
+    offset: z.coerce.number().int().min(0).default(0),
+  })
+  .strict();
+
 export const AppointmentStatusSchema = z.object({
   status: z.enum([
     'PENDING',
@@ -62,3 +70,4 @@ export type StaffCreateAppointmentInput = z.infer<
 export type AppointmentAvailabilityQuery = z.infer<
   typeof AppointmentAvailabilityQuerySchema
 >;
+export type AppointmentListQuery = z.infer<typeof AppointmentListQuerySchema>;

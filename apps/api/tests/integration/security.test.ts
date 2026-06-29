@@ -13,7 +13,12 @@ import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { createAppFromEnv } from '../../src/app.js';
 import type { User, Barbershop, Employee, Service } from '@prisma/client';
-import { getFutureOpenBusinessTime, getNextLocalWeekdayTime } from '../helpers/timezone.js';
+import {
+  getFutureOpenBusinessTime,
+  getNextLocalWeekdayDate,
+  getNextLocalWeekdayTime,
+  localDateTimeToUtc,
+} from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
 
@@ -1280,151 +1285,141 @@ describe('Business Hours Enforcement', () => {
 });
 
 // ============================================
-// 7. BARBER APPOINTMENT LISTING AUTHORIZATION
+// 7. APPOINTMENT LIST QUERY CORRECTNESS
 // ============================================
 
-import { listAppointments } from '../../src/services/appointmentService.js';
+describe('Appointment List Query Correctness', () => {
+  async function createAppointmentRecord(input: {
+    barbershopId: string;
+    employeeId: string;
+    clientId: string;
+    clientName: string;
+    service: Service;
+    startAt: Date;
+  }) {
+    return prisma.appointment.create({
+      data: {
+        barbershopId: input.barbershopId,
+        employeeId: input.employeeId,
+        clientId: input.clientId,
+        serviceId: input.service.id,
+        clientName: input.clientName,
+        clientPhone: null,
+        serviceName: input.service.name,
+        servicePriceCents: input.service.priceCents,
+        serviceDurationMinutes: input.service.durationMinutes,
+        serviceCurrency: input.service.currency,
+        startAt: input.startAt,
+        endAt: new Date(
+          input.startAt.getTime() + input.service.durationMinutes * 60_000
+        ),
+      },
+    });
+  }
 
-describe('Barber Appointment Listing Authorization', () => {
-  it('BARBER without employeeId receives 403 (fail closed)', async () => {
+  it('generic BARBER listing is intentionally unsupported and fail-closed', async () => {
     const res = await request(app)
       .get('/api/v1/appointments')
       .set(authHeader(fixtures.employeeA1.user.clerkUserId));
     expect(res.status).toBe(403);
-    expect(res.body.error.message).toContain('Employee context required');
+    expect(res.body.error.message).toContain('employee-scoped appointments endpoint');
   });
 
-  it('BARBER with employeeId sees only their own appointments (service level)', async () => {
-    // Create appointments for barber A1 and A2 in Shop A
-    const start1 = businessHoursDate(2);
-    const start2 = businessHoursDate(3);
-    const start3 = businessHoursDate(4);
+  it('OWNER date-filtered listing returns only appointments for that local day and tenant', async () => {
+    const monday = getNextLocalWeekdayDate(1);
+    const tuesday = getNextLocalWeekdayDate(2);
 
-    // A1 appointment
-    await prisma.appointment.create({
-      data: {
-        barbershopId: fixtures.shopA.id,
-        employeeId: fixtures.employeeA1.employee.id,
-        clientId: fixtures.clientA.id,
-        serviceId: fixtures.serviceA1.id,
-        clientName: fixtures.clientA.name!,
-        clientPhone: null,
-        serviceName: fixtures.serviceA1.name,
-        servicePriceCents: fixtures.serviceA1.priceCents,
-        serviceDurationMinutes: fixtures.serviceA1.durationMinutes,
-        serviceCurrency: fixtures.serviceA1.currency,
-        startAt: new Date(start1),
-        endAt: new Date(new Date(start1).getTime() + 30 * 60000),
-      },
+    await createAppointmentRecord({
+      barbershopId: fixtures.shopA.id,
+      employeeId: fixtures.employeeA1.employee.id,
+      clientId: fixtures.clientA.id,
+      clientName: fixtures.clientA.name!,
+      service: fixtures.serviceA1,
+      startAt: localDateTimeToUtc(monday, '10:00'),
+    });
+    const olderAppointment = await createAppointmentRecord({
+      barbershopId: fixtures.shopA.id,
+      employeeId: fixtures.employeeA1.employee.id,
+      clientId: fixtures.clientA.id,
+      clientName: fixtures.clientA.name!,
+      service: fixtures.serviceA1,
+      startAt: localDateTimeToUtc(tuesday, '10:00'),
+    });
+    await createAppointmentRecord({
+      barbershopId: fixtures.shopB.id,
+      employeeId: fixtures.employeeB1.employee.id,
+      clientId: fixtures.clientB.id,
+      clientName: fixtures.clientB.name!,
+      service: fixtures.serviceB1,
+      startAt: localDateTimeToUtc(monday, '11:00'),
     });
 
-    // A2 appointment (different barber, same shop)
-    await prisma.appointment.create({
-      data: {
+    const listRes = await request(app)
+      .get('/api/v1/appointments')
+      .query({ date: monday })
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.data).toHaveLength(1);
+    expect(listRes.body.data[0]?.barbershopId).toBe(fixtures.shopA.id);
+    expect(listRes.body.data[0]?.employeeId).toBe(fixtures.employeeA1.employee.id);
+  });
+
+  it('OWNER date-filtered listing does not miss older appointments outside the latest 100 rows', async () => {
+    const olderDate = getNextLocalWeekdayDate(1);
+    const newerBase = localDateTimeToUtc(getNextLocalWeekdayDate(2), '00:00');
+
+    const olderAppointment = await createAppointmentRecord({
+      barbershopId: fixtures.shopA.id,
+      employeeId: fixtures.employeeA1.employee.id,
+      clientId: fixtures.clientA.id,
+      clientName: fixtures.clientA.name!,
+      service: fixtures.serviceA1,
+      startAt: localDateTimeToUtc(olderDate, '10:00'),
+    });
+
+    for (let index = 0; index < 101; index += 1) {
+      await createAppointmentRecord({
         barbershopId: fixtures.shopA.id,
         employeeId: fixtures.employeeA2.employee.id,
         clientId: fixtures.clientA.id,
-        serviceId: fixtures.serviceA1.id,
         clientName: fixtures.clientA.name!,
-        clientPhone: null,
-        serviceName: fixtures.serviceA1.name,
-        servicePriceCents: fixtures.serviceA1.priceCents,
-        serviceDurationMinutes: fixtures.serviceA1.durationMinutes,
-        serviceCurrency: fixtures.serviceA1.currency,
-        startAt: new Date(start2),
-        endAt: new Date(new Date(start2).getTime() + 30 * 60000),
-      },
-    });
-
-    // Another A1 appointment
-    await prisma.appointment.create({
-      data: {
-        barbershopId: fixtures.shopA.id,
-        employeeId: fixtures.employeeA1.employee.id,
-        clientId: fixtures.clientA.id,
-        serviceId: fixtures.serviceA1.id,
-        clientName: fixtures.clientA.name!,
-        clientPhone: null,
-        serviceName: fixtures.serviceA1.name,
-        servicePriceCents: fixtures.serviceA1.priceCents,
-        serviceDurationMinutes: fixtures.serviceA1.durationMinutes,
-        serviceCurrency: fixtures.serviceA1.currency,
-        startAt: new Date(start3),
-        endAt: new Date(new Date(start3).getTime() + 30 * 60000),
-      },
-    });
-
-    // List as barber A1 — should see only A1's appointments
-    const results = await listAppointments(
-      fixtures.employeeA1.user.id,
-      'BARBER',
-      fixtures.employeeA1.employee.id
-    );
-
-    expect(results).toHaveLength(2);
-    for (const appt of results) {
-      expect(appt.employeeId).toBe(fixtures.employeeA1.employee.id);
-    }
-  });
-
-  it('BARBER does not see appointments from another barbershop (service level)', async () => {
-    // Create appointment in Shop B for barber B1
-    const startB = businessHoursDate(2);
-    await prisma.appointment.create({
-      data: {
-        barbershopId: fixtures.shopB.id,
-        employeeId: fixtures.employeeB1.employee.id,
-        clientId: fixtures.clientB.id,
-        serviceId: fixtures.serviceB1.id,
-        clientName: fixtures.clientB.name!,
-        clientPhone: null,
-        serviceName: fixtures.serviceB1.name,
-        servicePriceCents: fixtures.serviceB1.priceCents,
-        serviceDurationMinutes: fixtures.serviceB1.durationMinutes,
-        serviceCurrency: fixtures.serviceB1.currency,
-        startAt: new Date(startB),
-        endAt: new Date(new Date(startB).getTime() + 30 * 60000),
-      },
-    });
-
-    // List as barber A1 — should not see Shop B's appointments
-    const results = await listAppointments(
-      fixtures.employeeA1.user.id,
-      'BARBER',
-      fixtures.employeeA1.employee.id
-    );
-
-    for (const appt of results) {
-      expect(appt.barbershopId).not.toBe(fixtures.shopB.id);
-    }
-  });
-
-  it('OWNER listing still works correctly', async () => {
-    // Book an appointment in Shop A
-    const res = await request(app)
-      .post('/api/v1/appointments')
-      .set(authHeader(fixtures.clientA.clerkUserId))
-      .send({
-        barbershopId: fixtures.shopA.id,
-        employeeId: fixtures.employeeA1.employee.id,
-        serviceId: fixtures.serviceA1.id,
-        startAt: businessHoursDate(2),
+        service: fixtures.serviceA1,
+        startAt: new Date(newerBase.getTime() + index * 60 * 60_000),
       });
-    expect(res.status).toBe(201);
+    }
 
-    // Owner A lists — should see Shop A appointments
     const listRes = await request(app)
       .get('/api/v1/appointments')
+      .query({ date: olderDate, limit: 100 })
       .set(authHeader(fixtures.ownerA.clerkUserId));
+
     expect(listRes.status).toBe(200);
-    expect(listRes.body.data.length).toBeGreaterThanOrEqual(1);
-    for (const appt of listRes.body.data) {
-      expect(appt.barbershopId).toBe(fixtures.shopA.id);
-    }
+    expect(listRes.body.data).toHaveLength(1);
+    expect(listRes.body.data[0]?.id).toBe(olderAppointment.id);
+  });
+
+  it('invalid appointment list date returns 400', async () => {
+    const res = await request(app)
+      .get('/api/v1/appointments')
+      .query({ date: '2026/06/29' })
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('Invalid appointment list query parameters');
+  });
+
+  it('appointment list limit is bounded', async () => {
+    const res = await request(app)
+      .get('/api/v1/appointments')
+      .query({ limit: 101 })
+      .set(authHeader(fixtures.ownerA.clerkUserId));
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('Invalid appointment list query parameters');
   });
 
   it('CLIENT listing still works correctly', async () => {
-    // Book an appointment for client A
     const res = await request(app)
       .post('/api/v1/appointments')
       .set(authHeader(fixtures.clientA.clerkUserId))
@@ -1436,7 +1431,6 @@ describe('Barber Appointment Listing Authorization', () => {
       });
     expect(res.status).toBe(201);
 
-    // Client A lists — should see only their own appointments
     const listRes = await request(app)
       .get('/api/v1/appointments')
       .set(authHeader(fixtures.clientA.clerkUserId));
@@ -1548,6 +1542,53 @@ describe('Scoped Employee Appointment Listing', () => {
     }
   });
 
+  it('active BARBER can list their scoped appointments by date', async () => {
+    const monday = getNextLocalWeekdayDate(1);
+    const tuesday = getNextLocalWeekdayDate(2);
+
+    await prisma.appointment.createMany({
+      data: [
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.employee.id,
+          clientId: fixtures.clientA.id,
+          serviceId: fixtures.serviceA1.id,
+          clientName: fixtures.clientA.name!,
+          clientPhone: null,
+          serviceName: fixtures.serviceA1.name,
+          servicePriceCents: fixtures.serviceA1.priceCents,
+          serviceDurationMinutes: fixtures.serviceA1.durationMinutes,
+          serviceCurrency: fixtures.serviceA1.currency,
+          startAt: localDateTimeToUtc(monday, '10:00'),
+          endAt: localDateTimeToUtc(monday, '10:30'),
+        },
+        {
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.employee.id,
+          clientId: fixtures.clientA.id,
+          serviceId: fixtures.serviceA1.id,
+          clientName: fixtures.clientA.name!,
+          clientPhone: null,
+          serviceName: fixtures.serviceA1.name,
+          servicePriceCents: fixtures.serviceA1.priceCents,
+          serviceDurationMinutes: fixtures.serviceA1.durationMinutes,
+          serviceCurrency: fixtures.serviceA1.currency,
+          startAt: localDateTimeToUtc(tuesday, '10:00'),
+          endAt: localDateTimeToUtc(tuesday, '10:30'),
+        },
+      ],
+    });
+
+    const listRes = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shopA.id}/employees/${fixtures.employeeA1.employee.id}/appointments`)
+      .query({ date: monday })
+      .set(authHeader(fixtures.employeeA1.user.clerkUserId));
+
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.data).toHaveLength(1);
+    expect(listRes.body.data[0]?.employeeId).toBe(fixtures.employeeA1.employee.id);
+  });
+
   it('BARBER cannot list another barber\'s appointments in same barbershop — 403', async () => {
     // Create appointment for employeeA2
     await request(app)
@@ -1640,6 +1681,6 @@ describe('Scoped Employee Appointment Listing', () => {
       .get('/api/v1/appointments')
       .set(authHeader(fixtures.employeeA1.user.clerkUserId));
     expect(res.status).toBe(403);
-    expect(res.body.error.message).toContain('Employee context required');
+    expect(res.body.error.message).toContain('employee-scoped appointments endpoint');
   });
 });

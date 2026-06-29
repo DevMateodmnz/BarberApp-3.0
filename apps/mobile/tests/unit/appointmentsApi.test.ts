@@ -34,6 +34,51 @@ async function importAppointments() {
   return import('../../src/lib/appointments.js');
 }
 
+describe('appointment list fetchers', () => {
+  it('fetchAppointments sends the selected date query to the generic endpoint', async () => {
+    const { fetchAppointments } = await importAppointments();
+    const payload = [{ id: 'appt-1' }];
+
+    mockApi.get.mockResolvedValueOnce({
+      status: 200,
+      data: { success: true, data: payload },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('owner-token');
+    const result = await fetchAppointments(getToken, { date: '2026-06-29' });
+
+    expect(mockApi.get).toHaveBeenCalledWith('/appointments', {
+      headers: { Authorization: 'Bearer owner-token' },
+      params: { date: '2026-06-29' },
+    });
+    expect(result).toEqual(payload);
+  });
+
+  it('fetchEmployeeAppointments sends the selected date query to the scoped endpoint', async () => {
+    const { fetchEmployeeAppointments } = await importAppointments();
+    const payload = [{ id: 'appt-2' }];
+
+    mockApi.get.mockResolvedValueOnce({
+      status: 200,
+      data: { success: true, data: payload },
+    });
+
+    const getToken = vi.fn().mockResolvedValue('barber-token');
+    const result = await fetchEmployeeAppointments(getToken, 'shop-1', 'emp-1', {
+      date: '2026-06-30',
+    });
+
+    expect(mockApi.get).toHaveBeenCalledWith(
+      '/barbershops/shop-1/employees/emp-1/appointments',
+      {
+        headers: { Authorization: 'Bearer barber-token' },
+        params: { date: '2026-06-30' },
+      },
+    );
+    expect(result).toEqual(payload);
+  });
+});
+
 describe('fetchAppointmentAvailability', () => {
   it('builds the committed availability route and query params', async () => {
     const { fetchAppointmentAvailability } = await importAppointments();

@@ -3,7 +3,7 @@
  *
  * Role-based access:
  * - POST   /api/v1/appointments          CLIENT (book appointment)
- * - GET    /api/v1/appointments          ALL (filtered by role)
+ * - GET    /api/v1/appointments          OWNER, CLIENT
  * - GET    /api/v1/appointments/:id      ALL (tenant-scoped)
  * - PUT    /api/v1/appointments/:id      OWNER, BARBER (reschedule)
  * - PUT    /api/v1/appointments/:id/status  OWNER, BARBER (status transition)
@@ -17,15 +17,29 @@ import {
   CreateAppointmentSchema,
   UpdateAppointmentSchema,
   AppointmentStatusSchema,
+  AppointmentListQuerySchema,
 } from '../schemas/appointment.js';
 import * as appointmentService from '../services/appointmentService.js';
-import { BadRequestError } from '../lib/errors.js';
+import { BadRequestError, ValidationError } from '../lib/errors.js';
 
 /** Extracts route param with validation */
 function paramId(req: Request): string {
   const id = req.params.id;
   if (!id) throw new BadRequestError('Appointment ID is required');
   return id;
+}
+
+function parseAppointmentListQuery(req: Request) {
+  const parsed = AppointmentListQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid appointment list query parameters',
+      parsed.error.flatten()
+    );
+  }
+
+  return parsed.data;
 }
 
 const router = Router();
@@ -54,7 +68,7 @@ router.post(
 );
 
 // ============================================
-// GET /api/v1/appointments - List appointments (ALL roles, scoped)
+// GET /api/v1/appointments - List appointments (OWNER, CLIENT)
 // ============================================
 router.get(
   '/',
@@ -63,7 +77,7 @@ router.get(
       const appointments = await appointmentService.listAppointments(
         req.userId,
         req.userRole,
-        req.employeeId
+        parseAppointmentListQuery(req)
       );
       res.json({ success: true, data: appointments });
     } catch (error) {
