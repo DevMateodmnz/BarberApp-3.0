@@ -175,6 +175,20 @@ async function getClientSnapshotSource(clientId: string): Promise<User> {
   return prisma.user.findUniqueOrThrow({ where: { id: clientId } });
 }
 
+async function findActiveBarberEmployeeForBarbershop(
+  userId: string,
+  barbershopId: string
+): Promise<Employee | null> {
+  return prisma.employee.findFirst({
+    where: {
+      userId,
+      barbershopId,
+      isActive: true,
+      deletedAt: null,
+    },
+  });
+}
+
 function buildClientSnapshotFromUser(
   client: User,
   notes?: string | null
@@ -786,9 +800,10 @@ export async function getAppointment(
       throw new NotFoundError('Appointment');
     }
   } else if (role === 'BARBER') {
-    const employee = await prisma.employee.findFirst({
-      where: { userId, barbershopId: appointment.barbershopId },
-    });
+    const employee = await findActiveBarberEmployeeForBarbershop(
+      userId,
+      appointment.barbershopId
+    );
     if (!employee || employee.id !== appointment.employeeId) {
       throw new NotFoundError('Appointment');
     }
@@ -887,15 +902,6 @@ export async function transitionAppointmentStatus(
   const appointment = await getAppointment(appointmentId, userId, role);
 
   validateStatusTransition(appointment.status, newStatus, role);
-
-  if (role === 'BARBER') {
-    const employee = await prisma.employee.findFirst({
-      where: { userId, barbershopId: appointment.barbershopId },
-    });
-    if (!employee || employee.id !== appointment.employeeId) {
-      throw new ForbiddenError('You can only manage your own appointments');
-    }
-  }
 
   return prisma.appointment.update({
     where: { id: appointmentId },

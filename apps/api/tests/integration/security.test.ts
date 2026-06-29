@@ -228,6 +228,18 @@ beforeAll(async () => {
 beforeEach(async () => {
   // Clean appointments between tests (keep users/shops/services/workingHours)
   await prisma.appointment.deleteMany();
+  await prisma.employee.updateMany({
+    where: {
+      id: {
+        in: [
+          fixtures.employeeA1.employee.id,
+          fixtures.employeeA2.employee.id,
+          fixtures.employeeB1.employee.id,
+        ],
+      },
+    },
+    data: { isActive: true, deletedAt: null },
+  });
 });
 
 afterAll(async () => {
@@ -509,6 +521,124 @@ describe('Tenant Isolation', () => {
       .get(`/api/v1/appointments/${bookA.body.data.id}`)
       .set(authHeader(fixtures.employeeB1.user.clerkUserId));
     expect(res.status).toBe(404);
+  });
+
+  describe('appointment-by-id barber membership revocation', () => {
+    async function createAppointmentForEmployeeA1() {
+      const bookRes = await request(app)
+        .post('/api/v1/appointments')
+        .set(authHeader(fixtures.clientA.clerkUserId))
+        .send({
+          barbershopId: fixtures.shopA.id,
+          employeeId: fixtures.employeeA1.employee.id,
+          serviceId: fixtures.serviceA1.id,
+          startAt: futureDate(2),
+        });
+
+      expect(bookRes.status).toBe(201);
+      return bookRes.body.data.id as string;
+    }
+
+    it('active BARBER can access their allowed appointment by ID', async () => {
+      const appointmentId = await createAppointmentForEmployeeA1();
+
+      const res = await request(app)
+        .get(`/api/v1/appointments/${appointmentId}`)
+        .set(authHeader(fixtures.employeeA1.user.clerkUserId));
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toBe(appointmentId);
+    });
+
+    it('deactivated BARBER cannot access appointment by ID', async () => {
+      const appointmentId = await createAppointmentForEmployeeA1();
+
+      await prisma.employee.update({
+        where: { id: fixtures.employeeA1.employee.id },
+        data: { isActive: false, deletedAt: new Date() },
+      });
+
+      const res = await request(app)
+        .get(`/api/v1/appointments/${appointmentId}`)
+        .set(authHeader(fixtures.employeeA1.user.clerkUserId));
+
+      expect(res.status).toBe(404);
+    });
+
+    it('soft-deleted BARBER cannot access appointment by ID', async () => {
+      const appointmentId = await createAppointmentForEmployeeA1();
+
+      await prisma.employee.update({
+        where: { id: fixtures.employeeA1.employee.id },
+        data: { deletedAt: new Date() },
+      });
+
+      const res = await request(app)
+        .get(`/api/v1/appointments/${appointmentId}`)
+        .set(authHeader(fixtures.employeeA1.user.clerkUserId));
+
+      expect(res.status).toBe(404);
+    });
+
+    it('deactivated BARBER cannot update appointment by ID', async () => {
+      const appointmentId = await createAppointmentForEmployeeA1();
+
+      await prisma.employee.update({
+        where: { id: fixtures.employeeA1.employee.id },
+        data: { isActive: false, deletedAt: new Date() },
+      });
+
+      const res = await request(app)
+        .put(`/api/v1/appointments/${appointmentId}`)
+        .set(authHeader(fixtures.employeeA1.user.clerkUserId))
+        .send({ notes: 'should be blocked' });
+
+      expect(res.status).toBe(404);
+    });
+
+    it('deactivated BARBER cannot transition appointment status', async () => {
+      const appointmentId = await createAppointmentForEmployeeA1();
+
+      const confirmRes = await request(app)
+        .put(`/api/v1/appointments/${appointmentId}/status`)
+        .set(authHeader(fixtures.ownerA.clerkUserId))
+        .send({ status: 'CONFIRMED' });
+
+      expect(confirmRes.status).toBe(200);
+
+      await prisma.employee.update({
+        where: { id: fixtures.employeeA1.employee.id },
+        data: { isActive: false, deletedAt: new Date() },
+      });
+
+      const res = await request(app)
+        .put(`/api/v1/appointments/${appointmentId}/status`)
+        .set(authHeader(fixtures.employeeA1.user.clerkUserId))
+        .send({ status: 'IN_PROGRESS' });
+
+      expect(res.status).toBe(404);
+    });
+
+    it('OWNER access to appointment by ID still works', async () => {
+      const appointmentId = await createAppointmentForEmployeeA1();
+
+      const res = await request(app)
+        .get(`/api/v1/appointments/${appointmentId}`)
+        .set(authHeader(fixtures.ownerA.clerkUserId));
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toBe(appointmentId);
+    });
+
+    it('unrelated BARBER from another barbershop still cannot access the appointment', async () => {
+      const appointmentId = await createAppointmentForEmployeeA1();
+
+      const res = await request(app)
+        .get(`/api/v1/appointments/${appointmentId}`)
+        .set(authHeader(fixtures.employeeB1.user.clerkUserId));
+
+      expect(res.status).toBe(404);
+    });
   });
 
   it('listing appointments for owner only shows their shop appointments', async () => {
