@@ -114,13 +114,13 @@ export const es = {
     languageSettings: 'Idioma',
     tabs: {
       home: 'Inicio',
-      appointments: 'Turnos',
+      appointments: 'Agenda',
       record: 'Registrar',
       manage: 'Gestionar',
     },
     accessibility: {
       homeTab: 'Abrir la pestaña Inicio',
-      appointmentsTab: 'Abrir la pestaña Turnos',
+      appointmentsTab: 'Abrir la pestaña Agenda',
       recordTab: 'Abrir la pestaña Registrar servicio',
       manageTab: 'Abrir la pestaña Gestionar',
       services: 'Abrir la gestión de servicios',

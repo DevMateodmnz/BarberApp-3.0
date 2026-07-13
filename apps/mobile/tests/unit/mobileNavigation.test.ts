@@ -97,4 +97,31 @@ describe('mobileNavigation', () => {
     expect(germanCopy.tabLabel).toBe('Erfassen');
     expect(germanCopy.accessibilityLabel).toContain('Tab');
   });
+
+  it('uses Agenda only for the Spanish appointments tab label without renaming appointment copy globally', async () => {
+    const appointmentsDestination = getPrimaryDestinationsForRole('OWNER').find(
+      (destination) => destination.id === 'appointments',
+    );
+    if (!appointmentsDestination) {
+      throw new Error('Missing appointments destination');
+    }
+
+    await mobileLocalizationRuntime.i18n.changeLanguage('es');
+    const spanishCopy = resolvePrimaryDestinationCopy(
+      appointmentsDestination,
+      (key, options) => mobileLocalizationRuntime.i18n.t(key, options),
+    );
+
+    await mobileLocalizationRuntime.i18n.changeLanguage('en');
+    const englishCopy = resolvePrimaryDestinationCopy(
+      appointmentsDestination,
+      (key, options) => mobileLocalizationRuntime.i18n.t(key, options),
+    );
+
+    expect(spanishCopy.tabLabel).toBe('Agenda');
+    expect(spanishCopy.title).toBe('Turnos');
+    expect(spanishCopy.accessibilityLabel).toBe('Abrir la pestaña Agenda');
+    expect(englishCopy.tabLabel).toBe('Appointments');
+    expect(englishCopy.title).toBe('Appointments');
+  });
 });
