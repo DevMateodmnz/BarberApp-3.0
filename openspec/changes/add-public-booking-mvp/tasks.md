@@ -31,17 +31,17 @@ Chain strategy: pending
 
 ## Phase 1: Decision Lock and Schema Foundations
 
-- [ ] 1.1 Add `publicSlug`, `publicReference`, consent fields, schedule exceptions, and idempotency records to Prisma with backward-conscious migrations and rollback notes.
+- [x] 1.1 Add `publicSlug`, `publicReference`, consent fields, schedule exceptions, and idempotency records to Prisma with backward-conscious migrations and rollback notes.
   - [x] 1.1.a Add nullable `Barbershop.publicSlug` with lowercase canonical storage rules, uniqueness, and no automatic backfill.
-  - [ ] 1.1.b Add `publicReference`, consent fields, schedule exceptions, and idempotency records.
+  - [x] 1.1.b Add `publicReference`, consent fields, schedule exceptions, and idempotency records.
     - [x] 1.1.b.i Add `BarbershopScheduleException` and `BarbershopScheduleExceptionInterval` with backward-conscious migration support.
-    - [ ] 1.1.b.ii Add `publicReference`, consent fields, and idempotency records.
+    - [x] 1.1.b.ii Add `publicReference`, consent fields, and idempotency records.
 - [x] 1.2 Add slug normalization/reserved-word utilities and a shared public booking policy module for notice, horizon, and slot interval defaults.
-- [ ] 1.3 Write DB/unit tests for slug uniqueness, public reference uniqueness, exception interval validation, and idempotency-key scope.
+- [x] 1.3 Write DB/unit tests for slug uniqueness, public reference uniqueness, exception interval validation, and idempotency-key scope.
   - [x] 1.3.a Write DB/unit tests for slug normalization, reserved words, uniqueness, case handling, and canonical database constraints.
-  - [ ] 1.3.b Write DB/unit tests for public reference uniqueness, exception interval validation, and idempotency-key scope.
+  - [x] 1.3.b Write DB/unit tests for public reference uniqueness, exception interval validation, and idempotency-key scope.
     - [x] 1.3.b.i Write DB/unit tests for schedule exception interval validation and controlled provisioning flows.
-    - [ ] 1.3.b.ii Write DB/unit tests for public reference uniqueness and idempotency-key scope.
+    - [x] 1.3.b.ii Write DB/unit tests for public reference uniqueness and idempotency-key scope.
 
 ## Phase 2: Public Catalogue and Barbershop Identity API
 
@@ -83,7 +83,7 @@ Chain strategy: pending
 - [ ] 7.1 Add separate read/availability/write rate-limit classes using a production-safe shared store abstraction.
   - [x] 7.1.a Add a dedicated `public_catalog_read` limiter boundary for the current single-instance pilot.
   - [x] 7.1.b Add a dedicated `public_availability_read` limiter boundary for the current single-instance pilot.
-- [ ] 7.2 Verify public DTO minimization, error-envelope consistency, and tenant/privacy guarantees through integration tests.
+- [x] 7.2 Verify public DTO minimization, error-envelope consistency, and tenant/privacy guarantees through integration tests.
   - [x] 7.2.a Verify public catalogue DTO minimization, fail-closed errors, and tenant/privacy guarantees through integration tests.
   - [x] 7.2.b Verify public availability DTO minimization, fail-closed errors, and tenant/privacy guarantees through integration tests.
 - [x] 7.3 Confirm existing OWNER/BARBER/mobile booking flows still pass their full regressions.
