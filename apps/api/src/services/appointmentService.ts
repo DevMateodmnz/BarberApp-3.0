@@ -24,6 +24,7 @@ import {
   getUtcRangeForLocalDate,
   localDateTimeToUtc,
 } from '../lib/dateUtils.js';
+import { APPOINTMENT_SLOT_INTERVAL_MINUTES } from '../lib/appointmentScheduling.js';
 import { validateEmployeeInBarbershop } from './employeeService.js';
 import type {
   AppointmentStatus,
@@ -45,8 +46,6 @@ const BLOCKING_APPOINTMENT_STATUSES: AppointmentStatus[] = [
   'CONFIRMED',
   'IN_PROGRESS',
 ];
-
-const APPOINTMENT_SLOT_INTERVAL_MINUTES = 30;
 
 const APPOINTMENT_INCLUDE = {
   barbershop: true,

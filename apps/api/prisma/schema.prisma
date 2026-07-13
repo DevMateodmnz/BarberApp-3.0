@@ -79,16 +79,17 @@ model User {
 /// Barbershop model - represents a barbershop business
 /// Each barbershop has exactly one owner
 model Barbershop {
-  id        String    @id @default(cuid())
-  ownerId   String    @map("owner_id")
-  name      String
-  address   String?
-  phone     String?
-  timezone  String    @default("America/Argentina/Tucuman")
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  id         String    @id @default(cuid())
+  ownerId    String    @map("owner_id")
+  name       String
+  address    String?
+  phone      String?
+  publicSlug String?   @unique @map("public_slug")
+  timezone   String    @default("America/Argentina/Tucuman")
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
 
   // Relations
   owner               User                 @relation("BarbershopOwner", fields: [ownerId], references: [id])

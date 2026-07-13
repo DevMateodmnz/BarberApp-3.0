@@ -32,8 +32,12 @@ Chain strategy: pending
 ## Phase 1: Decision Lock and Schema Foundations
 
 - [ ] 1.1 Add `publicSlug`, `publicReference`, consent fields, schedule exceptions, and idempotency records to Prisma with backward-conscious migrations and rollback notes.
-- [ ] 1.2 Add slug normalization/reserved-word utilities and a shared public booking policy module for notice, horizon, and slot interval defaults.
+  - [x] 1.1.a Add nullable `Barbershop.publicSlug` with lowercase canonical storage rules, uniqueness, and no automatic backfill.
+  - [ ] 1.1.b Add `publicReference`, consent fields, schedule exceptions, and idempotency records.
+- [x] 1.2 Add slug normalization/reserved-word utilities and a shared public booking policy module for notice, horizon, and slot interval defaults.
 - [ ] 1.3 Write DB/unit tests for slug uniqueness, public reference uniqueness, exception interval validation, and idempotency-key scope.
+  - [x] 1.3.a Write DB/unit tests for slug normalization, reserved words, uniqueness, case handling, and canonical database constraints.
+  - [ ] 1.3.b Write DB/unit tests for public reference uniqueness, exception interval validation, and idempotency-key scope.
 
 ## Phase 2: Public Catalogue and Barbershop Identity API
 
