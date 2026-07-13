@@ -1,7 +1,7 @@
 # Public Booking Pilot RC 1
 
 **Date**: 2026-07-13
-**Status**: Physical Android QA passed; pending publication and deployment
+**Status**: MVP 1.1.0 published from the physical-QA release commit; deployment still pending
 **Audited candidate code HEAD**: `900274909f4b96ba3a3b7faf70d454b3ace2e94b` — `test(release): verify public booking production parity`
 **Branch**: `fix/public-booking-production-parity`
 **Base release**: `origin/main` at `8385ae4da31db3524b5c76347d0f8f4078fea79f` — `fix(appointments): use server-side date scoped listing`
@@ -16,7 +16,7 @@
 - Prisma public-booking migrations deploy cleanly from a fresh isolated PostgreSQL database on `5433`.
 - Anonymous public traffic remains limited to `apps/api/src/app.ts` route namespace `/api/v1/public`.
 - Production-mode parity passed with independently built artifacts via `npm run qa:public-booking` and its nested `npm run qa:public-booking:production`.
-- Physical Samsung Galaxy S21 QA has passed on Brave for Android (Chromium-based); push/tag/deploy remain pending until this publication batch completes cleanly.
+- Physical Samsung Galaxy S21 QA passed on Brave for Android (Chromium-based); `mvp-1.1.0` is now published on the physical-QA release commit and deployment remains pending.
 
 ## Release identity
 
@@ -29,7 +29,10 @@
 | Local `main` before integration | `8edea901205ec69613bae923ac00d385bcf4fdcd` |
 | Audited cumulative commit range | `origin/main..900274909f4b96ba3a3b7faf70d454b3ace2e94b` |
 | Audited commit count | `17` |
-| Planned release tag | `mvp-1.1.0` |
+| Published release tag | `mvp-1.1.0` |
+| Published tag object | `48525c4e099ac7cafd21dfdc386e1d2ffd6a8045` |
+| Published tag target | `49f69c4e323eab5f2226458979e7d2046ec208fa` |
+| Physical-QA release commit on `main` | `49f69c4e323eab5f2226458979e7d2046ec208fa` |
 | Release-prep evidence docs | `docs/releases/public-booking-pilot-rc-1.md`, `docs/manual-tests/public-booking-physical-qa.md` |
 
 ## Delivered scope
@@ -144,7 +147,7 @@ Important:
 5. No automated notifications.
 6. No public booking management (no self-service cancel/reschedule).
 7. Production deployment has not happened yet.
-8. Publication and deployment are still pending in this batch even though physical Android QA has passed.
+8. `mvp-1.1.0` publication is complete, but deployment is still pending.
 
 ## Nonblocking post-release UX follow-ups
 
@@ -155,7 +158,7 @@ Important:
 
 ## Release blocker policy
 
-This candidate must **not** be pushed, tagged, or deployed until all four conditions are true:
+Publication gate that was satisfied before creating `mvp-1.1.0` on `49f69c4e323eab5f2226458979e7d2046ec208fa`:
 
 1. Local integration to `main` passes with `git merge --ff-only`.
 2. Samsung Galaxy S21 Brave-for-Android QA is recorded as passed in `docs/manual-tests/public-booking-physical-qa.md`.
@@ -166,9 +169,9 @@ This candidate must **not** be pushed, tagged, or deployed until all four condit
 
 Current evidence supports this classification:
 
-> **Public Booking Pilot Release Candidate — physical Android QA passed; pending publication and deployment**
+> **Public Booking Pilot MVP 1.1.0 published; deployment pending**
 
-That means the audited code is acceptable for a single controlled pilot release path, but this document still precedes the `mvp-1.1.0` publication/tag step and any deployment.
+That means the physical-QA release commit is now tagged and published as `mvp-1.1.0`, while all deployment work remains explicitly outstanding.
 
 ## Related operational docs
 
