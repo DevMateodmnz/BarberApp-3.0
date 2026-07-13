@@ -2,12 +2,15 @@
 
 ## Release identity
 
-- Version: `mvp-1.1.0`
-- Release commit: `49f69c4e323eab5f2226458979e7d2046ec208fa`
-- Tag object: `48525c4e099ac7cafd21dfdc386e1d2ffd6a8045`
-- Tag target: `49f69c4e323eab5f2226458979e7d2046ec208fa`
-- Publication date: `2026-07-13`
-- Physical QA status: Samsung Galaxy S21 physical Android Chromium-browser QA passed on Brave for Android; deployment not yet performed.
+- Deployment candidate version: `mvp-1.1.1`
+- Deployment rule: deploy `mvp-1.1.1` only after the patch tag is published from green `main`.
+- Superseded pre-deploy release: `mvp-1.1.0`
+- Superseded release commit: `49f69c4e323eab5f2226458979e7d2046ec208fa`
+- Superseded tag object: `48525c4e099ac7cafd21dfdc386e1d2ffd6a8045`
+- Superseded tag target: `49f69c4e323eab5f2226458979e7d2046ec208fa`
+- Publication date of superseded tag: `2026-07-13`
+- Supersession reason: GitHub Actions on Node `20.20.2` exposed a midnight-conversion defect in `apps/api/src/lib/dateUtils.ts`; see `docs/releases/mvp-1.1.1.md`.
+- Physical QA status: Samsung Galaxy S21 physical Android Chromium-browser QA passed on Brave for Android; the patch is runtime-only, so that physical QA remains valid; deployment still has not been performed.
 
 ## Platform inventory
 
@@ -71,6 +74,8 @@
 16. Verify staff visibility.
 17. Share link with pilot shop.
 
+Before step 1, verify the deployment artifact/tag is `mvp-1.1.1`, not `mvp-1.1.0`.
+
 ### Operator details for the ordered steps
 
 1. **Confirm backup**: verify Railway/PostgreSQL backup coverage before schema changes; do not proceed on assumptions.
@@ -104,6 +109,7 @@
 ## Go / no-go checklist
 
 - [ ] Production database exists and backup posture is confirmed.
+- [ ] Deployment tag `mvp-1.1.1` is published and green on GitHub Actions.
 - [ ] Railway/API deployment target is provisioned and authenticated.
 - [ ] Actual production `DATABASE_URL` is available.
 - [ ] Actual production `CLERK_SECRET_KEY` and `CLERK_WEBHOOK_SECRET` are available.
@@ -138,6 +144,7 @@
 ## Notes on unresolved deployment risk
 
 - GitHub Actions CI definitely triggers on pushes to `main` per `.github/workflows/ci.yml`.
+- `mvp-1.1.0` was published but is superseded before deployment by the Node 20 compatibility patch release `mvp-1.1.1`.
 - The repository does **not** prove whether Railway or any Next.js host is currently Git-connected for automatic deployment.
 - No `vercel.json` or equivalent public-web platform config was found in the repository root.
 - Therefore deployment must still be treated as **not yet executed** and **not fully configuration-complete**.
