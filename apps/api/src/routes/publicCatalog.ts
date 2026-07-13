@@ -3,12 +3,18 @@ import type { ApiRuntimeConfig } from '../config/runtime.js';
 import { ValidationError } from '../lib/errors.js';
 import {
   createPublicAvailabilityReadRateLimiter,
+  createPublicBookingWriteRateLimiter,
   createPublicCatalogReadRateLimiter,
 } from '../middleware/publicRateLimit.js';
+import { validateBody } from '../middleware/validate.js';
 import {
   PublicAvailabilityQuerySchema,
   PublicBarberQuerySchema,
 } from '../schemas/publicCatalog.js';
+import { PublicCreateAppointmentSchema } from '../schemas/publicBooking.js';
+import {
+  createPublicBookingBySlug,
+} from '../services/publicBookingService.js';
 import {
   getPublicBarbershopBySlug,
   listEligiblePublicBarbersBySlug,
@@ -22,6 +28,10 @@ interface PublicCatalogRouterOptions {
     windowMs?: number;
   };
   availabilityReadRateLimit?: {
+    max?: number;
+    windowMs?: number;
+  };
+  bookingWriteRateLimit?: {
     max?: number;
     windowMs?: number;
   };
@@ -61,6 +71,16 @@ function parsePublicAvailabilityQuery(req: Request) {
   return parsed.data;
 }
 
+function requireIdempotencyKey(req: Request): string {
+  const header = req.get('Idempotency-Key')?.trim();
+
+  if (!header) {
+    throw new ValidationError('Idempotency-Key header is required');
+  }
+
+  return header;
+}
+
 export function createPublicCatalogRouter(
   config: ApiRuntimeConfig,
   options: PublicCatalogRouterOptions = {}
@@ -73,6 +93,10 @@ export function createPublicCatalogRouter(
   const availabilityReadRateLimit = createPublicAvailabilityReadRateLimiter(
     config.rateLimit,
     options.availabilityReadRateLimit
+  );
+  const bookingWriteRateLimit = createPublicBookingWriteRateLimiter(
+    config.rateLimit,
+    options.bookingWriteRateLimit
   );
 
   router.get(
@@ -131,6 +155,27 @@ export function createPublicCatalogRouter(
           localDate: query.localDate,
         });
         res.json({ success: true, data: availability });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.post(
+    '/barbershops/:slug/appointments',
+    bookingWriteRateLimit,
+    validateBody(PublicCreateAppointmentSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const result = await createPublicBookingBySlug({
+          slug: paramSlug(req),
+          idempotencyKey: requireIdempotencyKey(req),
+          body: req.body,
+        });
+
+        res
+          .status(result.replayed ? 200 : 201)
+          .json({ success: true, data: result.confirmation });
       } catch (error) {
         next(error);
       }

@@ -12,6 +12,7 @@ import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { createAppFromEnv } from '../../src/app.js';
 import type { User, Barbershop, Employee, Service } from '@prisma/client';
+import { getNextLocalWeekdayTime } from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
 
@@ -39,6 +40,18 @@ const fixtures: TestFixtures = {} as TestFixtures;
 
 function authHeader(clerkUserId: string) {
   return { 'x-test-user-id': clerkUserId };
+}
+
+function nextBuenosAiresWeekdayTimeIso(
+  dayOfWeek: number,
+  time: string
+): string {
+  return getNextLocalWeekdayTime(
+    dayOfWeek,
+    time,
+    new Date(),
+    'America/Argentina/Buenos_Aires'
+  ).toISOString();
 }
 
 const DEFAULT_HOURS = [
@@ -341,25 +354,21 @@ describe('PUT /api/v1/barbershops/:barbershopId/working-hours', () => {
       .set(authHeader(fixtures.ownerA.clerkUserId))
       .send({ workingHours: narrowHours });
 
-    // Monday 21:30 local = Tuesday 00:30 UTC
-    const insideTime = new Date('2026-06-30T00:30:00.000Z');
     const insideRes = await bookAppointment(
       fixtures.shopA.id,
       fixtures.employeeA.id,
       fixtures.serviceA.id,
       fixtures.clientUser.clerkUserId,
-      insideTime.toISOString()
+      nextBuenosAiresWeekdayTimeIso(1, '21:30')
     );
     expect(insideRes.status).toBe(201);
 
-    // Monday 20:00 local = Monday 23:00 UTC
-    const outsideTime = new Date('2026-06-29T23:00:00.000Z');
     const outsideRes = await bookAppointment(
       fixtures.shopA.id,
       fixtures.employeeA.id,
       fixtures.serviceA.id,
       fixtures.clientUser.clerkUserId,
-      outsideTime.toISOString()
+      nextBuenosAiresWeekdayTimeIso(1, '20:00')
     );
     expect(outsideRes.status).toBe(400);
     expect(outsideRes.body.error.message).toContain('before opening hours');
@@ -380,14 +389,12 @@ describe('PUT /api/v1/barbershops/:barbershopId/working-hours', () => {
       .set(authHeader(fixtures.ownerA.clerkUserId))
       .send({ workingHours: closedMonday });
 
-    // Monday 21:15 local = Tuesday 00:15 UTC
-    const mondayTime = new Date('2026-06-30T00:15:00.000Z');
     const res = await bookAppointment(
       fixtures.shopA.id,
       fixtures.employeeA.id,
       fixtures.serviceA.id,
       fixtures.clientUser.clerkUserId,
-      mondayTime.toISOString()
+      nextBuenosAiresWeekdayTimeIso(1, '21:30')
     );
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain('closed');

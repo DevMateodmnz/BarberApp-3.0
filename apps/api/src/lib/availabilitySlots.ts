@@ -1,5 +1,7 @@
 import type { AppointmentStatus, PrismaClient } from '@prisma/client';
 import { prisma } from './prisma.js';
+import { AppError } from './errors.js';
+import { roundMinutesUpToSlotBoundary } from './appointmentScheduling.js';
 import {
   addDaysToDateString,
   getLocalDateStringInTimeZone,
@@ -58,10 +60,7 @@ export function validateAvailabilityDateRange(
   const todayLocalDate = getLocalDateStringInTimeZone(timezone, now);
 
   if (options.allowTodayOnlyOrFuture && localDate < todayLocalDate) {
-    throw Object.assign(new Error(options.invalidPastMessage), {
-      statusCode: 400,
-      code: options.invalidPastCode,
-    });
+    throw new AppError(400, options.invalidPastCode, options.invalidPastMessage);
   }
 
   if (options.maximumBookingHorizonDays !== undefined) {
@@ -71,15 +70,11 @@ export function validateAvailabilityDateRange(
     );
 
     if (localDate > finalAllowedDate) {
-      throw Object.assign(
-        new Error(
-          options.invalidHorizonMessage ??
-            'Availability cannot be requested beyond the booking horizon'
-        ),
-        {
-          statusCode: 400,
-          code: options.invalidHorizonCode ?? 'INVALID_APPOINTMENT_DATE',
-        }
+      throw new AppError(
+        400,
+        options.invalidHorizonCode ?? 'INVALID_APPOINTMENT_DATE',
+        options.invalidHorizonMessage ??
+          'Availability cannot be requested beyond the booking horizon'
       );
     }
   }
@@ -145,7 +140,10 @@ export async function buildAvailabilitySlots(
     const closeMinutes = timeToMinutes(interval.closeTime);
 
     for (
-      let startMinutes = openMinutes;
+      let startMinutes = roundMinutesUpToSlotBoundary(
+        openMinutes,
+        slotIntervalMinutes
+      );
       startMinutes < closeMinutes;
       startMinutes += slotIntervalMinutes
     ) {

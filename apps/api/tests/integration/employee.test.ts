@@ -33,6 +33,15 @@ interface TestFixtures {
 
 const fixtures: TestFixtures = {} as TestFixtures;
 
+function getFutureEmployeeBookingTime(timeStr = '10:00') {
+  return getNextLocalWeekdayTime(
+    1,
+    timeStr,
+    new Date(),
+    'America/Argentina/Buenos_Aires'
+  );
+}
+
 // ============================================
 // SETUP / TEARDOWN
 // ============================================
@@ -753,7 +762,7 @@ describe('Appointment booking with assigned/unassigned services', () => {
       data: { employeeId: employeeA.id, serviceId: fixtures.serviceA1.id },
     });
 
-    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
+    const nextMonday = getFutureEmployeeBookingTime('10:00');
 
     const res = await request(app)
       .post('/api/v1/appointments')
@@ -771,7 +780,7 @@ describe('Appointment booking with assigned/unassigned services', () => {
 
   it('appointment booking fails after service is unassigned', async () => {
     // No service assigned — booking should fail
-    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
+    const nextMonday = getFutureEmployeeBookingTime('10:00');
 
     const res = await request(app)
       .post('/api/v1/appointments')
@@ -921,7 +930,7 @@ describe('DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId', () =>
   }
 
   function bookAppointment(shopId: string, empId: string, svcId: string) {
-    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
+    const nextMonday = getFutureEmployeeBookingTime('10:00');
     return request(app)
       .post('/api/v1/appointments')
       .set(authHeader(fixtures.clientUser.clerkUserId))
@@ -1267,7 +1276,7 @@ describe('PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactiva
     );
 
     // Book appointment
-    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
+    const nextMonday = getFutureEmployeeBookingTime('10:00');
 
     const res = await request(app)
       .post('/api/v1/appointments')

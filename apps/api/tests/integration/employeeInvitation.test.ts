@@ -362,6 +362,16 @@ describe('Employee invitation listing, resend, and revoke', () => {
       },
     });
 
+    await prisma.employeeInvitation.update({
+      where: { id: older.id },
+      data: { updatedAt: new Date(Date.now() - 60_000) },
+    });
+
+    await prisma.employeeInvitation.update({
+      where: { id: newer.id },
+      data: { updatedAt: new Date() },
+    });
+
     await prisma.employeeInvitation.create({
       data: {
         barbershopId: fixtures.shopB.id,

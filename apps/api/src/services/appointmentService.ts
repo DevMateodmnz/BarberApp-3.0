@@ -21,12 +21,16 @@ import {
   getLocalDateStringInTimeZone,
   getUtcRangeForLocalDate,
 } from '../lib/dateUtils.js';
-import { APPOINTMENT_SLOT_INTERVAL_MINUTES } from '../lib/appointmentScheduling.js';
+import {
+  APPOINTMENT_SLOT_INTERVAL_MINUTES,
+  isSlotBoundaryMinute,
+} from '../lib/appointmentScheduling.js';
 import { buildAvailabilitySlots } from '../lib/availabilitySlots.js';
 import { validateEmployeeInBarbershop } from './employeeService.js';
 import type {
   AppointmentStatus,
   Employee,
+  PrismaClient,
   Service,
   User,
   UserRole,
@@ -60,6 +64,13 @@ interface AppointmentSnapshotInput {
   serviceDurationMinutes: number;
   serviceCurrency: string;
   notes: string | null;
+}
+
+interface AppointmentRecordOptions {
+  status?: AppointmentStatus;
+  publicReference?: string | null;
+  publicConsentAcceptedAt?: Date | null;
+  publicConsentVersion?: string | null;
 }
 
 interface EligibleBookingContext {
@@ -215,7 +226,7 @@ function buildGuestClientSnapshot(input: {
   };
 }
 
-function buildServiceSnapshot(
+export function buildServiceSnapshot(
   service: Service
 ): Pick<
   AppointmentSnapshotInput,
@@ -232,7 +243,7 @@ function buildServiceSnapshot(
   };
 }
 
-function calculateAppointmentEndAt(
+export function calculateAppointmentEndAt(
   startAt: Date,
   durationMinutes: number
 ): Date {
@@ -408,25 +419,40 @@ async function resolveStaffEmployeeScope(
   return employeeId;
 }
 
-function validateStaffStartAt(
+export function validateAppointmentStartAt(
   startAt: Date,
   timezone: string,
-  now: Date = new Date()
+  options: {
+    now?: Date;
+    minimumAllowedAt?: Date;
+    futureErrorMessage?: string;
+    slotIntervalMinutes?: number;
+  } = {}
 ): void {
-  if (startAt.getTime() <= now.getTime()) {
+  const now = options.now ?? new Date();
+  const minimumAllowedAt = options.minimumAllowedAt;
+
+  const isTooSoon = minimumAllowedAt
+    ? startAt.getTime() < minimumAllowedAt.getTime()
+    : startAt.getTime() <= now.getTime();
+
+  if (isTooSoon) {
     throw new AppError(
       400,
       'INVALID_APPOINTMENT_TIME',
-      'Appointments must be scheduled in the future'
+      options.futureErrorMessage ?? 'Appointments must be scheduled in the future'
     );
   }
 
   const { minutesSinceMidnight } = getLocalDayAndTime(startAt, timezone);
-  if (minutesSinceMidnight % APPOINTMENT_SLOT_INTERVAL_MINUTES !== 0) {
+  const slotIntervalMinutes =
+    options.slotIntervalMinutes ?? APPOINTMENT_SLOT_INTERVAL_MINUTES;
+
+  if (!isSlotBoundaryMinute(minutesSinceMidnight, slotIntervalMinutes)) {
     throw new AppError(
       400,
       'INVALID_APPOINTMENT_TIME',
-      'Appointments must start on a 30-minute interval'
+      `Appointments must start on a ${slotIntervalMinutes}-minute interval`
     );
   }
 }
@@ -439,11 +465,23 @@ async function createAppointmentRecord(input: {
   startAt: Date;
   endAt: Date;
   snapshot: AppointmentSnapshotInput;
+  options?: AppointmentRecordOptions;
+  db?: Pick<PrismaClient, 'appointment'>;
 }) {
-  const { barbershopId, employeeId, clientId, serviceId, startAt, endAt, snapshot } = input;
+  const {
+    barbershopId,
+    employeeId,
+    clientId,
+    serviceId,
+    startAt,
+    endAt,
+    snapshot,
+    options,
+    db = prisma,
+  } = input;
 
   try {
-    return await prisma.appointment.create({
+    return await db.appointment.create({
       data: {
         barbershopId,
         employeeId,
@@ -451,9 +489,12 @@ async function createAppointmentRecord(input: {
         serviceId,
         startAt,
         endAt,
-        status: 'PENDING',
+        status: options?.status ?? 'PENDING',
         clientName: snapshot.clientName,
         clientPhone: snapshot.clientPhone,
+        publicReference: options?.publicReference ?? null,
+        publicConsentAcceptedAt: options?.publicConsentAcceptedAt ?? null,
+        publicConsentVersion: options?.publicConsentVersion ?? null,
         serviceName: snapshot.serviceName,
         servicePriceCents: snapshot.servicePriceCents,
         serviceDurationMinutes: snapshot.serviceDurationMinutes,
@@ -483,9 +524,10 @@ export async function hasTimeConflict(
   employeeId: string,
   startAt: Date,
   endAt: Date,
-  excludeId?: string
+  excludeId?: string,
+  db: Pick<PrismaClient, 'appointment'> = prisma
 ): Promise<boolean> {
-  const conflict = await prisma.appointment.findFirst({
+  const conflict = await db.appointment.findFirst({
     where: {
       id: excludeId ? { not: excludeId } : undefined,
       employeeId,
@@ -518,12 +560,14 @@ export async function createAppointment(
     notes,
   } = input;
 
-  const [{ service }, client] = await Promise.all([
+  const [{ service }, client, timezone] = await Promise.all([
     resolveEligibleBookingContext(barbershopId, employeeId, serviceId),
     getClientSnapshotSource(clientId),
+    getBarbershopTimezone(barbershopId),
   ]);
 
   const startAt = new Date(startAtStr);
+  validateAppointmentStartAt(startAt, timezone);
   const endAt = calculateAppointmentEndAt(startAt, service.durationMinutes);
 
   await validateBusinessHours({ barbershopId, startAt, endAt });
@@ -570,7 +614,7 @@ export async function createStaffAppointment(
   ]);
 
   const startAt = new Date(input.startAt);
-  validateStaffStartAt(startAt, timezone);
+  validateAppointmentStartAt(startAt, timezone);
 
   const endAt = calculateAppointmentEndAt(
     startAt,

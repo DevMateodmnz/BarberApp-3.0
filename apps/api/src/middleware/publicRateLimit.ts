@@ -11,6 +11,11 @@ interface PublicAvailabilityReadRateLimitOverrides {
   windowMs?: number;
 }
 
+interface PublicBookingWriteRateLimitOverrides {
+  max?: number;
+  windowMs?: number;
+}
+
 /**
  * Public catalogue reads are allowed anonymously during the single-instance pilot.
  * This still uses the in-memory store from createRateLimiter, so production
@@ -45,5 +50,23 @@ export function createPublicAvailabilityReadRateLimiter(
       `${req.ip}:${req.params.slug ?? ''}:${req.params.barberId ?? ''}`,
     max: overrides.max ?? Math.min(config.max, 30),
     windowMs: overrides.windowMs ?? 60_000,
+  });
+}
+
+/**
+ * Public booking writes are the strictest anonymous path in the MVP. They
+ * still use the in-memory limiter, so production horizontal scaling requires a
+ * shared backing store.
+ */
+export function createPublicBookingWriteRateLimiter(
+  config: RateLimitConfig,
+  overrides: PublicBookingWriteRateLimitOverrides = {}
+) {
+  return createRateLimiter(config, {
+    code: 'PUBLIC_BOOKING_WRITE_RATE_LIMITED',
+    message: 'Too many public booking requests, please try again later',
+    keyGenerator: (req) => `${req.ip}:${req.params.slug ?? ''}`,
+    max: overrides.max ?? Math.min(config.max, 5),
+    windowMs: overrides.windowMs ?? 15 * 60_000,
   });
 }

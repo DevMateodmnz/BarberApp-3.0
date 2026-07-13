@@ -28,6 +28,15 @@ interface TestFixtures {
 
 const fixtures: TestFixtures = {} as TestFixtures;
 
+function getFutureServiceBookingTime(timeStr = '10:00') {
+  return getNextLocalWeekdayTime(
+    1,
+    timeStr,
+    new Date(),
+    'America/Argentina/Buenos_Aires'
+  );
+}
+
 // ============================================
 // SETUP / TEARDOWN
 // ============================================
@@ -375,7 +384,7 @@ describe('POST /api/v1/barbershops/:barbershopId/services', () => {
     });
 
     // Book appointment
-    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
+    const nextMonday = getFutureServiceBookingTime('10:00');
 
     const bookRes = await request(app)
       .post('/api/v1/appointments')
@@ -798,7 +807,7 @@ describe('DELETE /api/v1/barbershops/:barbershopId/services/:serviceId', () => {
     await deleteService(fixtures.shopA.id, svcA.id, fixtures.ownerA.clerkUserId);
 
     // Try to book
-    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
+    const nextMonday = getFutureServiceBookingTime('10:00');
 
     const bookRes = await request(app)
       .post('/api/v1/appointments')
@@ -830,7 +839,7 @@ describe('DELETE /api/v1/barbershops/:barbershopId/services/:serviceId', () => {
     });
 
     // Book appointment FIRST
-    const nextMonday = getNextLocalWeekdayTime(1, '10:00');
+    const nextMonday = getFutureServiceBookingTime('10:00');
 
     const bookRes = await request(app)
       .post('/api/v1/appointments')

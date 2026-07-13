@@ -1,0 +1,38 @@
+import { z } from 'zod';
+import {
+  PUBLIC_BOOKING_CLIENT_NAME_MAX_LENGTH,
+  PUBLIC_BOOKING_NOTES_MAX_LENGTH,
+} from '../lib/publicBookingInput.js';
+
+export const PublicCreateAppointmentSchema = z
+  .object({
+    serviceId: z.string().trim().min(1, 'serviceId is required'),
+    barberId: z.string().trim().min(1, 'barberId is required'),
+    startAt: z
+      .string()
+      .trim()
+      .datetime({
+        offset: true,
+        message: 'startAt must be ISO 8601 datetime',
+      })
+      .refine(
+        (value) => value.endsWith('Z'),
+        'startAt must be a UTC timestamp with a Z suffix'
+      ),
+    clientName: z
+      .string()
+      .trim()
+      .min(1, 'clientName is required')
+      .max(PUBLIC_BOOKING_CLIENT_NAME_MAX_LENGTH),
+    clientPhone: z.string().trim().min(1, 'clientPhone is required').max(16),
+    notes: z.string().trim().max(PUBLIC_BOOKING_NOTES_MAX_LENGTH).optional(),
+    consentAccepted: z
+      .boolean()
+      .refine((value) => value === true, 'consentAccepted must be true'),
+    consentVersion: z.string().trim().min(1, 'consentVersion is required'),
+  })
+  .strict();
+
+export type PublicCreateAppointmentInput = z.infer<
+  typeof PublicCreateAppointmentSchema
+>;

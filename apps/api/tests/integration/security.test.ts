@@ -274,7 +274,7 @@ function authHeader(clerkUserId: string) {
  * Skips Sunday to ensure the resulting day is always open.
  */
 function businessHoursDate(daysFromNow = 1): string {
-  return getFutureOpenBusinessTime(daysFromNow).toISOString();
+  return getFutureOpenBusinessTime(daysFromNow, '10:00', new Date()).toISOString();
 }
 
 /**
@@ -863,14 +863,14 @@ describe('Double Booking Prevention', () => {
       .send({
         barbershopId: fixtures.shopA.id,
         employeeId: fixtures.employeeA1.employee.id,
-        serviceId: fixtures.serviceA1.id,
+        serviceId: fixtures.serviceA2.id,
         startAt: firstStart,
       });
     expect(first.status).toBe(201);
 
-    // Second: Start 15 min later (2:15, ends 2:45 with same service)
+    // Second: Start 30 min later while the 45-minute service is still in progress.
     const overlapDate = new Date(firstStart);
-    overlapDate.setMinutes(overlapDate.getMinutes() + 15);
+    overlapDate.setMinutes(overlapDate.getMinutes() + 30);
 
     const second = await request(app)
       .post('/api/v1/appointments')
@@ -1181,7 +1181,8 @@ describe('Business Hours Enforcement', () => {
   ): string {
     return getNextLocalWeekdayTime(
       dayOfWeek,
-      `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+      `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+      new Date()
     ).toISOString();
   }
 
@@ -1218,8 +1219,16 @@ describe('Business Hours Enforcement', () => {
   });
 
   it('appointment ending after closing is rejected (Friday 18:45)', async () => {
-    // 30 min service at 18:45 ends at 19:15 > 19:00 closing
-    const res = await bookAt(5, 18, 45); // Friday 18:45
+    // 45 min service at 18:30 ends at 19:15 > 19:00 closing.
+    const res = await request(app)
+      .post('/api/v1/appointments')
+      .set(authHeader(fixtures.clientA.clerkUserId))
+      .send({
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.employeeA1.employee.id,
+        serviceId: fixtures.serviceA2.id,
+        startAt: dateAtLocalTime(5, 18, 30),
+      });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('BAD_REQUEST');
     expect(res.body.error.message).toContain('after closing hours');
