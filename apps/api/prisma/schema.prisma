@@ -92,15 +92,15 @@ model Barbershop {
   deletedAt  DateTime? @map("deleted_at")
 
   // Relations
-  owner               User                          @relation("BarbershopOwner", fields: [ownerId], references: [id])
-  employees           Employee[]
-  services            Service[]
-  appointments        Appointment[]
-  workingHours        WorkingHours[]
-  scheduleExceptions  BarbershopScheduleException[]
+  owner                           User                          @relation("BarbershopOwner", fields: [ownerId], references: [id])
+  employees                       Employee[]
+  services                        Service[]
+  appointments                    Appointment[]
+  workingHours                    WorkingHours[]
+  scheduleExceptions              BarbershopScheduleException[]
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
-  serviceRecords      ServiceRecord[]
-  employeeInvitations EmployeeInvitation[]
+  serviceRecords                  ServiceRecord[]
+  employeeInvitations             EmployeeInvitation[]
 
   // Indexes
   @@index([ownerId])
@@ -237,35 +237,35 @@ model EmployeeService {
 
 /// Appointment model - represents a booked appointment
 model Appointment {
-  id                     String            @id @default(cuid())
-  barbershopId           String            @map("barbershop_id")
-  employeeId             String            @map("employee_id")
-  clientId               String?           @map("client_id")
-  serviceId              String            @map("service_id")
-  clientName             String            @map("client_name")
-  clientPhone            String?           @map("client_phone")
-  publicReference        String?           @unique @map("public_reference")
-  publicConsentAcceptedAt DateTime?        @map("public_consent_accepted_at")
-  publicConsentVersion   String?           @map("public_consent_version")
-  serviceName            String            @map("service_name")
-  servicePriceCents      Int               @map("service_price_cents")
-  serviceDurationMinutes Int               @map("service_duration_minutes")
-  serviceCurrency        String            @map("service_currency")
-  startAt                DateTime          @map("start_at")
-  endAt                  DateTime          @map("end_at")
-  status                 AppointmentStatus @default(PENDING)
-  notes                  String?
-  createdAt              DateTime          @default(now()) @map("created_at")
-  updatedAt              DateTime          @updatedAt @map("updated_at")
-  deletedAt              DateTime?         @map("deleted_at")
+  id                      String            @id @default(cuid())
+  barbershopId            String            @map("barbershop_id")
+  employeeId              String            @map("employee_id")
+  clientId                String?           @map("client_id")
+  serviceId               String            @map("service_id")
+  clientName              String            @map("client_name")
+  clientPhone             String?           @map("client_phone")
+  publicReference         String?           @unique @map("public_reference")
+  publicConsentAcceptedAt DateTime?         @map("public_consent_accepted_at")
+  publicConsentVersion    String?           @map("public_consent_version")
+  serviceName             String            @map("service_name")
+  servicePriceCents       Int               @map("service_price_cents")
+  serviceDurationMinutes  Int               @map("service_duration_minutes")
+  serviceCurrency         String            @map("service_currency")
+  startAt                 DateTime          @map("start_at")
+  endAt                   DateTime          @map("end_at")
+  status                  AppointmentStatus @default(PENDING)
+  notes                   String?
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+  deletedAt               DateTime?         @map("deleted_at")
 
   // Relations
-  barbershop     Barbershop      @relation(fields: [barbershopId], references: [id])
-  employee       Employee        @relation(fields: [employeeId], references: [id])
-  client         User?           @relation("AppointmentClient", fields: [clientId], references: [id])
-  service        Service         @relation(fields: [serviceId], references: [id])
+  barbershop                      Barbershop                 @relation(fields: [barbershopId], references: [id])
+  employee                        Employee                   @relation(fields: [employeeId], references: [id])
+  client                          User?                      @relation("AppointmentClient", fields: [clientId], references: [id])
+  service                         Service                    @relation(fields: [serviceId], references: [id])
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
-  serviceRecords ServiceRecord[]
+  serviceRecords                  ServiceRecord[]
 
   // Indexes for common queries
   @@index([barbershopId])
@@ -278,15 +278,15 @@ model Appointment {
 }
 
 model PublicBookingIdempotency {
-  id                 String       @id @default(cuid())
-  barbershopId       String       @map("barbershop_id")
+  id                 String   @id @default(cuid())
+  barbershopId       String   @map("barbershop_id")
   operation          String
-  idempotencyKey     String       @map("idempotency_key")
-  requestFingerprint String       @map("request_fingerprint")
-  appointmentId      String?      @map("appointment_id")
-  expiresAt          DateTime     @map("expires_at")
-  createdAt          DateTime     @default(now()) @map("created_at")
-  updatedAt          DateTime     @updatedAt @map("updated_at")
+  idempotencyKey     String   @map("idempotency_key")
+  requestFingerprint String   @map("request_fingerprint")
+  appointmentId      String?  @map("appointment_id")
+  expiresAt          DateTime @map("expires_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   barbershop  Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)

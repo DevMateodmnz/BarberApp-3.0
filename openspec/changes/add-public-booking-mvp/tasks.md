@@ -86,15 +86,15 @@ Chain strategy: pending
 - [ ] 7.2 Verify public DTO minimization, error-envelope consistency, and tenant/privacy guarantees through integration tests.
   - [x] 7.2.a Verify public catalogue DTO minimization, fail-closed errors, and tenant/privacy guarantees through integration tests.
   - [x] 7.2.b Verify public availability DTO minimization, fail-closed errors, and tenant/privacy guarantees through integration tests.
-- [ ] 7.3 Confirm existing OWNER/BARBER/mobile booking flows still pass their full regressions.
+- [x] 7.3 Confirm existing OWNER/BARBER/mobile booking flows still pass their full regressions.
 
 ## Phase 8: Pilot Rollout and Launch Validation
 
-- [ ] 8.1 Document manual provisioning for the first pilot barbershop: owner identity, slug, timezone, services, employees, assignments, weekly hours, exceptions.
+- [x] 8.1 Document manual provisioning for the first pilot barbershop: owner identity, slug, timezone, services, employees, assignments, weekly hours, exceptions.
   - [x] 8.1.a Add an operator-only public-slug provisioning command and pilot runbook for controlled publish/unpublish.
-  - [ ] 8.1.b Document the full pilot barbershop provisioning checklist, including services, employees, assignments, and exceptions.
+  - [x] 8.1.b Document the full pilot barbershop provisioning checklist, including services, employees, assignments, and exceptions.
     - [x] 8.1.b.i Add an operator-only schedule-exception command and pilot runbook for date-specific overrides.
-- [ ] 8.2 Define monitoring and rollback steps so public routes/web can be disabled without affecting staff booking.
+- [x] 8.2 Define monitoring and rollback steps so public routes/web can be disabled without affecting staff booking.
 - [x] 8.3 Add a future browser-based E2E that books publicly and verifies the appointment through staff-visible surfaces.
 
 ## Risk Gate

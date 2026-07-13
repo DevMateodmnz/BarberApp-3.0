@@ -20,7 +20,7 @@ For the current MVP deployment target, see the Railway-specific runbook: [`docs/
 | `DATABASE_URL` | yes | yes | Production PostgreSQL connection string. |
 | `CLERK_SECRET_KEY` | yes | yes | Backend Clerk secret for authenticated API requests. |
 | `CLERK_WEBHOOK_SECRET` | yes | yes | Required for Clerk webhook signature verification. |
-| `ALLOWED_ORIGIN` | yes | no | Explicit credentialed browser allowlist. Comma-separate only when multiple origins are intentional. |
+| `CORS_ALLOWED_ORIGINS` | no | no | Exact browser-origin allowlist for direct browser-to-Express traffic only. Omit when only mobile, webhooks, health checks, or the Next.js BFF call the API. |
 | `PORT` | no | no | Defaults to `3000` if unset. |
 | `RATE_LIMIT_ENABLED` | no | no | Optional override; defaults to enabled outside test. |
 | `RATE_LIMIT_WINDOW_MS` | no | no | Optional positive integer override. |
@@ -33,12 +33,12 @@ NODE_ENV=production
 DATABASE_URL=postgresql://db_user:db_password@db-host:5432/barberapp
 CLERK_SECRET_KEY=sk_live_replace_me
 CLERK_WEBHOOK_SECRET=whsec_replace_me
-ALLOWED_ORIGIN=https://app.example.com
-# ALLOWED_ORIGIN=https://app.example.com,https://admin.example.com
+CORS_ALLOWED_ORIGINS=https://admin.example.com
+# CORS_ALLOWED_ORIGINS=https://admin.example.com,https://ops.example.com
 PORT=3000
 ```
 
-Production startup fails before listening when `ALLOWED_ORIGIN` is missing, empty, wildcard-based, malformed, non-HTTP(S), or incompatible with credentialed CORS.
+If `CORS_ALLOWED_ORIGINS` is set, startup fails before listening when it is empty, wildcard-based, malformed, non-HTTP(S), or includes paths, query strings, fragments, or credentials.
 
 ## Install, Generate, Build
 
@@ -90,7 +90,7 @@ Expected behavior:
 
 - The API refuses to start if required production configuration is invalid.
 - No listening log is emitted before configuration validation succeeds.
-- Credentialed CORS uses the exact allowed origin, never `*`.
+- Credentialed CORS uses only exact allowed origins, never `*`.
 - Requests without an `Origin` header remain usable for health checks, probes, and server-to-server calls.
 
 Reverse-proxy trust is **not** enabled by default in the current codebase; configure it explicitly only if your deployment topology requires it.

@@ -15,6 +15,7 @@
     "lint:workspaces": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "validate": "npm run typecheck && npm run lint && npm run test",
+    "qa:public-booking": "node scripts/qaPublicBooking.mjs",
     "dev": "npm run dev --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "build": "npm run build --workspaces --if-present"

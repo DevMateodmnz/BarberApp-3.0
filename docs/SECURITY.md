@@ -137,7 +137,7 @@ npx vitest run tests/db/models.test.ts
 
 2. **Rate limiting — RESOLVED**: In-memory rate limiting is implemented for `/api/v1/appointments` routes (window: 15 min, max: 100 requests). Uses `express-rate-limit` with MemoryStore — acceptable for single-instance MVP. Production horizontal scaling should use a shared store (Redis, etc.). See `apps/api/src/middleware/rateLimit.ts`.
 
-3. **CORS**: Production now requires an explicit HTTP(S) allowlist in `ALLOWED_ORIGIN`. Non-production can reflect concrete request origins dynamically for credentialed local development, but never returns `*` with credentials.
+3. **CORS**: Express now allows browser origins only when `CORS_ALLOWED_ORIGINS` is explicitly configured. Mobile/native traffic, webhooks, health checks, and the Next.js BFF continue to work without an `Origin` header, and browser allowlists never use `*`.
 
 4. **Clerk webhook — RESOLVED**: Webhook endpoint implemented at `POST /api/v1/webhooks/clerk` with Svix signature verification via `standardwebhooks`. Handles `user.created`, `user.updated`, `user.deleted` events. Role is now read from Clerk `public_metadata.role` (valid values: `OWNER`, `BARBER`, `CLIENT`). When metadata is absent or invalid, defaults to `CLIENT`. Webhook NEVER downgrades an existing `OWNER` or `BARBER` role via `user.updated` — privilege preservation is enforced by `resolveRole()` in `userSyncService.ts`. The DB `User.role` remains the runtime source of truth for auth middleware. `unsafe_metadata` is intentionally NOT trusted for role assignment. See `apps/api/src/services/userSyncService.ts`.
 

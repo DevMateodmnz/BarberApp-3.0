@@ -89,7 +89,7 @@ Set these on the API service:
 | `DATABASE_URL` | yes | reference variable: `${{Postgres.DATABASE_URL}}` |
 | `CLERK_SECRET_KEY` | yes | Clerk production backend secret |
 | `CLERK_WEBHOOK_SECRET` | yes | Clerk production webhook signing secret |
-| `ALLOWED_ORIGIN` | yes | chosen production browser origin(s) |
+| `CORS_ALLOWED_ORIGINS` | no | explicit internal browser origin(s) only when needed |
 | `RATE_LIMIT_ENABLED` | no | optional override |
 | `RATE_LIMIT_WINDOW_MS` | no | optional override |
 | `RATE_LIMIT_MAX` | no | optional override |

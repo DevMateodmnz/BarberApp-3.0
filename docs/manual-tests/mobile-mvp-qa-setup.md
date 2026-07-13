@@ -104,7 +104,7 @@ CLERK_WEBHOOK_SECRET=whsec_<real-or-placeholder-webhook-secret>
 NODE_ENV=development
 PORT=3000
 # Optional explicit browser allowlist for local web-based callers:
-# ALLOWED_ORIGIN=http://localhost:8081,http://192.168.x.x:8081
+# CORS_ALLOWED_ORIGINS=http://localhost:8081,http://192.168.x.x:8081
 ```
 
 `CLERK_SECRET_KEY` is required for authenticated backend requests. `CLERK_WEBHOOK_SECRET` is required when you want local Clerk webhook verification to succeed. The mobile publishable key belongs in `apps/mobile/.env.local`, not the API `.env`.

@@ -12,67 +12,80 @@ function createProductionEnv(
     DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/barberapp',
     CLERK_SECRET_KEY: 'sk_live_test',
     CLERK_WEBHOOK_SECRET: 'whsec_test',
-    ALLOWED_ORIGIN: 'https://app.example.com',
+    CORS_ALLOWED_ORIGINS: 'https://app.example.com',
     ...overrides,
   };
 }
 
 describe('readApiRuntimeConfig', () => {
-  it('rejects production without ALLOWED_ORIGIN', () => {
+  it('keeps production locked down when no browser allowlist is configured', () => {
     const env = createProductionEnv();
-    delete env.ALLOWED_ORIGIN;
+    delete env.CORS_ALLOWED_ORIGINS;
 
-    expect(() => readApiRuntimeConfig(env)).toThrow(
-      'ALLOWED_ORIGIN is required in production'
+    const config = readApiRuntimeConfig(env);
+
+    expect(config.corsPolicy.mode).toBe('deny-browser-origins');
+    expect(config.corsPolicy.allowedOrigins).toEqual([]);
+  });
+
+  it('rejects production with an empty CORS_ALLOWED_ORIGINS', () => {
+    expect(() =>
+      readApiRuntimeConfig(
+        createProductionEnv({ CORS_ALLOWED_ORIGINS: '   ' })
+      )
+    ).toThrow('CORS_ALLOWED_ORIGINS cannot be empty');
+  });
+
+  it('rejects wildcard CORS_ALLOWED_ORIGINS in production', () => {
+    expect(() =>
+      readApiRuntimeConfig(createProductionEnv({ CORS_ALLOWED_ORIGINS: '*' }))
+    ).toThrow(
+      'CORS_ALLOWED_ORIGINS must not contain "*" when credentials are enabled'
     );
-  });
-
-  it('rejects production with an empty ALLOWED_ORIGIN', () => {
-    expect(() =>
-      readApiRuntimeConfig(createProductionEnv({ ALLOWED_ORIGIN: '   ' }))
-    ).toThrow('ALLOWED_ORIGIN cannot be empty');
-  });
-
-  it('rejects wildcard ALLOWED_ORIGIN in production', () => {
-    expect(() =>
-      readApiRuntimeConfig(createProductionEnv({ ALLOWED_ORIGIN: '*' }))
-    ).toThrow('ALLOWED_ORIGIN must not contain "*" when credentials are enabled');
   });
 
   it('rejects malformed origins in production', () => {
     expect(() =>
       readApiRuntimeConfig(
-        createProductionEnv({ ALLOWED_ORIGIN: 'not-a-valid-origin' })
+        createProductionEnv({ CORS_ALLOWED_ORIGINS: 'not-a-valid-origin' })
       )
-    ).toThrow('ALLOWED_ORIGIN contains an invalid origin');
+    ).toThrow('CORS_ALLOWED_ORIGINS contains an invalid origin');
   });
 
   it('rejects non-http origins in production', () => {
     expect(() =>
       readApiRuntimeConfig(
-        createProductionEnv({ ALLOWED_ORIGIN: 'ftp://app.example.com' })
+        createProductionEnv({
+          CORS_ALLOWED_ORIGINS: 'ftp://app.example.com',
+        })
       )
-    ).toThrow('ALLOWED_ORIGIN only supports http:// or https:// origins');
+    ).toThrow('CORS_ALLOWED_ORIGINS only supports http:// or https:// origins');
   });
 
   it('rejects configured origins that include a path, query, or fragment', () => {
     expect(() =>
       readApiRuntimeConfig(
-        createProductionEnv({ ALLOWED_ORIGIN: 'https://app.example.com/path' })
+        createProductionEnv({
+          CORS_ALLOWED_ORIGINS: 'https://app.example.com/path',
+        })
       )
-    ).toThrow('ALLOWED_ORIGIN origins must not include a path');
+    ).toThrow('CORS_ALLOWED_ORIGINS origins must not include a path');
 
     expect(() =>
       readApiRuntimeConfig(
-        createProductionEnv({ ALLOWED_ORIGIN: 'https://app.example.com?x=1' })
+        createProductionEnv({
+          CORS_ALLOWED_ORIGINS: 'https://app.example.com?x=1',
+        })
       )
-    ).toThrow('ALLOWED_ORIGIN origins must not include a query string');
+    ).toThrow('CORS_ALLOWED_ORIGINS origins must not include a query string');
 
     expect(() =>
       readApiRuntimeConfig(
-        createProductionEnv({ ALLOWED_ORIGIN: 'https://app.example.com#frag' })
+        createProductionEnv({
+          CORS_ALLOWED_ORIGINS: 'https://app.example.com#frag',
+        })
       )
-    ).toThrow('ALLOWED_ORIGIN origins must not include a fragment');
+    ).toThrow('CORS_ALLOWED_ORIGINS origins must not include a fragment');
   });
 
   it('accepts one valid HTTPS origin in production', () => {
@@ -87,7 +100,8 @@ describe('readApiRuntimeConfig', () => {
   it('accepts multiple valid origins in production', () => {
     const config = readApiRuntimeConfig(
       createProductionEnv({
-        ALLOWED_ORIGIN: 'https://app.example.com, https://admin.example.com',
+        CORS_ALLOWED_ORIGINS:
+          'https://app.example.com, https://admin.example.com',
       })
     );
 
@@ -100,7 +114,7 @@ describe('readApiRuntimeConfig', () => {
   it('deduplicates origins deterministically', () => {
     const config = readApiRuntimeConfig(
       createProductionEnv({
-        ALLOWED_ORIGIN:
+        CORS_ALLOWED_ORIGINS:
           'https://app.example.com, https://admin.example.com, https://app.example.com/',
       })
     );
@@ -111,19 +125,19 @@ describe('readApiRuntimeConfig', () => {
     ]);
   });
 
-  it('keeps development usable without an explicit allowlist', () => {
+  it('keeps development locked down without an explicit allowlist', () => {
     const config = readApiRuntimeConfig({ NODE_ENV: 'development' });
 
-    expect(config.corsPolicy.mode).toBe('reflect-request-origin');
+    expect(config.corsPolicy.mode).toBe('deny-browser-origins');
     expect(
       resolveCorsOrigin(config.corsPolicy, 'http://localhost:8081')
-    ).toBe('http://localhost:8081');
+    ).toBe(false);
   });
 
   it('honors an explicit non-production allowlist when provided', () => {
     const config = readApiRuntimeConfig({
       NODE_ENV: 'development',
-      ALLOWED_ORIGIN: 'http://localhost:8081',
+      CORS_ALLOWED_ORIGINS: 'http://localhost:8081',
     });
 
     expect(config.corsPolicy.mode).toBe('explicit-allowlist');

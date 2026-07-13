@@ -1,5 +1,7 @@
 # Public booking pilot provisioning
 
+For the full pilot release sequence, environment requirements, rollback plan, and limitations, see [`public-booking-pilot-runbook.md`](./public-booking-pilot-runbook.md).
+
 Use this runbook to intentionally publish or unpublish a barbershop slug for the public-booking pilot.
 
 ## Assign a slug

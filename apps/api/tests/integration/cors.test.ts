@@ -22,7 +22,7 @@ function buildApp(overrides: Partial<NodeJS.ProcessEnv> = {}) {
 describe('CORS behavior', () => {
   it('returns the exact allow-origin header for an allowed browser origin', async () => {
     const app = buildApp({
-      ALLOWED_ORIGIN: 'https://app.example.com,https://admin.example.com',
+      CORS_ALLOWED_ORIGINS: 'https://app.example.com,https://admin.example.com',
     });
 
     const res = await request(app)
@@ -38,7 +38,7 @@ describe('CORS behavior', () => {
 
   it('does not return permissive CORS headers for a disallowed browser origin', async () => {
     const app = buildApp({
-      ALLOWED_ORIGIN: 'https://app.example.com',
+      CORS_ALLOWED_ORIGINS: 'https://app.example.com',
     });
 
     const res = await request(app)
@@ -60,8 +60,72 @@ describe('CORS behavior', () => {
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
   });
 
-  it('reflects a concrete development/test origin instead of returning a wildcard', async () => {
+  it('does not allow browser origins when no explicit allowlist is configured', async () => {
     const app = buildApp();
+
+    const res = await request(app)
+      .get('/health')
+      .set('Origin', 'http://localhost:8081');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    expect(res.headers['access-control-allow-credentials']).toBeUndefined();
+  });
+
+  it('preserves preflight behavior for allowed origins with minimal methods and headers', async () => {
+    const app = buildApp({
+      CORS_ALLOWED_ORIGINS: 'https://app.example.com',
+    });
+
+    const res = await request(app)
+      .options('/api/v1/ping')
+      .set('Origin', 'https://app.example.com')
+      .set('Access-Control-Request-Method', 'POST')
+      .set(
+        'Access-Control-Request-Headers',
+        'authorization,content-type,idempotency-key'
+      );
+
+    expect(res.status).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe(
+      'https://app.example.com'
+    );
+    expect(res.headers['access-control-allow-credentials']).toBe('true');
+    expect(res.headers['access-control-allow-methods']).toContain('GET');
+    expect(res.headers['access-control-allow-methods']).toContain('POST');
+    expect(res.headers['access-control-allow-methods']).toContain('PUT');
+    expect(res.headers['access-control-allow-methods']).toContain('DELETE');
+    expect(res.headers['access-control-allow-headers']).toContain('Accept');
+    expect(res.headers['access-control-allow-headers']).toContain(
+      'Authorization'
+    );
+    expect(res.headers['access-control-allow-headers']).toContain(
+      'Content-Type'
+    );
+    expect(res.headers['access-control-allow-headers']).toContain(
+      'Idempotency-Key'
+    );
+  });
+
+  it('keeps protected routes protected even for allowed origins', async () => {
+    const app = buildApp({
+      CORS_ALLOWED_ORIGINS: 'https://admin.example.com',
+    });
+
+    const res = await request(app)
+      .get('/api/v1/appointments')
+      .set('Origin', 'https://admin.example.com');
+
+    expect(res.status).toBe(401);
+    expect(res.headers['access-control-allow-origin']).toBe(
+      'https://admin.example.com'
+    );
+  });
+
+  it('permits explicit local browser development origins when configured', async () => {
+    const app = buildApp({
+      CORS_ALLOWED_ORIGINS: 'http://localhost:8081',
+    });
 
     const res = await request(app)
       .get('/health')
@@ -71,25 +135,5 @@ describe('CORS behavior', () => {
     expect(res.headers['access-control-allow-origin']).toBe(
       'http://localhost:8081'
     );
-    expect(res.headers['access-control-allow-credentials']).toBe('true');
-    expect(res.headers['access-control-allow-origin']).not.toBe('*');
-  });
-
-  it('preserves preflight behavior for allowed origins', async () => {
-    const app = buildApp({
-      ALLOWED_ORIGIN: 'https://app.example.com',
-    });
-
-    const res = await request(app)
-      .options('/api/v1/ping')
-      .set('Origin', 'https://app.example.com')
-      .set('Access-Control-Request-Method', 'GET');
-
-    expect(res.status).toBe(204);
-    expect(res.headers['access-control-allow-origin']).toBe(
-      'https://app.example.com'
-    );
-    expect(res.headers['access-control-allow-credentials']).toBe('true');
-    expect(res.headers['access-control-allow-methods']).toContain('GET');
   });
 });

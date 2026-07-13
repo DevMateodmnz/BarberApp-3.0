@@ -204,6 +204,8 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/barberapp
 CLERK_SECRET_KEY=sk_test_...
 NODE_ENV=development
 PORT=3000
+# Optional direct-browser allowlist only when needed:
+# CORS_ALLOWED_ORIGINS=http://localhost:8081
 ```
 
 ### Mobile (`apps/mobile/.env`)
@@ -220,6 +222,9 @@ EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 ```bash
 # Run all tests
 npm test
+
+# Public booking release-candidate gate
+npm run qa:public-booking
 
 # API tests
 npm test --workspace=apps/api

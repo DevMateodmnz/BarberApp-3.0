@@ -9,7 +9,7 @@ export interface RateLimitConfig {
 }
 
 export interface CorsPolicy {
-  mode: 'explicit-allowlist' | 'reflect-request-origin';
+  mode: 'deny-browser-origins' | 'explicit-allowlist';
   allowedOrigins: string[];
 }
 
@@ -185,15 +185,18 @@ function parseConfiguredOrigin(value: string, source: string): string {
   return url.origin;
 }
 
-export function parseAllowedOrigins(raw: string): string[] {
+export function parseAllowedOrigins(
+  raw: string,
+  source = 'CORS_ALLOWED_ORIGINS'
+): string[] {
   const parts = raw.split(',').map((part) => part.trim());
 
   if (parts.length === 0 || parts.every((part) => part === '')) {
-    throw new Error('ALLOWED_ORIGIN cannot be empty');
+    throw new Error(`${source} cannot be empty`);
   }
 
   if (parts.some((part) => part === '')) {
-    throw new Error('ALLOWED_ORIGIN contains an empty origin entry');
+    throw new Error(`${source} contains an empty origin entry`);
   }
 
   const origins: string[] = [];
@@ -201,12 +204,10 @@ export function parseAllowedOrigins(raw: string): string[] {
 
   for (const part of parts) {
     if (part === '*') {
-      throw new Error(
-        'ALLOWED_ORIGIN must not contain "*" when credentials are enabled'
-      );
+      throw new Error(`${source} must not contain "*" when credentials are enabled`);
     }
 
-    const origin = parseConfiguredOrigin(part, 'ALLOWED_ORIGIN');
+    const origin = parseConfiguredOrigin(part, source);
     if (!seen.has(origin)) {
       origins.push(origin);
       seen.add(origin);
@@ -230,21 +231,7 @@ function parseRequestOrigin(origin: string): string | false {
   }
 }
 
-function createCorsPolicy(
-  nodeEnv: NodeEnv,
-  allowedOriginValue?: string
-): CorsPolicy {
-  if (nodeEnv === 'production') {
-    if (!allowedOriginValue) {
-      throw new Error('ALLOWED_ORIGIN is required in production');
-    }
-
-    return {
-      mode: 'explicit-allowlist',
-      allowedOrigins: parseAllowedOrigins(allowedOriginValue),
-    };
-  }
-
+function createCorsPolicy(allowedOriginValue?: string): CorsPolicy {
   if (allowedOriginValue) {
     return {
       mode: 'explicit-allowlist',
@@ -253,7 +240,7 @@ function createCorsPolicy(
   }
 
   return {
-    mode: 'reflect-request-origin',
+    mode: 'deny-browser-origins',
     allowedOrigins: [],
   };
 }
@@ -271,8 +258,8 @@ export function resolveCorsOrigin(
     return false;
   }
 
-  if (policy.mode === 'reflect-request-origin') {
-    return parsedOrigin;
+  if (policy.mode === 'deny-browser-origins') {
+    return false;
   }
 
   return policy.allowedOrigins.includes(parsedOrigin) ? parsedOrigin : false;
@@ -280,7 +267,14 @@ export function resolveCorsOrigin(
 
 export function createCorsOptions(policy: CorsPolicy): CorsOptions {
   return {
+    allowedHeaders: [
+      'Accept',
+      'Authorization',
+      'Content-Type',
+      'Idempotency-Key',
+    ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     optionsSuccessStatus: 204,
     origin(requestOrigin, callback) {
       callback(null, resolveCorsOrigin(policy, requestOrigin ?? undefined));
@@ -308,8 +302,7 @@ export function readApiRuntimeConfig(
       'CLERK_WEBHOOK_SECRET'
     ),
     corsPolicy: createCorsPolicy(
-      nodeEnv,
-      readOptionalNonEmpty(env, 'ALLOWED_ORIGIN')
+      readOptionalNonEmpty(env, 'CORS_ALLOWED_ORIGINS')
     ),
     rateLimit: {
       enabled: readBoolean(

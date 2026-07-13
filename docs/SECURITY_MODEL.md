@@ -363,7 +363,7 @@ app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
 import cors from 'cors';
 
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGIN, // Mobile app URL
+  origin: process.env.CORS_ALLOWED_ORIGINS, // Direct browser callers only
   credentials: true
 }));
 ```
