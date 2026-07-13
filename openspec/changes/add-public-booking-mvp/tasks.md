@@ -78,6 +78,8 @@ Chain strategy: pending
 ## Phase 8: Pilot Rollout and Launch Validation
 
 - [ ] 8.1 Document manual provisioning for the first pilot barbershop: owner identity, slug, timezone, services, employees, assignments, weekly hours, exceptions.
+  - [x] 8.1.a Add an operator-only public-slug provisioning command and pilot runbook for controlled publish/unpublish.
+  - [ ] 8.1.b Document the full pilot barbershop provisioning checklist, including services, employees, assignments, and exceptions.
 - [ ] 8.2 Define monitoring and rollback steps so public routes/web can be disabled without affecting staff booking.
 - [ ] 8.3 Add a future browser-based E2E that books publicly and verifies the appointment through staff-visible surfaces.
 
