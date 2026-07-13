@@ -59,13 +59,14 @@ None in this batch. Existing `mobile` and authenticated appointment capabilities
 - Required: full name, phone number, explicit consent acceptance.
 - Optional: short note.
 - Excluded: email, password, account/profile, booking history.
-- Validation targets: `name <= 120`, normalized phone stored in `Appointment.clientPhone`, `note <= 500`.
+- Public create request contract uses `serviceId`, `barberId`, `startAt`, `clientName`, `clientPhone`, `consentAccepted`, `consentVersion`, and optional `notes`.
+- Obsolete public-create aliases `localDate`, `localStartTime`, `customerName`, `customerPhone`, and `note` are not accepted in MVP.
+- Validation targets: `clientName <= 120`, canonical E.164-compatible phone stored in `Appointment.clientPhone`, `notes <= 500`.
 
 ### Phone handling
 - MVP launch targets Argentina.
-- Accepted input: digits plus spaces, `+`, parentheses, hyphens, and common local prefixes.
-- Storage target: normalized E.164-compatible `+54...` string in `Appointment.clientPhone`.
-- Input length cap: `32` characters before normalization.
+- Accepted input: canonical E.164-compatible strings such as `+543811234567`.
+- Storage target: trimmed canonical E.164-compatible string in `Appointment.clientPhone`.
 - Invalid/unparseable input fails with `400` validation error.
 - Staff UI should display a locally formatted view derived from the normalized number, with raw normalized fallback if formatting fails.
 
@@ -88,6 +89,7 @@ None in this batch. Existing `mobile` and authenticated appointment capabilities
 - Public availability uses production data and barbershop-local time.
 - It must enforce weekly hours, date-specific exceptions, service duration, employee-service eligibility, active state, blocking appointments, overlap boundaries, minimum notice, maximum horizon, and slot interval.
 - Initial defaults: minimum notice `60 minutes`, horizon `30 calendar days`, slot interval `30 minutes`, authoritative timezone = `Barbershop.timezone`.
+- Availability responses return authoritative UTC `startAt` / `endAt` values for each slot while preserving `localDate` as the query concept for reading availability.
 - These values live behind a domain-policy boundary, not scattered through route handlers.
 
 ### Schedule exceptions
@@ -97,7 +99,9 @@ None in this batch. Existing `mobile` and authenticated appointment capabilities
 
 ### Appointment creation
 - Public booking writes into the existing `Appointment` table.
-- Server-side code derives authoritative `barbershopId`, `employeeId`, `serviceId`, `startAt`, `endAt`, `status`, and all snapshots.
+- Public creation submits the selected UTC `startAt` returned by availability; the API derives the barbershop-local booking date from `startAt` plus the authoritative shop timezone.
+- `startAt` must be a strict ISO-8601 UTC timestamp, align exactly to a valid slot boundary, and remain untrusted until all server-side invariants are revalidated.
+- Server-side code derives authoritative `barbershopId`, `employeeId`, `serviceId`, `endAt`, `status`, and all snapshots.
 - Browser-provided price, duration, end time, status, or tenant fields are ignored/rejected.
 - Public implementation must reuse or extract the existing appointment invariants from `apps/api/src/services/appointmentService.ts`.
 - Successful public bookings are immediately confirmed.
@@ -126,8 +130,8 @@ None in this batch. Existing `mobile` and authenticated appointment capabilities
 | Public shop lookup | `GET` | `/api/v1/public/barbershops/:slug` | Returns public barbershop profile only if active + slug-enabled |
 | Public service catalogue | `GET` | `/api/v1/public/barbershops/:slug/services` | Returns active services only |
 | Public eligible barbers | `GET` | `/api/v1/public/barbershops/:slug/barbers?serviceId=...` | Returns active eligible barbers scoped to the selected service |
-| Public availability | `GET` | `/api/v1/public/barbershops/:slug/barbers/:barberId/availability?serviceId=...&localDate=YYYY-MM-DD` | Returns real open slots in barbershop-local time |
-| Public booking create | `POST` | `/api/v1/public/barbershops/:slug/appointments` | Requires `Idempotency-Key`; creates guest appointment in the real domain |
+| Public availability | `GET` | `/api/v1/public/barbershops/:slug/barbers/:barberId/availability?serviceId=...&localDate=YYYY-MM-DD` | Returns real open slots with authoritative UTC `startAt` / `endAt` while `localDate` remains the availability-read query |
+| Public booking create | `POST` | `/api/v1/public/barbershops/:slug/appointments` | Requires `Idempotency-Key`; accepts the selected UTC `startAt`; derives authoritative `endAt`; creates guest appointment in the real domain |
 
 The public surface keeps the existing API envelope, remains anonymous, and fails closed on missing/inactive/private resources.
 

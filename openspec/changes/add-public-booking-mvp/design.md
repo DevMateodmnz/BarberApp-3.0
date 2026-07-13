@@ -30,7 +30,8 @@ Public web page (/barberias/[slug])
       → re-validate service + barber eligibility
       → apply policy (notice/horizon/slot interval)
       → apply weekly hours + schedule exception precedence
-      → derive UTC start/end from local date/time + shop timezone
+      → validate requested UTC startAt against the derived local date + valid slot boundary
+      → derive authoritative endAt from the service duration
       → create real Appointment with snapshots + consent + reference
       → persist idempotency result
   → success page shows safe confirmation DTO
@@ -71,20 +72,21 @@ Headers: Idempotency-Key: <uuid-or-token>
 Body: {
   serviceId: string;
   barberId: string;
-  localDate: string;       // YYYY-MM-DD in barbershop timezone
-  localStartTime: string;  // HH:mm in barbershop timezone
-  customerName: string;
-  customerPhone: string;
+  startAt: string;         // strict ISO-8601 UTC instant selected from availability
+  clientName: string;
+  clientPhone: string;
   consentAccepted: true;
   consentVersion: string;
-  note?: string;
+  notes?: string;
 }
 → 201 { success: true, data: ConfirmationDto }
 → 200 same body on safe replay
 → 409 on stale slot or idempotency mismatch/in-progress duplicate
 ```
 
-`ConfirmationDto` should include only: `bookingReference`, `barbershopName`, `serviceName`, `barberName`, `localDate`, `localStartTime`, `timezone`, `customerPhoneDisplay`, and `status`.
+Availability returns authoritative UTC `startAt` / `endAt` values for each slot, while public creation submits the chosen UTC `startAt`. The API derives authoritative `endAt`, and any local confirmation formatting uses the barbershop timezone.
+
+`ConfirmationDto` should include only: `bookingReference`, `barbershopName`, `serviceName`, `barberName`, `localDate`, `localStartTime`, `timezone`, `clientPhoneDisplay`, `startAt`, `endAt`, and `status`.
 
 ### Idempotency Policy
 
@@ -92,7 +94,7 @@ Body: {
 - **Recommended format**: UUID v4 or equivalent opaque token matching a conservative ASCII pattern such as `[A-Za-z0-9_-]{8,128}`.
 - **Maximum length**: `128` characters.
 - **Scope**: `(resolved barbershopId, operation = public-booking-create, idempotencyKey)`.
-- **Fingerprint**: SHA-256 of the canonicalized booking payload fields after trimming/normalization.
+- **Fingerprint**: SHA-256 of the canonicalized booking payload fields after trimming/normalization: resolved `barbershopId`, `serviceId`, `barberId`, normalized UTC `startAt`, normalized `clientName`, canonical `clientPhone`, normalized nullable `notes`, and accepted `consentVersion`.
 - **Replay behavior**: same key + same fingerprint returns the original success DTO.
 - **In-progress duplicate**: deterministic `409` conflict with a duplicate/in-progress code.
 - **Key reuse with different payload**: deterministic `409` conflict.
@@ -106,11 +108,11 @@ Body: {
 | `GET /api/v1/public/barbershops/:slug` | anonymous | `slug` path | `200` public shop DTO | `404`, `429`, `500` | owner IDs, internal barbershop ID, private notes |
 | `GET /api/v1/public/barbershops/:slug/services` | anonymous | `slug` path | `200` service list | `404`, `429`, `500` | inactive services, raw Prisma rows |
 | `GET /api/v1/public/barbershops/:slug/barbers?serviceId=...` | anonymous | `slug`, `serviceId` | `200` eligible barber list | `400`, `404`, `429`, `500` | employee email, user IDs, inactive/unassigned barbers |
-| `GET /api/v1/public/barbershops/:slug/barbers/:barberId/availability?...` | anonymous | `slug`, `barberId`, `serviceId`, `localDate` | `200` availability DTO | `400`, `404`, `429`, `500` | blocking appointment details, private schedule notes |
+| `GET /api/v1/public/barbershops/:slug/barbers/:barberId/availability?...` | anonymous | `slug`, `barberId`, `serviceId`, `localDate` | `200` availability DTO with UTC `startAt` / `endAt` per slot | `400`, `404`, `429`, `500` | blocking appointment details, private schedule notes |
 | `POST /api/v1/public/barbershops/:slug/appointments` | anonymous + `Idempotency-Key` | `slug` path + booking body | `201` create, `200` replay | `400`, `404`, `409`, `429`, `500` | raw appointment row, tenant records, internal DB IDs in confirmation |
 
 Public validation semantics:
-- `400`: malformed slug input, invalid date/time/phone/consent, out-of-policy booking window
+- `400`: malformed slug input, invalid `startAt` / phone / consent, out-of-policy booking window, or slot-boundary mismatch
 - `404`: unavailable public resource (missing/inactive shop, hidden service/barber within slug scope)
 - `409`: stale slot, idempotency mismatch, in-progress duplicate
 - `429`: public rate limit exceeded
@@ -146,7 +148,7 @@ Public validation semantics:
 
 | Layer | What to Test | Approach |
 |------|---------------|----------|
-| Domain/unit | slug normalization, phone normalization, schedule exception precedence, notice/horizon, idempotency fingerprinting, consent rules | Pure helper and service tests |
+| Domain/unit | slug normalization, phone normalization, UTC `startAt` validation, slot-boundary alignment, schedule exception precedence, notice/horizon, idempotency fingerprinting, consent rules | Pure helper and service tests |
 | API/integration | anonymous route access, fail-closed resources, eligibility, availability, stale-slot conflict, replay behavior, safe DTOs, rate-limit envelopes | Vitest + Supertest against real app/error envelope |
 | DB | uniqueness/index behavior for slug, booking reference, idempotency keys; exception-model constraints | Real PostgreSQL tests where needed |
 | Web | loading, empty, missing shop, form validation, accessibility, stale-slot conflict, replay/retry | component/unit tests first |

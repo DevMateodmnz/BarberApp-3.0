@@ -98,6 +98,7 @@ model Barbershop {
   appointments        Appointment[]
   workingHours        WorkingHours[]
   scheduleExceptions  BarbershopScheduleException[]
+  publicBookingIdempotencyRecords PublicBookingIdempotency[]
   serviceRecords      ServiceRecord[]
   employeeInvitations EmployeeInvitation[]
 
@@ -243,6 +244,9 @@ model Appointment {
   serviceId              String            @map("service_id")
   clientName             String            @map("client_name")
   clientPhone            String?           @map("client_phone")
+  publicReference        String?           @unique @map("public_reference")
+  publicConsentAcceptedAt DateTime?        @map("public_consent_accepted_at")
+  publicConsentVersion   String?           @map("public_consent_version")
   serviceName            String            @map("service_name")
   servicePriceCents      Int               @map("service_price_cents")
   serviceDurationMinutes Int               @map("service_duration_minutes")
@@ -260,6 +264,7 @@ model Appointment {
   employee       Employee        @relation(fields: [employeeId], references: [id])
   client         User?           @relation("AppointmentClient", fields: [clientId], references: [id])
   service        Service         @relation(fields: [serviceId], references: [id])
+  publicBookingIdempotencyRecords PublicBookingIdempotency[]
   serviceRecords ServiceRecord[]
 
   // Indexes for common queries
@@ -270,6 +275,27 @@ model Appointment {
   @@index([barbershopId, employeeId, startAt])
   @@index([employeeId, startAt, status])
   @@map("appointments")
+}
+
+model PublicBookingIdempotency {
+  id                 String       @id @default(cuid())
+  barbershopId       String       @map("barbershop_id")
+  operation          String
+  idempotencyKey     String       @map("idempotency_key")
+  requestFingerprint String       @map("request_fingerprint")
+  appointmentId      String?      @map("appointment_id")
+  expiresAt          DateTime     @map("expires_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  barbershop  Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@unique([barbershopId, operation, idempotencyKey])
+  @@index([barbershopId])
+  @@index([appointmentId])
+  @@index([expiresAt])
+  @@map("public_booking_idempotency")
 }
 
 // ============================================

@@ -88,9 +88,9 @@ The system MUST enforce a public booking policy boundary for minimum notice, boo
 - WHEN public availability or booking is requested
 - THEN the system MUST reject the request with a validation error
 
-### Requirement: Public booking input is local-time based and consent-gated
+### Requirement: Public booking input uses UTC startAt and consent-gated customer fields
 
-The public booking create contract MUST accept `serviceId`, `barberId`, `localDate`, `localStartTime`, `customerName`, `customerPhone`, `consentAccepted`, `consentVersion`, and optional `note`. Consent acceptance MUST be required before any customer PII is persisted.
+The public booking create contract MUST accept `serviceId`, `barberId`, `startAt`, `clientName`, `clientPhone`, `consentAccepted`, `consentVersion`, and optional `notes`. The create contract MUST NOT accept the obsolete aliases `localDate`, `localStartTime`, `customerName`, `customerPhone`, or `note`. Consent acceptance MUST be required before any customer PII is persisted.
 
 #### Scenario: Consent missing blocks persistence
 - GIVEN a create request with `consentAccepted = false`
@@ -98,14 +98,31 @@ The public booking create contract MUST accept `serviceId`, `barberId`, `localDa
 - THEN the response MUST reject the request
 - AND no appointment or idempotency success record MUST be created
 
+#### Scenario: Availability-selected UTC startAt is authoritative input
+- GIVEN the public availability endpoint returned UTC `startAt` / `endAt` values for a slot
+- WHEN the browser submits the public create request
+- THEN the browser MUST submit the selected UTC `startAt`
+- AND the API MUST derive the authoritative `endAt` from the service duration
+- AND any local confirmation formatting MUST use the authoritative barbershop timezone
+
+#### Scenario: Obsolete local-time aliases are rejected
+- GIVEN a create request that submits `localDate`, `localStartTime`, `customerName`, `customerPhone`, or `note`
+- WHEN the booking endpoint validates the payload
+- THEN the response MUST be a `400` validation error
+
 #### Scenario: Invalid phone fails validation
-- GIVEN a phone input that cannot be normalized to the MVP’s accepted Argentina format
+- GIVEN a phone input that is not a canonical E.164-compatible phone number for the MVP’s accepted Argentina format
 - WHEN the create request is validated
+- THEN the response MUST be a `400` validation error
+
+#### Scenario: startAt must align to a valid slot boundary
+- GIVEN a create request whose `startAt` is inside working hours but does not exactly match a valid slot-start boundary
+- WHEN the booking endpoint validates the requested instant
 - THEN the response MUST be a `400` validation error
 
 ### Requirement: Public phone storage is normalized and minimal
 
-The system MUST normalize accepted public phones to an E.164-compatible `+54...` representation before writing `Appointment.clientPhone`. The original raw input MUST NOT be stored in the booking record.
+The system MUST normalize accepted public phones to a canonical E.164-compatible `+54...` representation before writing `Appointment.clientPhone`. The original raw input MUST NOT be stored in the booking record.
 
 #### Scenario: Staff sees formatted normalized phone
 - GIVEN a public booking succeeds with a valid normalized phone
@@ -114,7 +131,7 @@ The system MUST normalize accepted public phones to an E.164-compatible `+54...`
 
 ### Requirement: Public booking reuses the real appointment domain
 
-The system MUST create public bookings in the existing `Appointment` table with `clientId = null` and MUST reuse or extract the same authoritative invariants already applied by authenticated appointment creation: service eligibility, employee eligibility, timezone conversion, business-hours checks, overlap checking, and service snapshot creation.
+The system MUST create public bookings in the existing `Appointment` table with `clientId = null` and MUST reuse or extract the same authoritative invariants already applied by authenticated appointment creation: service eligibility, employee eligibility, authoritative timezone conversion, business-hours checks, slot-boundary validation, overlap checking, and service snapshot creation.
 
 #### Scenario: Authoritative fields are server-derived
 - GIVEN a public booking request containing customer-entered data only
@@ -169,7 +186,7 @@ Every successful public booking MUST receive a unique, unpredictable, non-sequen
 #### Scenario: Confirmation DTO is safe and sufficient
 - GIVEN a successful public booking
 - WHEN the response is returned
-- THEN it MUST include only `bookingReference`, `barbershopName`, `serviceName`, `barberName`, `localDate`, `localStartTime`, timezone context when needed, formatted customer phone, and appointment status
+- THEN it MUST include only `bookingReference`, `barbershopName`, `serviceName`, `barberName`, `localDate`, `localStartTime`, `timezone`, `startAt`, `endAt`, formatted customer phone, and appointment status
 
 ### Requirement: Public errors and DTOs minimize private-data leakage
 

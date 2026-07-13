@@ -62,9 +62,9 @@ Chain strategy: pending
 
 ## Phase 4: Public Booking Write Path and Durable Idempotency
 
-- [ ] 4.1 Add anonymous booking creation with `Idempotency-Key`, payload fingerprinting, replay support, and mismatch detection.
+- [ ] 4.1 Add anonymous booking creation with `Idempotency-Key`, the authoritative `startAt` / `clientName` / `clientPhone` / `notes` contract, payload fingerprinting, replay support, and mismatch detection.
 - [ ] 4.2 Extract shared appointment-creation invariants instead of duplicating a weaker public-only path.
-- [ ] 4.3 Write RED-first tests for consent, phone normalization, concurrency, replay, in-progress duplicate, and safe confirmation DTOs.
+- [ ] 4.3 Write RED-first tests for consent, strict UTC `startAt`, slot-boundary alignment, phone normalization, concurrency, replay, in-progress duplicate, and safe confirmation DTOs.
 
 ## Phase 5: Dedicated Public Web Foundation
 

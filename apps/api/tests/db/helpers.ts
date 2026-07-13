@@ -152,6 +152,9 @@ export async function createTestAppointment(data: {
   servicePriceCents?: number;
   serviceDurationMinutes?: number;
   serviceCurrency?: string;
+  publicReference?: string | null;
+  publicConsentAcceptedAt?: Date | null;
+  publicConsentVersion?: string | null;
   notes?: string | null;
 }): Promise<Awaited<ReturnType<typeof prisma.appointment.create>>> {
   const startAt = data.startAt || new Date();
@@ -173,6 +176,9 @@ export async function createTestAppointment(data: {
       serviceId: data.serviceId,
       clientName: data.clientName ?? client?.name ?? client?.email ?? 'Walk-in Client',
       clientPhone: data.clientPhone ?? null,
+      publicReference: data.publicReference ?? null,
+      publicConsentAcceptedAt: data.publicConsentAcceptedAt ?? null,
+      publicConsentVersion: data.publicConsentVersion ?? null,
       serviceName: data.serviceName ?? service.name,
       servicePriceCents: data.servicePriceCents ?? service.priceCents,
       serviceDurationMinutes: durationMinutes,
@@ -244,6 +250,7 @@ export async function createTestEmployeeService(data: {
  */
 export async function cleanupTestData(): Promise<void> {
   await prisma.photo.deleteMany();
+  await prisma.publicBookingIdempotency.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
