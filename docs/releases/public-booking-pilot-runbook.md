@@ -38,20 +38,34 @@ Architecture reminder:
 
 | Variable | Required | Notes |
 |---|---:|---|
-| `PUBLIC_WEB_API_URL` | yes | Absolute Express API base URL ending in `/api/v1` |
+| `PUBLIC_WEB_API_URL` | yes | Server-only internal Express API base URL ending in `/api/v1`; required for `next start` production requests, not for `next build` |
 | `PORT` | no | `next start --port 3001` in local/probe workflows |
 
 ### Actual commands
 
 ```bash
 # API
+export NODE_ENV=production
+export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/barberapp
+export CLERK_SECRET_KEY=...
+export CLERK_WEBHOOK_SECRET=...
+export PORT=3000
 npm run build --workspace @barberapp/api
 npm run start --workspace @barberapp/api
 
 # Public web
+export NODE_ENV=production
+export PUBLIC_WEB_API_URL=http://127.0.0.1:3000/api/v1
+export PORT=3001
 npm run build --workspace @barberapp/public-web
 npm run start --workspace @barberapp/public-web
 ```
+
+Notes:
+
+- `PUBLIC_WEB_API_URL` is consumed only on the server by App Router server components and Next BFF routes; do **not** move it to `NEXT_PUBLIC_*`.
+- Because it is server-only, same-host or private-network `http://` origins such as `http://127.0.0.1:3000/api/v1` are valid in production-mode local and CI parity checks.
+- The public shop route `/barberias/[slug]` is request-time dynamic, so `PUBLIC_WEB_API_URL` is validated when the production server handles requests, not during `next build`.
 
 ## Database migration order
 
@@ -72,6 +86,79 @@ npm run start --workspace @barberapp/public-web
 5. Start or deploy the updated public web.
 
 Do **not** use `prisma db push`, `qa:bootstrap`, or E2E fixture commands in production.
+
+## Startup order and readiness checks
+
+1. Apply API migrations.
+2. Start the compiled API.
+3. Verify API readiness:
+
+   ```bash
+   curl -fsS http://127.0.0.1:3000/health
+   curl -fsS http://127.0.0.1:3000/api/v1/ping
+   ```
+
+4. Build the public web.
+5. Start `next start`.
+6. Verify BFF reachability before opening the customer page:
+
+   ```bash
+   curl -fsS http://127.0.0.1:3001/api/public-booking/shops/<slug>/booking-config
+   ```
+
+7. Open `http://127.0.0.1:3001/barberias/<slug>`.
+
+## Production-parity verification command
+
+Run this before pilot sign-off whenever you need independent built-artifact proof:
+
+```bash
+npm run qa:public-booking:production
+```
+
+What it does:
+
+- uses only the isolated PostgreSQL test database on `5433`;
+- applies test migrations;
+- provisions a deterministic public-booking fixture;
+- builds `@barberapp/api` and `@barberapp/public-web`;
+- starts the compiled API with `npm run start --workspace @barberapp/api`;
+- starts Next with `npm run start --workspace @barberapp/public-web`;
+- verifies a Next BFF route plus `/barberias/:slug`;
+- preserves server logs under `apps/public-web/test-results/public-booking-production-parity/`;
+- cleans the fixture and stops any processes it started.
+
+## Verification layers
+
+- **Public-web unit/component tests** validate rendering, runtime config parsing, and client-state behavior quickly.
+- **Playwright E2E** validates the public booking journey in Chromium with a real API plus a production Next build/start path.
+- **`qa:public-booking:production`** validates the independent compiled API + `next start` parity path that previously hid the release blocker.
+- **`qa:public-booking`** is the complete release gate: API suites, public-web checks, Playwright E2E, shared validation, mobile regression, and the production-parity smoke.
+
+## Safe fallback diagnostics
+
+If `/barberias/<slug>` shows **“No pudimos cargar la agenda”**:
+
+1. Verify the API itself is healthy:
+
+   ```bash
+   curl -i http://127.0.0.1:3000/health
+   curl -i http://127.0.0.1:3000/api/v1/public/barbershops/<slug>
+   ```
+
+2. Verify the Next BFF can reach the API:
+
+   ```bash
+   curl -i http://127.0.0.1:3001/api/public-booking/shops/<slug>/booking-config
+   ```
+
+3. Confirm `PUBLIC_WEB_API_URL` was present when `next start` launched and that it points to `/api/v1` exactly.
+4. Inspect the Next server logs for structured `[public-web][public-api]` entries. They distinguish:
+   - runtime configuration errors,
+   - upstream connection failures,
+   - upstream non-2xx responses,
+   - malformed upstream responses.
+5. If the API public endpoints return `200` but the BFF route returns `500`, the problem is in the public-web server runtime or its internal API URL, not in the Express public catalogue handlers.
 
 ## Pilot shop provisioning
 

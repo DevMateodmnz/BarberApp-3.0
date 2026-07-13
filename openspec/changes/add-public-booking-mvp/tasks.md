@@ -96,6 +96,9 @@ Chain strategy: pending
     - [x] 8.1.b.i Add an operator-only schedule-exception command and pilot runbook for date-specific overrides.
 - [x] 8.2 Define monitoring and rollback steps so public routes/web can be disabled without affecting staff booking.
 - [x] 8.3 Add a future browser-based E2E that books publicly and verifies the appointment through staff-visible surfaces.
+  - [x] 8.3.a Verify independent compiled API + `next start` production parity against the isolated fixture workflow.
+  - [x] 8.3.b Run a production-mode Chromium booking smoke, confirm persistence, and verify idempotent replay behavior after the independent startup path loads correctly.
+  - [x] 8.3.c Add `qa:public-booking:production` to the release gate and document runtime/startup diagnostics for the safe fallback page.
 
 ## Risk Gate
 
