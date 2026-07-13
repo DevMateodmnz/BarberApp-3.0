@@ -99,6 +99,7 @@ Chain strategy: pending
   - [x] 8.3.a Verify independent compiled API + `next start` production parity against the isolated fixture workflow.
   - [x] 8.3.b Run a production-mode Chromium booking smoke, confirm persistence, and verify idempotent replay behavior after the independent startup path loads correctly.
   - [x] 8.3.c Add `qa:public-booking:production` to the release gate and document runtime/startup diagnostics for the safe fallback page.
+  - [x] 8.3.d Record the Samsung Galaxy S21 physical Android Chromium-browser QA pass and the nonblocking UX follow-ups before release publication.
 
 ## Risk Gate
 

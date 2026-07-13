@@ -1,8 +1,8 @@
 # Public Booking Physical QA — Samsung Galaxy S21
 
 **Date**: 2026-07-13
-**Status**: Pending execution on physical device
-**Target device/browser**: Samsung Galaxy S21 + current Chrome
+**Status**: Physical Android Chromium-browser QA recorded as PASS; publication and deployment still pending
+**Target device/browser**: Samsung Galaxy S21 + Brave on Android (Chromium-based)
 **Network model**: Same trusted local Wi-Fi for laptop and phone
 **Runtime model**: laptop-hosted production builds (`node dist/index.js` + `next start`)
 **Database**: isolated PostgreSQL test database on `5433` only
@@ -12,10 +12,55 @@
 
 ## Quick status
 
-- Use this checklist **after** local `main` is fast-forwarded to the audited candidate.
+- Physical Samsung Galaxy S21 QA passed on a trusted local Wi-Fi using **Brave on Android** over the production-style local stack (`3000` API, `3001` Next, `5433` isolated PostgreSQL).
+- The captured browser evidence is **Chromium-based Brave**, not Chrome. No Chrome-specific rerun is required for this controlled pilot unless a browser-specific defect appears later.
+- Do **not** treat this checklist as deployment proof; it records a local trusted-network physical QA checkpoint only.
 - Do **not** point the phone flow at the dev database on `5432`.
-- Do **not** treat this as deployment; it is a trusted-LAN physical QA checkpoint only.
-- Keep the deterministic fixture available until all scenarios and cleanup are complete.
+
+## Recorded physical QA evidence — 2026-07-13
+
+### Runtime and device metadata
+
+| Field | Value |
+|---|---|
+| Device | Samsung Galaxy S21 |
+| Browser | Brave on Android |
+| Browser engine class | Chromium-based |
+| Network | Trusted local Wi-Fi |
+| Public web runtime | production Next.js build on `3001` |
+| API runtime | compiled Express API on `3000` |
+| Database | isolated PostgreSQL test database on `5433` |
+| Overall manual result | `PASS` |
+
+### Successful physical booking evidence
+
+| Field | Value |
+|---|---|
+| Shop | `E2E Booking Shop F16DE1C2F8` |
+| Service | `Servicio E2E F16DE1C2F8` |
+| Barber | `Barbero E2E F16DE1C2F8` |
+| Date/time | `14 de julio de 2026 a las 09:00` |
+| Phone | `+5493816167701` |
+| Status shown | `CONFIRMED` |
+| Public reference | `pb_XM3IT22J6Z3I6Y64` |
+
+### Verified physical behavior
+
+- ✅ direct public shop page load succeeded
+- ✅ shop name and services rendered correctly
+- ✅ service selection worked
+- ✅ eligible barber selection worked
+- ✅ date selection worked
+- ✅ real available slots loaded
+- ✅ responsive portrait layout was usable
+- ✅ no visible horizontal overflow was observed
+- ✅ customer form and consent flow worked
+- ✅ real public booking succeeded
+- ✅ confirmation page rendered
+- ✅ public booking reference was shown
+- ✅ international phone was stored and shown
+- ✅ confirmed appointment status was shown
+- ✅ no internal appointment IDs were exposed in the customer UI
 
 ## Required local terminals
 
@@ -185,7 +230,7 @@ NODE
 
 ### A. Direct page load
 
-- [ ] Open `http://<LAPTOP_LAN_IP>:3001/barberias/<SLUG>` in Chrome on the Samsung Galaxy S21
+- [ ] Open `http://<LAPTOP_LAN_IP>:3001/barberias/<SLUG>` in Brave on the Samsung Galaxy S21
 - [ ] Refresh the page
 - [ ] Navigate away and return
 - [ ] Verify no safe-fallback error appears
@@ -304,19 +349,55 @@ Verify:
 - [ ] date/time
 - [ ] confirmed status
 
+## Recorded nonblocking UX findings
+
+### 1. Argentine phone-entry experience
+
+Classification:
+
+`POST-RELEASE UX IMPROVEMENT — HIGH PRIORITY, NONBLOCKING FOR CONTROLLED PILOT`
+
+Observed on device:
+
+- The current field works when the customer enters canonical E.164-compatible input such as `+5493816167701`.
+- A normal Argentine customer is more likely to type a familiar local form such as:
+  - `3816167701`
+  - `381 6167701`
+  - `0381 15 6167701`
+
+Required future direction:
+
+- accept familiar Argentine mobile formats;
+- normalize safely to E.164 through an authoritative client/server boundary;
+- preserve canonical stored representation;
+- provide clearer visible help text and formatting guidance;
+- avoid guessing truly ambiguous numbers.
+
+### 2. Spanish confirmation status copy
+
+Classification:
+
+`POST-RELEASE COPY IMPROVEMENT — NONBLOCKING`
+
+Observed on device:
+
+- The confirmation currently displays `CONFIRMED`.
+- The customer-facing Spanish UI should later display `Confirmado`.
+- The internal enum and API status should remain `CONFIRMED`.
+
 ## Pass / fail recording
 
 | Scenario | Result | Evidence / notes | Blocker severity |
 |---|---|---|---|
-| A. Direct page load | `NOT-TESTED` |  |  |
-| B. Responsive layout | `NOT-TESTED` |  |  |
-| C. Successful booking | `NOT-TESTED` |  |  |
-| D. Double submission | `NOT-TESTED` |  |  |
-| E. Stale slot | `NOT-TESTED` |  |  |
-| F. Confirmation refresh | `NOT-TESTED` |  |  |
-| G. Validation | `NOT-TESTED` |  |  |
-| H. Network interruption | `NOT-TESTED` |  |  |
-| I. Staff visibility | `NOT-TESTED` |  |  |
+| A. Direct page load | `PASS` | Samsung Galaxy S21 on Brave loaded the public URL directly, showed the shop correctly, and no safe-fallback error appeared during the captured pass. |  |
+| B. Responsive layout | `PASS` | Portrait layout was usable on the physical phone and no visible horizontal overflow was observed. |  |
+| C. Successful booking | `PASS` | Completed real booking for `E2E Booking Shop F16DE1C2F8` / `Servicio E2E F16DE1C2F8` / `Barbero E2E F16DE1C2F8`; `14 de julio de 2026 a las 09:00`; phone `+5493816167701`; reference `pb_XM3IT22J6Z3I6Y64`; status `CONFIRMED`. |  |
+| D. Double submission | `NOT-TESTED` | Not repeated on the physical phone during the publication batch; covered by Playwright scenario 3 in `apps/public-web/e2e/publicBooking.spec.ts`. |  |
+| E. Stale slot | `NOT-TESTED` | Not repeated on the physical phone during the publication batch; covered by Playwright scenario 5. |  |
+| F. Confirmation refresh | `NOT-TESTED` | Not repeated on the physical phone during the publication batch; covered by Playwright scenario 6. |  |
+| G. Validation | `NOT-TESTED` | Not repeated on the physical phone during the publication batch; covered by Playwright scenario 7. |  |
+| H. Network interruption | `NOT-TESTED` | Not repeated on the physical phone during the publication batch; ambiguous-retry behavior remains covered by Playwright scenario 4. |  |
+| I. Staff visibility | `NOT-TESTED` | The customer-side confirmation PASS was recorded; staff-surface verification was not separately repeated on-device in this publication batch. |  |
 
 ### Result meanings
 

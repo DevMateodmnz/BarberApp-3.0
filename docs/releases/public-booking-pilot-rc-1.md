@@ -1,7 +1,7 @@
 # Public Booking Pilot RC 1
 
 **Date**: 2026-07-13
-**Status**: Audited release candidate ready for local-`main` fast-forward after documentation prep; push/tag/deploy remain blocked on Samsung Galaxy S21 Chrome QA
+**Status**: Physical Android QA passed; pending publication and deployment
 **Audited candidate code HEAD**: `900274909f4b96ba3a3b7faf70d454b3ace2e94b` — `test(release): verify public booking production parity`
 **Branch**: `fix/public-booking-production-parity`
 **Base release**: `origin/main` at `8385ae4da31db3524b5c76347d0f8f4078fea79f` — `fix(appointments): use server-side date scoped listing`
@@ -16,7 +16,7 @@
 - Prisma public-booking migrations deploy cleanly from a fresh isolated PostgreSQL database on `5433`.
 - Anonymous public traffic remains limited to `apps/api/src/app.ts` route namespace `/api/v1/public`.
 - Production-mode parity passed with independently built artifacts via `npm run qa:public-booking` and its nested `npm run qa:public-booking:production`.
-- Physical Samsung Galaxy S21 Chrome QA is still pending and must happen before any push, tag, or deployment.
+- Physical Samsung Galaxy S21 QA has passed on Brave for Android (Chromium-based); push/tag/deploy remain pending until this publication batch completes cleanly.
 
 ## Release identity
 
@@ -29,6 +29,7 @@
 | Local `main` before integration | `8edea901205ec69613bae923ac00d385bcf4fdcd` |
 | Audited cumulative commit range | `origin/main..900274909f4b96ba3a3b7faf70d454b3ace2e94b` |
 | Audited commit count | `17` |
+| Planned release tag | `mvp-1.1.0` |
 | Release-prep evidence docs | `docs/releases/public-booking-pilot-rc-1.md`, `docs/manual-tests/public-booking-physical-qa.md` |
 
 ## Delivered scope
@@ -93,6 +94,29 @@ The production smoke in `scripts/qaPublicBookingProduction.mjs` successfully:
 7. loaded the Next BFF route and `/barberias/<slug>`,
 8. cleaned the fixture after completion.
 
+## Physical Android QA evidence
+
+Recorded manual physical result from `docs/manual-tests/public-booking-physical-qa.md`:
+
+| Field | Value |
+|---|---|
+| Device | Samsung Galaxy S21 |
+| Browser | Brave on Android |
+| Browser class | Chromium-based |
+| Overall result | `PASS` |
+| Shop | `E2E Booking Shop F16DE1C2F8` |
+| Service | `Servicio E2E F16DE1C2F8` |
+| Barber | `Barbero E2E F16DE1C2F8` |
+| Date/time | `14 de julio de 2026 a las 09:00` |
+| Phone | `+5493816167701` |
+| Public reference | `pb_XM3IT22J6Z3I6Y64` |
+| Confirmation status shown | `CONFIRMED` |
+
+Important:
+
+- This release records **Brave on Android** as the captured browser evidence.
+- A Chrome-specific rerun is **not** required for this controlled pilot unless a future browser-specific defect appears.
+
 ## Migration and security evidence
 
 - Schema files inspected: `apps/api/prisma/schema.prisma`, `apps/api/prisma/test.schema.prisma`
@@ -120,14 +144,21 @@ The production smoke in `scripts/qaPublicBookingProduction.mjs` successfully:
 5. No automated notifications.
 6. No public booking management (no self-service cancel/reschedule).
 7. Production deployment has not happened yet.
-8. Physical Samsung Galaxy S21 Chrome QA is still pending.
+8. Publication and deployment are still pending in this batch even though physical Android QA has passed.
+
+## Nonblocking post-release UX follow-ups
+
+1. `POST-RELEASE UX IMPROVEMENT — HIGH PRIORITY, NONBLOCKING FOR CONTROLLED PILOT`
+   - Argentine phone-entry UX should accept familiar local formats such as `3816167701`, `381 6167701`, and `0381 15 6167701`, then normalize safely to canonical E.164 storage.
+2. `POST-RELEASE COPY IMPROVEMENT — NONBLOCKING`
+   - The customer-facing confirmation should later display `Confirmado` while the domain/API enum remains `CONFIRMED`.
 
 ## Release blocker policy
 
 This candidate must **not** be pushed, tagged, or deployed until all four conditions are true:
 
 1. Local integration to `main` passes with `git merge --ff-only`.
-2. Samsung Galaxy S21 Chrome QA passes using `docs/manual-tests/public-booking-physical-qa.md`.
+2. Samsung Galaxy S21 Brave-for-Android QA is recorded as passed in `docs/manual-tests/public-booking-physical-qa.md`.
 3. Final Git state is reviewed on local `main`.
 4. Mateo explicitly approves the pilot deployment.
 
@@ -135,9 +166,9 @@ This candidate must **not** be pushed, tagged, or deployed until all four condit
 
 Current evidence supports this classification:
 
-> **Public Booking Pilot Release Candidate — pending physical Android QA and deployment**
+> **Public Booking Pilot Release Candidate — physical Android QA passed; pending publication and deployment**
 
-That means the audited code is acceptable for a single controlled pilot release path, but **not** for push/tag/deploy yet.
+That means the audited code is acceptable for a single controlled pilot release path, but this document still precedes the `mvp-1.1.0` publication/tag step and any deployment.
 
 ## Related operational docs
 
