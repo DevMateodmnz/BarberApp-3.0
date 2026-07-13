@@ -1,16 +1,27 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import type { ApiRuntimeConfig } from '../config/runtime.js';
 import { ValidationError } from '../lib/errors.js';
-import { createPublicCatalogReadRateLimiter } from '../middleware/publicRateLimit.js';
-import { PublicBarberQuerySchema } from '../schemas/publicCatalog.js';
+import {
+  createPublicAvailabilityReadRateLimiter,
+  createPublicCatalogReadRateLimiter,
+} from '../middleware/publicRateLimit.js';
+import {
+  PublicAvailabilityQuerySchema,
+  PublicBarberQuerySchema,
+} from '../schemas/publicCatalog.js';
 import {
   getPublicBarbershopBySlug,
   listEligiblePublicBarbersBySlug,
   listPublicServicesBySlug,
 } from '../services/publicCatalogService.js';
+import { getPublicBarberAvailabilityBySlug } from '../services/publicAvailabilityService.js';
 
 interface PublicCatalogRouterOptions {
   catalogReadRateLimit?: {
+    max?: number;
+    windowMs?: number;
+  };
+  availabilityReadRateLimit?: {
     max?: number;
     windowMs?: number;
   };
@@ -18,6 +29,10 @@ interface PublicCatalogRouterOptions {
 
 function paramSlug(req: Request): string {
   return req.params.slug ?? '';
+}
+
+function paramBarberId(req: Request): string {
+  return req.params.barberId ?? '';
 }
 
 function parsePublicBarberQuery(req: Request) {
@@ -33,6 +48,19 @@ function parsePublicBarberQuery(req: Request) {
   return parsed.data;
 }
 
+function parsePublicAvailabilityQuery(req: Request) {
+  const parsed = PublicAvailabilityQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid public availability query parameters',
+      parsed.error.flatten()
+    );
+  }
+
+  return parsed.data;
+}
+
 export function createPublicCatalogRouter(
   config: ApiRuntimeConfig,
   options: PublicCatalogRouterOptions = {}
@@ -41,6 +69,10 @@ export function createPublicCatalogRouter(
   const catalogReadRateLimit = createPublicCatalogReadRateLimiter(
     config.rateLimit,
     options.catalogReadRateLimit
+  );
+  const availabilityReadRateLimit = createPublicAvailabilityReadRateLimiter(
+    config.rateLimit,
+    options.availabilityReadRateLimit
   );
 
   router.get(
@@ -80,6 +112,25 @@ export function createPublicCatalogRouter(
           query.serviceId
         );
         res.json({ success: true, data: barbers });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.get(
+    '/barbershops/:slug/barbers/:barberId/availability',
+    availabilityReadRateLimit,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const query = parsePublicAvailabilityQuery(req);
+        const availability = await getPublicBarberAvailabilityBySlug({
+          slug: paramSlug(req),
+          barberId: paramBarberId(req),
+          serviceId: query.serviceId,
+          localDate: query.localDate,
+        });
+        res.json({ success: true, data: availability });
       } catch (error) {
         next(error);
       }

@@ -25,34 +25,12 @@ export function getUtcRangeForLocalDate(
   dateStr: string,
   timezone: string
 ): { startUtc: Date; endUtc: Date } {
-  // UTC noon on the target date — safe reference point
-  const noonUtc = new Date(`${dateStr}T12:00:00.000Z`);
-
-  // Get local time-of-day at that UTC moment
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(noonUtc);
-
-  const hour = parseInt(
-    parts.find((p) => p.type === 'hour')!.value,
-    10
+  const startUtc = localDateTimeToUtc(dateStr, '00:00', timezone);
+  const endUtc = localDateTimeToUtc(
+    addDaysToDateString(dateStr, 1),
+    '00:00',
+    timezone
   );
-  const minute = parseInt(
-    parts.find((p) => p.type === 'minute')!.value,
-    10
-  );
-  const localMinutesSinceMidnight = hour * 60 + minute;
-
-  // Start of local day in UTC = noonUtc minus the local time elapsed
-  const startUtc = new Date(
-    noonUtc.getTime() - localMinutesSinceMidnight * 60_000
-  );
-
-  // End of local day (exclusive) = startUtc + 24h
-  const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60_000);
 
   return { startUtc, endUtc };
 }
@@ -61,7 +39,7 @@ function formatDateParts(year: number, month: number, day: number): string {
   return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function addDaysToDateString(dateStr: string, days: number): string {
+export function addDaysToDateString(dateStr: string, days: number): string {
   const [year, month, day] = dateStr.split('-').map(Number) as [number, number, number];
   const next = new Date(Date.UTC(year, month - 1, day + days));
   return formatDateParts(
@@ -112,15 +90,136 @@ export function getLocalDateStringInTimeZone(
   );
 }
 
+interface LocalDateTimeParts {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+}
+
+function getLocalDateTimeParts(
+  timezone: string,
+  date: Date,
+): LocalDateTimeParts {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  return {
+    year: parseInt(parts.find((part) => part.type === 'year')?.value ?? '0', 10),
+    month: parseInt(parts.find((part) => part.type === 'month')?.value ?? '0', 10),
+    day: parseInt(parts.find((part) => part.type === 'day')?.value ?? '0', 10),
+    hour: parseInt(parts.find((part) => part.type === 'hour')?.value ?? '0', 10),
+    minute: parseInt(parts.find((part) => part.type === 'minute')?.value ?? '0', 10),
+  };
+}
+
+function parseTimeZoneOffsetMinutes(
+  timezone: string,
+  date: Date,
+): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    timeZoneName: 'shortOffset',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const offsetValue = parts.find((part) => part.type === 'timeZoneName')?.value;
+  if (offsetValue === 'GMT') {
+    return 0;
+  }
+  const match = offsetValue?.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/);
+
+  if (!match) {
+    throw new Error(`Unable to resolve timezone offset for ${timezone}`);
+  }
+
+  const sign = match[1] === '-' ? -1 : 1;
+  const hours = parseInt(match[2] ?? '0', 10);
+  const minutes = parseInt(match[3] ?? '0', 10);
+
+  return sign * ((hours * 60) + minutes);
+}
+
+function matchesLocalDateTime(
+  timezone: string,
+  date: Date,
+  targetDate: string,
+  targetTime: string,
+): boolean {
+  const parts = getLocalDateTimeParts(timezone, date);
+  return (
+    formatDateParts(parts.year, parts.month, parts.day) === targetDate &&
+    `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}` ===
+      targetTime
+  );
+}
+
+export function tryLocalDateTimeToUtc(
+  dateStr: string,
+  timeStr: string,
+  timezone: string,
+): Date | null {
+  const [year, month, day] = dateStr.split('-').map(Number) as [number, number, number];
+  const [hours, minutes] = timeStr.split(':').map(Number) as [number, number];
+  const naiveUtcMs = Date.UTC(year, month - 1, day, hours, minutes);
+
+  let guessMs = naiveUtcMs;
+  for (let iteration = 0; iteration < 4; iteration += 1) {
+    const offsetMinutes = parseTimeZoneOffsetMinutes(
+      timezone,
+      new Date(guessMs)
+    );
+    const nextGuessMs = naiveUtcMs - (offsetMinutes * 60_000);
+
+    if (nextGuessMs === guessMs) {
+      break;
+    }
+
+    guessMs = nextGuessMs;
+  }
+
+  const directCandidate = new Date(guessMs);
+  if (matchesLocalDateTime(timezone, directCandidate, dateStr, timeStr)) {
+    return directCandidate;
+  }
+
+  for (let deltaMinutes = -180; deltaMinutes <= 180; deltaMinutes += 1) {
+    const candidate = new Date(guessMs + (deltaMinutes * 60_000));
+    if (matchesLocalDateTime(timezone, candidate, dateStr, timeStr)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 export function localDateTimeToUtc(
   dateStr: string,
   timeStr: string,
   timezone: string,
 ): Date {
-  const [hours, minutes] = timeStr.split(':').map(Number) as [number, number];
-  const { startUtc } = getUtcRangeForLocalDate(dateStr, timezone);
+  const resolved = tryLocalDateTimeToUtc(dateStr, timeStr, timezone);
 
-  return new Date(startUtc.getTime() + ((hours * 60) + minutes) * 60_000);
+  if (!resolved) {
+    throw new Error(
+      `Local time ${dateStr} ${timeStr} does not exist in timezone ${timezone}`
+    );
+  }
+
+  return resolved;
 }
 
 export function getLocalTimeStringInTimeZone(

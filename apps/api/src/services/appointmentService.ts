@@ -15,16 +15,14 @@ import {
 } from '../lib/errors.js';
 import {
   getLocalDayAndTime,
-  timeToMinutes,
   validateBusinessHours,
 } from '../lib/businessHours.js';
 import {
   getLocalDateStringInTimeZone,
-  getLocalTimeStringInTimeZone,
   getUtcRangeForLocalDate,
-  localDateTimeToUtc,
 } from '../lib/dateUtils.js';
 import { APPOINTMENT_SLOT_INTERVAL_MINUTES } from '../lib/appointmentScheduling.js';
+import { buildAvailabilitySlots } from '../lib/availabilitySlots.js';
 import { validateEmployeeInBarbershop } from './employeeService.js';
 import type {
   AppointmentStatus,
@@ -433,16 +431,6 @@ function validateStaffStartAt(
   }
 }
 
-function candidateSlotsOverlap(
-  startAt: Date,
-  endAt: Date,
-  existing: { startAt: Date; endAt: Date }[]
-): boolean {
-  return existing.some(
-    (appointment) => appointment.startAt < endAt && appointment.endAt > startAt
-  );
-}
-
 async function createAppointmentRecord(input: {
   barbershopId: string;
   employeeId: string;
@@ -644,9 +632,7 @@ export async function getAppointmentAvailability(input: AvailabilityInput) {
   const now = input.now ?? new Date();
   const { serviceId, localDate } = query;
   const timezone = await getBarbershopTimezone(barbershopId);
-  const todayLocalDate = getLocalDateStringInTimeZone(timezone, now);
-
-  if (localDate < todayLocalDate) {
+  if (localDate < getLocalDateStringInTimeZone(timezone, now)) {
     throw new AppError(
       400,
       'INVALID_APPOINTMENT_DATE',
@@ -659,82 +645,16 @@ export async function getAppointmentAvailability(input: AvailabilityInput) {
     employeeId,
     serviceId
   );
-
-  const [year, month, day] = localDate.split('-').map(Number) as [number, number, number];
-  const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-
-  const workingHours = await prisma.workingHours.findUnique({
-    where: {
-      barbershopId_dayOfWeek: {
-        barbershopId,
-        dayOfWeek,
-      },
-    },
+  const slots = await buildAvailabilitySlots({
+    barbershopId,
+    employeeId,
+    localDate,
+    timezone,
+    serviceDurationMinutes: service.durationMinutes,
+    slotIntervalMinutes: APPOINTMENT_SLOT_INTERVAL_MINUTES,
+    blockingStatuses: BLOCKING_APPOINTMENT_STATUSES,
+    now,
   });
-
-  if (!workingHours || !workingHours.isActive) {
-    return {
-      localDate,
-      barbershopTimezone: timezone,
-      slotIntervalMinutes: APPOINTMENT_SLOT_INTERVAL_MINUTES,
-      serviceDurationMinutes: service.durationMinutes,
-      slots: [],
-    };
-  }
-
-  const { startUtc, endUtc } = getUtcRangeForLocalDate(localDate, timezone);
-  const blockingAppointments = await prisma.appointment.findMany({
-    where: {
-      employeeId,
-      status: { in: BLOCKING_APPOINTMENT_STATUSES },
-      startAt: { lt: endUtc },
-      endAt: { gt: startUtc },
-    },
-    select: {
-      startAt: true,
-      endAt: true,
-    },
-    orderBy: { startAt: 'asc' },
-  });
-
-  const openMinutes = timeToMinutes(workingHours.openTime);
-  const closeMinutes = timeToMinutes(workingHours.closeTime);
-  const latestStartMinutes = closeMinutes - service.durationMinutes;
-  const slots: Array<{
-    startAt: string;
-    endAt: string;
-    localStartTime: string;
-    localEndTime: string;
-  }> = [];
-
-  for (
-    let startMinutes = openMinutes;
-    startMinutes <= latestStartMinutes;
-    startMinutes += APPOINTMENT_SLOT_INTERVAL_MINUTES
-  ) {
-    const startTime = `${String(Math.floor(startMinutes / 60)).padStart(2, '0')}:${String(startMinutes % 60).padStart(2, '0')}`;
-    const candidateStartAt = localDateTimeToUtc(localDate, startTime, timezone);
-
-    if (candidateStartAt.getTime() <= now.getTime()) {
-      continue;
-    }
-
-    const candidateEndAt = calculateAppointmentEndAt(
-      candidateStartAt,
-      service.durationMinutes
-    );
-
-    if (candidateSlotsOverlap(candidateStartAt, candidateEndAt, blockingAppointments)) {
-      continue;
-    }
-
-    slots.push({
-      startAt: candidateStartAt.toISOString(),
-      endAt: candidateEndAt.toISOString(),
-      localStartTime: getLocalTimeStringInTimeZone(timezone, candidateStartAt),
-      localEndTime: getLocalTimeStringInTimeZone(timezone, candidateEndAt),
-    });
-  }
 
   return {
     localDate,

@@ -17,6 +17,11 @@
  */
 import { prisma } from './prisma.js';
 import { BadRequestError } from './errors.js';
+import {
+  getLocalDateStringInTimeZone,
+  getLocalTimeStringInTimeZone,
+} from './dateUtils.js';
+import { resolveEffectiveScheduleForDate } from './effectiveSchedule.js';
 
 /**
  * Converts "HH:mm" string to minutes since midnight for comparison.
@@ -101,49 +106,68 @@ export async function validateBusinessHours(
 
   const timezone = barbershop.timezone;
 
-  // 2. Get local day and time for startAt
+  // 2. Get local date/day/time for startAt and endAt
+  const startLocalDate = getLocalDateStringInTimeZone(timezone, startAt);
+  const endLocalDate = getLocalDateStringInTimeZone(timezone, endAt);
   const startLocal = getLocalDayAndTime(startAt, timezone);
   const endLocal = getLocalDayAndTime(endAt, timezone);
 
-  // 3. Look up working hours for the barbershop on this day
-  const workingHours = await prisma.workingHours.findUnique({
-    where: {
-      barbershopId_dayOfWeek: {
-        barbershopId,
-        dayOfWeek: startLocal.dayOfWeek,
-      },
-    },
+  // 3. Appointments must remain within one local calendar date
+  if (startLocalDate !== endLocalDate || startLocal.dayOfWeek !== endLocal.dayOfWeek) {
+    throw new BadRequestError(
+      'Appointments cannot span across multiple days'
+    );
+  }
+
+  // 4. Resolve the effective schedule for the local date
+  const effectiveSchedule = await resolveEffectiveScheduleForDate({
+    barbershopId,
+    localDate: startLocalDate,
   });
 
-  // 4. No working hours = closed day
-  if (!workingHours || !workingHours.isActive) {
+  if (effectiveSchedule.intervals.length === 0) {
     throw new BadRequestError(
       'Appointments cannot be booked on this day — the barbershop is closed'
     );
   }
 
-  // 5. Validate start time >= open time
-  const openMinutes = timeToMinutes(workingHours.openTime);
-  const closeMinutes = timeToMinutes(workingHours.closeTime);
+  // 5. Validate the appointment fits entirely within one effective interval
+  const matchingInterval = effectiveSchedule.intervals.find((interval) => {
+    const openMinutes = timeToMinutes(interval.openTime);
+    const closeMinutes = timeToMinutes(interval.closeTime);
 
-  if (startLocal.minutesSinceMidnight < openMinutes) {
-    throw new BadRequestError(
-      `Appointment starts before opening hours (opens at ${workingHours.openTime})`
+    return (
+      startLocal.minutesSinceMidnight >= openMinutes &&
+      endLocal.minutesSinceMidnight <= closeMinutes
     );
+  });
+
+  if (matchingInterval) {
+    return;
   }
 
-  // 6. Validate end time <= close time
-  if (endLocal.minutesSinceMidnight > closeMinutes) {
-    throw new BadRequestError(
-      `Appointment ends after closing hours (closes at ${workingHours.closeTime})`
-    );
+  if (effectiveSchedule.intervals.length === 1) {
+    const [interval] = effectiveSchedule.intervals;
+    const openMinutes = timeToMinutes(interval!.openTime);
+    const closeMinutes = timeToMinutes(interval!.closeTime);
+
+    if (startLocal.minutesSinceMidnight < openMinutes) {
+      throw new BadRequestError(
+        `Appointment starts before opening hours (opens at ${interval!.openTime})`
+      );
+    }
+
+    if (endLocal.minutesSinceMidnight > closeMinutes) {
+      throw new BadRequestError(
+        `Appointment ends after closing hours (closes at ${interval!.closeTime})`
+      );
+    }
   }
 
-  // 7. Quick sanity: if start and end are on different local days,
-  //    that's an overnight appointment, which we don't support yet
-  if (startLocal.dayOfWeek !== endLocal.dayOfWeek) {
-    throw new BadRequestError(
-      'Appointments cannot span across multiple days'
-    );
-  }
+  const startLocalTime = getLocalTimeStringInTimeZone(timezone, startAt);
+  const endLocalTime = getLocalTimeStringInTimeZone(timezone, endAt);
+
+  throw new BadRequestError(
+    `Appointment must fit within a single working interval for this date (${startLocalTime}-${endLocalTime})`
+  );
 }

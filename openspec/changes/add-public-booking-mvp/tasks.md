@@ -54,9 +54,11 @@ Chain strategy: pending
 
 ## Phase 3: Schedule Exceptions and Availability Hardening
 
-- [ ] 3.1 Extend availability logic to apply schedule exceptions before weekly hours and enforce notice/horizon policy.
-- [ ] 3.2 Keep barbershop-timezone conversion authoritative and add DST-sensitive regression tests.
+- [x] 3.1 Extend availability logic to apply schedule exceptions before weekly hours and enforce notice/horizon policy.
+- [x] 3.2 Keep barbershop-timezone conversion authoritative and add DST-sensitive regression tests.
 - [ ] 3.3 Validate stale-slot and closed-date responses before any web implementation begins.
+  - [x] 3.3.a Validate closed-date availability and appointment-write rejections before web implementation.
+  - [ ] 3.3.b Validate stale-slot behavior on the future public booking write path.
 
 ## Phase 4: Public Booking Write Path and Durable Idempotency
 
@@ -80,8 +82,10 @@ Chain strategy: pending
 
 - [ ] 7.1 Add separate read/availability/write rate-limit classes using a production-safe shared store abstraction.
   - [x] 7.1.a Add a dedicated `public_catalog_read` limiter boundary for the current single-instance pilot.
+  - [x] 7.1.b Add a dedicated `public_availability_read` limiter boundary for the current single-instance pilot.
 - [ ] 7.2 Verify public DTO minimization, error-envelope consistency, and tenant/privacy guarantees through integration tests.
   - [x] 7.2.a Verify public catalogue DTO minimization, fail-closed errors, and tenant/privacy guarantees through integration tests.
+  - [x] 7.2.b Verify public availability DTO minimization, fail-closed errors, and tenant/privacy guarantees through integration tests.
 - [ ] 7.3 Confirm existing OWNER/BARBER/mobile booking flows still pass their full regressions.
 
 ## Phase 8: Pilot Rollout and Launch Validation

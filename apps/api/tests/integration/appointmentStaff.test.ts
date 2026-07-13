@@ -13,6 +13,7 @@ import {
   getNextLocalWeekdayDate,
   TEST_BARBERSHOP_TIMEZONE,
 } from '../helpers/timezone.js';
+import { provisionBarbershopScheduleException } from '../../src/services/scheduleExceptionProvisioningService.js';
 
 const app = createAppFromEnv();
 
@@ -246,6 +247,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.appointment.deleteMany();
+  await prisma.barbershopScheduleException.deleteMany();
   await prisma.employee.updateMany({
     where: { id: { in: [fixtures.barberA1.employee.id, fixtures.barberA2.employee.id] } },
     data: { isActive: true, deletedAt: null },
@@ -620,6 +622,30 @@ describe('client snapshot compatibility', () => {
     expect(fetchRes.body.data.serviceDurationMinutes).toBe(30);
     expect(fetchRes.body.data.service.name).toBe('Renamed Service');
   });
+
+  it('CLIENT booking rejects fully closed schedule exception dates', async () => {
+    const monday = nextLocalWeekdayDate(1);
+
+    await provisionBarbershopScheduleException({
+      barbershopId: fixtures.shopA.id,
+      dryRun: false,
+      localDate: monday,
+      mode: 'closed',
+    });
+
+    const res = await request(app)
+      .post('/api/v1/appointments')
+      .set(authHeader(fixtures.clientA.clerkUserId))
+      .send({
+        barbershopId: fixtures.shopA.id,
+        employeeId: fixtures.barberA1.employee.id,
+        serviceId: fixtures.ownerService30.id,
+        startAt: isoAtLocal(monday, '10:00'),
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('closed');
+  });
 });
 
 describe('availability', () => {
@@ -862,5 +888,113 @@ describe('availability', () => {
 
     expect(availability.slots[0]?.localStartTime).toBe('09:30');
     expect(availability.slots.every((slot) => new Date(slot.startAt) > localDateTimeToUtc(localToday, '09:20', TEST_BARBERSHOP_TIMEZONE))).toBe(true);
+  });
+
+  it('applies date-specific closures and custom intervals to staff availability', async () => {
+    const monday = nextLocalWeekdayDate(1);
+
+    await provisionBarbershopScheduleException({
+      barbershopId: fixtures.shopA.id,
+      dryRun: false,
+      localDate: monday,
+      mode: 'closed',
+    });
+
+    const closed = await getAppointmentAvailability({
+      barbershopId: fixtures.shopA.id,
+      employeeId: fixtures.barberA1.employee.id,
+      query: {
+        serviceId: fixtures.ownerService30.id,
+        localDate: monday,
+      },
+      userId: fixtures.ownerA.id,
+      userRole: 'OWNER',
+      now: localDateTimeToUtc(previousDateString(monday), '10:00', TEST_BARBERSHOP_TIMEZONE),
+    });
+
+    expect(closed.slots).toEqual([]);
+
+    await provisionBarbershopScheduleException({
+      barbershopId: fixtures.shopA.id,
+      dryRun: false,
+      localDate: monday,
+      mode: 'set_intervals',
+      intervals: [
+        { openTime: '10:00', closeTime: '13:00', position: 0 },
+        { openTime: '15:00', closeTime: '18:00', position: 1 },
+      ],
+    });
+
+    const custom = await getAppointmentAvailability({
+      barbershopId: fixtures.shopA.id,
+      employeeId: fixtures.barberA1.employee.id,
+      query: {
+        serviceId: fixtures.ownerService45.id,
+        localDate: monday,
+      },
+      userId: fixtures.ownerA.id,
+      userRole: 'OWNER',
+      now: localDateTimeToUtc(previousDateString(monday), '10:00', TEST_BARBERSHOP_TIMEZONE),
+    });
+
+    expect(custom.slots.map((slot) => slot.localStartTime)).toEqual([
+      '10:00',
+      '10:30',
+      '11:00',
+      '11:30',
+      '12:00',
+      '15:00',
+      '15:30',
+      '16:00',
+      '16:30',
+      '17:00',
+    ]);
+  });
+
+  it('rejects staff creation and rescheduling onto fully closed dates', async () => {
+    const monday = nextLocalWeekdayDate(1);
+    const tuesday = nextLocalWeekdayDate(2);
+
+    await provisionBarbershopScheduleException({
+      barbershopId: fixtures.shopA.id,
+      dryRun: false,
+      localDate: monday,
+      mode: 'closed',
+    });
+
+    const createOnClosed = await request(app)
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/appointments`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({
+        employeeId: fixtures.barberA1.employee.id,
+        serviceId: fixtures.ownerService30.id,
+        startAt: isoAtLocal(monday, '10:00'),
+        clientName: 'Closed Day Guest',
+      });
+
+    expect(createOnClosed.status).toBe(400);
+    expect(createOnClosed.body.error.message).toContain('closed');
+
+    const existing = await request(app)
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/appointments`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({
+        employeeId: fixtures.barberA1.employee.id,
+        serviceId: fixtures.ownerService30.id,
+        startAt: isoAtLocal(tuesday, '10:00'),
+        clientName: 'Reschedule Source',
+      });
+
+    expect(existing.status).toBe(201);
+
+    const movedToClosed = await request(app)
+      .put(`/api/v1/appointments/${existing.body.data.id}`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({
+        startAt: isoAtLocal(monday, '10:00'),
+      });
+
+    expect(movedToClosed.status).toBe(400);
+    expect(movedToClosed.body.error.message).toContain('closed');
   });
 });
