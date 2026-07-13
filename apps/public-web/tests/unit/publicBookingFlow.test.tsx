@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PublicBookingFlow } from '@/components/PublicBookingFlow';
+import { BrowserApiError } from '@/lib/api/browser';
 
 describe('PublicBookingFlow', () => {
   const shop = {
@@ -195,9 +196,13 @@ describe('PublicBookingFlow', () => {
 
     await user.type(screen.getByLabelText(/nombre y apellido/i), 'Mateo');
     await user.type(screen.getByLabelText(/teléfono/i), '+543811234567');
-    await user.click(
-      screen.getByRole('checkbox', { name: /acepto compartir mis datos/i })
-    );
+    const consentCheckbox = screen.getByRole('checkbox', {
+      name: /acepto compartir mis datos/i,
+    });
+    await user.click(consentCheckbox);
+    await waitFor(() => {
+      expect(consentCheckbox).toBeChecked();
+    });
     await user.click(screen.getByRole('button', { name: /reservar turno/i }));
 
     await waitFor(() => {
@@ -221,5 +226,103 @@ describe('PublicBookingFlow', () => {
         bookingReference: 'pb_TEST1234567890',
       })
     );
+  });
+
+  it('keeps the form visible after a stale-slot conflict so the customer can recover', async () => {
+    const user = userEvent.setup();
+    const loadAvailability = vi
+      .fn()
+      .mockResolvedValueOnce({
+        slug: shop.slug,
+        serviceId: 'svc_1',
+        barberId: 'barber_1',
+        localDate: '2026-07-20',
+        timezone: shop.timezone,
+        slotIntervalMinutes: 30,
+        serviceDurationMinutes: 30,
+        slots: [
+          {
+            startAt: '2026-07-20T13:00:00.000Z',
+            endAt: '2026-07-20T13:30:00.000Z',
+          },
+          {
+            startAt: '2026-07-20T13:30:00.000Z',
+            endAt: '2026-07-20T14:00:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        slug: shop.slug,
+        serviceId: 'svc_1',
+        barberId: 'barber_1',
+        localDate: '2026-07-20',
+        timezone: shop.timezone,
+        slotIntervalMinutes: 30,
+        serviceDurationMinutes: 30,
+        slots: [
+          {
+            startAt: '2026-07-20T13:30:00.000Z',
+            endAt: '2026-07-20T14:00:00.000Z',
+          },
+        ],
+      });
+    const submitBooking = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new BrowserApiError(
+          'Ese horario ya no está disponible. Elegí otro turno para continuar.',
+          409,
+          'PUBLIC_BOOKING_SLOT_UNAVAILABLE'
+        )
+      );
+
+    render(
+      <PublicBookingFlow
+        shop={shop}
+        services={services}
+        bookingConfig={bookingConfig}
+        loadBarbers={vi.fn().mockResolvedValue([
+          { barberId: 'barber_1', displayName: 'Mateo' },
+        ])}
+        loadAvailability={loadAvailability}
+        submitBooking={submitBooking}
+      />
+    );
+
+    await user.click(screen.getByRole('radio', { name: /corte clásico/i }));
+    await user.click(await screen.findByRole('radio', { name: /mateo/i }));
+    await user.type(screen.getByLabelText(/fecha de reserva/i), '2026-07-20');
+    await user.click(
+      screen.getByRole('button', { name: /ver horarios disponibles/i })
+    );
+    await user.click(await screen.findByRole('button', { name: /10:00/i }));
+
+    await user.type(
+      screen.getByLabelText(/nombre y apellido/i),
+      'Cliente Conflicto'
+    );
+    await user.type(screen.getByLabelText(/teléfono/i), '+543811234570');
+    await user.type(
+      screen.getByLabelText(/notas \(opcional\)/i),
+      'Conflicto controlado'
+    );
+    await user.click(screen.getByRole('checkbox', { name: /acepto compartir/i }));
+    await user.click(screen.getByRole('button', { name: /reservar turno/i }));
+
+    await expect(
+      await screen.findByRole('alert')
+    ).toHaveTextContent(/ese horario ya no está disponible/i);
+    expect(screen.queryByText(/turno seleccionado/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/nombre y apellido/i)).toHaveValue(
+      'Cliente Conflicto'
+    );
+    expect(screen.getByLabelText(/teléfono/i)).toHaveValue('+543811234570');
+    expect(screen.getByLabelText(/notas \(opcional\)/i)).toHaveValue(
+      'Conflicto controlado'
+    );
+    expect(screen.getByRole('button', { name: /10:30/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /reservar turno/i })
+    ).toBeDisabled();
   });
 });

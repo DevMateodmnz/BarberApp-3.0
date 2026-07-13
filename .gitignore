@@ -29,6 +29,8 @@ npm-debug.log*
 
 # Test
 coverage/
+apps/public-web/playwright-report/
+apps/public-web/test-results/
 
 # Prisma
 apps/api/prisma/*.db

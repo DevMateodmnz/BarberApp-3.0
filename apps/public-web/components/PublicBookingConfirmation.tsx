@@ -79,6 +79,10 @@ export function PublicBookingConfirmationView({ slug }: { slug: string }) {
           <dt style={{ fontWeight: 700 }}>Teléfono</dt>
           <dd style={{ margin: 0 }}>{confirmation.clientPhoneDisplay}</dd>
         </div>
+        <div>
+          <dt style={{ fontWeight: 700 }}>Estado</dt>
+          <dd style={{ margin: 0 }}>{confirmation.status}</dd>
+        </div>
       </dl>
     </section>
   );

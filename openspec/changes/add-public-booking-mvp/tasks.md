@@ -95,7 +95,7 @@ Chain strategy: pending
   - [ ] 8.1.b Document the full pilot barbershop provisioning checklist, including services, employees, assignments, and exceptions.
     - [x] 8.1.b.i Add an operator-only schedule-exception command and pilot runbook for date-specific overrides.
 - [ ] 8.2 Define monitoring and rollback steps so public routes/web can be disabled without affecting staff booking.
-- [ ] 8.3 Add a future browser-based E2E that books publicly and verifies the appointment through staff-visible surfaces.
+- [x] 8.3 Add a future browser-based E2E that books publicly and verifies the appointment through staff-visible surfaces.
 
 ## Risk Gate
 
