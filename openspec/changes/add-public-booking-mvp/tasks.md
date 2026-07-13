@@ -41,9 +41,12 @@ Chain strategy: pending
 
 ## Phase 2: Public Catalogue and Barbershop Identity API
 
-- [ ] 2.1 Create anonymous public routes under `/api/v1/public/barbershops/:slug` for shop lookup, services, and eligible barbers.
-- [ ] 2.2 Reuse existing tenant/service/employee invariants while filtering inactive/private data.
-- [ ] 2.3 Write integration tests for fail-closed behavior, omitted private fields, and service-to-barber eligibility.
+- [x] 2.1 Create anonymous public routes under `/api/v1/public/barbershops/:slug` for shop lookup, services, and eligible barbers.
+  - [x] 2.1.a Add anonymous public shop lookup for active published barbershops.
+  - [x] 2.1.b Add anonymous public active-service catalogue under the resolved slug.
+  - [x] 2.1.c Add anonymous public eligible-barber listing scoped by slug + service.
+- [x] 2.2 Reuse existing tenant/service/employee invariants while filtering inactive/private data.
+- [x] 2.3 Write integration tests for fail-closed behavior, omitted private fields, and service-to-barber eligibility.
 
 ## Phase 3: Schedule Exceptions and Availability Hardening
 
@@ -72,7 +75,9 @@ Chain strategy: pending
 ## Phase 7: Security, Privacy, and Abuse Hardening
 
 - [ ] 7.1 Add separate read/availability/write rate-limit classes using a production-safe shared store abstraction.
+  - [x] 7.1.a Add a dedicated `public_catalog_read` limiter boundary for the current single-instance pilot.
 - [ ] 7.2 Verify public DTO minimization, error-envelope consistency, and tenant/privacy guarantees through integration tests.
+  - [x] 7.2.a Verify public catalogue DTO minimization, fail-closed errors, and tenant/privacy guarantees through integration tests.
 - [ ] 7.3 Confirm existing OWNER/BARBER/mobile booking flows still pass their full regressions.
 
 ## Phase 8: Pilot Rollout and Launch Validation
