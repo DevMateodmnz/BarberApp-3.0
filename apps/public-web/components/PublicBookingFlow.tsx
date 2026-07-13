@@ -6,10 +6,15 @@ import {
   BrowserApiError,
   loadAvailabilityForSelection,
   loadBarbersForService,
+  submitPublicBooking,
 } from '@/lib/api/browser';
+import { saveBookingConfirmation } from '@/lib/bookingConfirmationStorage';
 import type {
   PublicAvailability,
   PublicBarber,
+  PublicBookingConfig,
+  PublicBookingConfirmation,
+  PublicCreateAppointmentPayload,
   PublicService,
   PublicShop,
 } from '@/lib/api/types';
@@ -17,12 +22,18 @@ import type {
 interface PublicBookingFlowProps {
   shop: PublicShop;
   services: PublicService[];
+  bookingConfig: PublicBookingConfig;
   loadBarbers?: (serviceId: string) => Promise<PublicBarber[]>;
   loadAvailability?: (input: {
     barberId: string;
     localDate: string;
     serviceId: string;
   }) => Promise<PublicAvailability>;
+  submitBooking?: (input: {
+    idempotencyKey: string;
+    payload: PublicCreateAppointmentPayload;
+  }) => Promise<PublicBookingConfirmation>;
+  onBookingConfirmed?: (confirmation: PublicBookingConfirmation) => void;
 }
 
 function formatPrice(priceCents: number, currency: string) {
@@ -65,6 +76,7 @@ function mapBrowserError(error: unknown) {
 export function PublicBookingFlow({
   shop,
   services,
+  bookingConfig,
   loadBarbers = (serviceId) => loadBarbersForService(shop.slug, serviceId),
   loadAvailability = (input) =>
     loadAvailabilityForSelection({
@@ -73,6 +85,13 @@ export function PublicBookingFlow({
       barberId: input.barberId,
       localDate: input.localDate,
     }),
+  submitBooking = (input) =>
+    submitPublicBooking({
+      slug: shop.slug,
+      idempotencyKey: input.idempotencyKey,
+      payload: input.payload,
+    }),
+  onBookingConfirmed,
 }: PublicBookingFlowProps) {
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [selectedBarberId, setSelectedBarberId] = useState('');
@@ -86,6 +105,12 @@ export function PublicBookingFlow({
   const [availabilityMessage, setAvailabilityMessage] = useState('');
   const [isLoadingBarbers, setIsLoadingBarbers] = useState(false);
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
+  const [clientName, setClientName] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [notes, setNotes] = useState('');
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [submitMessage, setSubmitMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedService = useMemo(
     () => services.find((service) => service.serviceId === selectedServiceId) ?? null,
@@ -102,6 +127,13 @@ export function PublicBookingFlow({
       availability?.slots.find((slot) => slot.startAt === selectedSlotStartAt) ?? null,
     [availability, selectedSlotStartAt]
   );
+
+  const handleBookingConfirmed =
+    onBookingConfirmed ??
+    ((confirmation: PublicBookingConfirmation) => {
+      saveBookingConfirmation(shop.slug, confirmation);
+      window.location.assign(`/barberias/${shop.slug}/confirmacion`);
+    });
 
   async function handleServiceChange(serviceId: string) {
     setSelectedServiceId(serviceId);
@@ -155,6 +187,61 @@ export function PublicBookingFlow({
     }
   }
 
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedService || !selectedBarber || !selectedSlot) {
+      return;
+    }
+
+    setSubmitMessage('');
+    setIsSubmitting(true);
+
+    try {
+      const idempotencyKey =
+        globalThis.crypto?.randomUUID?.() ??
+        `booking_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+      const confirmation = await submitBooking({
+        idempotencyKey,
+        payload: {
+          serviceId: selectedService.serviceId,
+          barberId: selectedBarber.barberId,
+          startAt: selectedSlot.startAt,
+          clientName: clientName.trim(),
+          clientPhone: clientPhone.trim(),
+          notes: notes.trim() ? notes.trim() : undefined,
+          consentAccepted: true,
+          consentVersion: bookingConfig.consent.version,
+        },
+      });
+
+      handleBookingConfirmed(confirmation);
+    } catch (error) {
+      if (
+        error instanceof BrowserApiError &&
+        error.code === 'PUBLIC_BOOKING_SLOT_UNAVAILABLE'
+      ) {
+        setSubmitMessage(
+          'Ese horario ya no está disponible. Elegí otro turno para continuar.'
+        );
+        setSelectedSlotStartAt('');
+        await handleAvailabilityLookup();
+      } else if (
+        error instanceof BrowserApiError &&
+        error.code === 'PUBLIC_BOOKING_WRITE_RATE_LIMITED'
+      ) {
+        setSubmitMessage(
+          'Llegaste al límite de intentos. Esperá unos minutos antes de volver a reservar.'
+        );
+      } else {
+        setSubmitMessage(mapBrowserError(error));
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <main className={styles.page}>
       <section className={styles.card} aria-labelledby="public-booking-title">
@@ -163,6 +250,11 @@ export function PublicBookingFlow({
           {shop.name}
         </h1>
         <p className={styles.subtitle}>Zona horaria: {shop.timezone}</p>
+        <p className={styles.subtitle}>
+          Reserva con {bookingConfig.policy.minimumNoticeMinutes} minutos de
+          anticipación y hasta {bookingConfig.policy.maximumBookingHorizonDays}{' '}
+          días corridos.
+        </p>
 
         <div className={styles.stack}>
           <fieldset className={styles.section}>
@@ -310,6 +402,81 @@ export function PublicBookingFlow({
               </p>
             ) : null}
           </section>
+
+          {selectedSlot && selectedService && selectedBarber ? (
+            <section className={styles.section} aria-labelledby="form-section-title">
+              <h2 id="form-section-title" className={styles.legend}>
+                5. Completá tus datos
+              </h2>
+              <form className={styles.formGrid} onSubmit={(event) => void handleSubmit(event)}>
+                <label className={styles.label}>
+                  Nombre y apellido
+                  <input
+                    className={styles.input}
+                    type="text"
+                    value={clientName}
+                    onChange={(event) => setClientName(event.currentTarget.value)}
+                    autoComplete="name"
+                    required
+                  />
+                </label>
+
+                <label className={styles.label}>
+                  Teléfono
+                  <input
+                    className={styles.input}
+                    type="tel"
+                    value={clientPhone}
+                    onChange={(event) => setClientPhone(event.currentTarget.value)}
+                    autoComplete="tel"
+                    inputMode="tel"
+                    required
+                  />
+                </label>
+
+                <label className={styles.label}>
+                  Notas (opcional)
+                  <textarea
+                    className={styles.textarea}
+                    value={notes}
+                    onChange={(event) => setNotes(event.currentTarget.value)}
+                    maxLength={500}
+                  />
+                </label>
+
+                <label className={styles.checkboxRow}>
+                  <input
+                    type="checkbox"
+                    checked={consentAccepted}
+                    onChange={(event) =>
+                      setConsentAccepted(event.currentTarget.checked)
+                    }
+                    required
+                  />
+                  <span>{bookingConfig.consent.text}</span>
+                </label>
+
+                {submitMessage ? (
+                  <p className={styles.error} role="alert">
+                    {submitMessage}
+                  </p>
+                ) : null}
+
+                <button
+                  type="submit"
+                  className={styles.button}
+                  disabled={
+                    isSubmitting ||
+                    !clientName.trim() ||
+                    !clientPhone.trim() ||
+                    !consentAccepted
+                  }
+                >
+                  {isSubmitting ? 'Reservando…' : 'Reservar turno'}
+                </button>
+              </form>
+            </section>
+          ) : null}
         </div>
       </section>
     </main>

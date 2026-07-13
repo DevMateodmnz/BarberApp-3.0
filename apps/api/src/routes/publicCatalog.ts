@@ -17,6 +17,7 @@ import {
 } from '../services/publicBookingService.js';
 import {
   getPublicBarbershopBySlug,
+  getPublicBookingConfigBySlug,
   listEligiblePublicBarbersBySlug,
   listPublicServicesBySlug,
 } from '../services/publicCatalogService.js';
@@ -136,6 +137,19 @@ export function createPublicCatalogRouter(
           query.serviceId
         );
         res.json({ success: true, data: barbers });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.get(
+    '/barbershops/:slug/booking-config',
+    catalogReadRateLimit,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const configDto = await getPublicBookingConfigBySlug(paramSlug(req));
+        res.json({ success: true, data: configDto });
       } catch (error) {
         next(error);
       }

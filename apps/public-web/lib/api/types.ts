@@ -41,3 +41,40 @@ export interface PublicAvailability {
     endAt: string;
   }>;
 }
+
+export interface PublicBookingConfig {
+  consent: {
+    version: string;
+    text: string;
+  };
+  policy: {
+    minimumNoticeMinutes: number;
+    maximumBookingHorizonDays: number;
+    slotIntervalMinutes: number;
+  };
+}
+
+export interface PublicBookingConfirmation {
+  bookingReference: string;
+  barbershopName: string;
+  serviceName: string;
+  barberName: string;
+  timezone: string;
+  localDate: string;
+  localStartTime: string;
+  startAt: string;
+  endAt: string;
+  clientPhoneDisplay: string;
+  status: 'CONFIRMED';
+}
+
+export interface PublicCreateAppointmentPayload {
+  serviceId: string;
+  barberId: string;
+  startAt: string;
+  clientName: string;
+  clientPhone: string;
+  notes?: string;
+  consentAccepted: true;
+  consentVersion: string;
+}

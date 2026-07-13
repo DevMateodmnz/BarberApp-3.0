@@ -3,6 +3,7 @@ import { MissingShopState } from '@/components/MissingShopState';
 import { PublicBookingFlow } from '@/components/PublicBookingFlow';
 import {
   PublicApiError,
+  getPublicBookingConfig,
   getPublicServices,
   getPublicShop,
 } from '@/lib/api/server';
@@ -19,12 +20,19 @@ export default async function PublicBookingPage({
   const { slug } = await params;
 
   try {
-    const [shop, services] = await Promise.all([
+    const [shop, services, bookingConfig] = await Promise.all([
       getPublicShop(slug),
       getPublicServices(slug),
+      getPublicBookingConfig(slug),
     ]);
 
-    return <PublicBookingFlow shop={shop} services={services} />;
+    return (
+      <PublicBookingFlow
+        shop={shop}
+        services={services}
+        bookingConfig={bookingConfig}
+      />
+    );
   } catch (error) {
     if (error instanceof PublicApiError && error.status === 404) {
       return (

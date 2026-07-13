@@ -4,6 +4,7 @@ import request from 'supertest';
 import { createApp, createAppFromEnv } from '../../src/app.js';
 import { readApiRuntimeConfig } from '../../src/config/runtime.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
+import { CURRENT_PUBLIC_BOOKING_CONSENT_VERSION } from '../../src/lib/publicBookingConsent.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { createPublicCatalogRouter } from '../../src/routes/publicCatalog.js';
 
@@ -456,6 +457,39 @@ describe('GET /api/v1/public/barbershops/:slug/barbers', () => {
     expect(res.body.data[0].userId).toBeUndefined();
     expect(res.body.data[0].email).toBeUndefined();
     expect(res.body.data[0].isActive).toBeUndefined();
+  });
+});
+
+describe('GET /api/v1/public/barbershops/:slug/booking-config', () => {
+  it('returns the public consent copy and policy values for an active published shop', async () => {
+    const res = await request(app).get(
+      `/api/v1/public/barbershops/${fixtures.publishedShop.slug}/booking-config`
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      data: {
+        consent: {
+          version: CURRENT_PUBLIC_BOOKING_CONSENT_VERSION,
+          text: expect.stringContaining('Acepto compartir mis datos'),
+        },
+        policy: {
+          minimumNoticeMinutes: 60,
+          maximumBookingHorizonDays: 30,
+          slotIntervalMinutes: 30,
+        },
+      },
+    });
+  });
+
+  it('fails closed for unavailable shops', async () => {
+    const res = await request(app).get(
+      '/api/v1/public/barbershops/missing-shop/booking-config'
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('NOT_FOUND');
   });
 });
 

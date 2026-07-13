@@ -56,27 +56,27 @@ Chain strategy: pending
 
 - [x] 3.1 Extend availability logic to apply schedule exceptions before weekly hours and enforce notice/horizon policy.
 - [x] 3.2 Keep barbershop-timezone conversion authoritative and add DST-sensitive regression tests.
-- [ ] 3.3 Validate stale-slot and closed-date responses before any web implementation begins.
+- [x] 3.3 Validate stale-slot and closed-date responses before any web implementation begins.
   - [x] 3.3.a Validate closed-date availability and appointment-write rejections before web implementation.
-  - [ ] 3.3.b Validate stale-slot behavior on the future public booking write path.
+  - [x] 3.3.b Validate stale-slot behavior on the future public booking write path.
 
 ## Phase 4: Public Booking Write Path and Durable Idempotency
 
-- [ ] 4.1 Add anonymous booking creation with `Idempotency-Key`, the authoritative `startAt` / `clientName` / `clientPhone` / `notes` contract, payload fingerprinting, replay support, and mismatch detection.
-- [ ] 4.2 Extract shared appointment-creation invariants instead of duplicating a weaker public-only path.
-- [ ] 4.3 Write RED-first tests for consent, strict UTC `startAt`, slot-boundary alignment, phone normalization, concurrency, replay, in-progress duplicate, and safe confirmation DTOs.
+- [x] 4.1 Add anonymous booking creation with `Idempotency-Key`, the authoritative `startAt` / `clientName` / `clientPhone` / `notes` contract, payload fingerprinting, replay support, and mismatch detection.
+- [x] 4.2 Extract shared appointment-creation invariants instead of duplicating a weaker public-only path.
+- [x] 4.3 Write RED-first tests for consent, strict UTC `startAt`, slot-boundary alignment, phone normalization, concurrency, replay, in-progress duplicate, and safe confirmation DTOs.
 
 ## Phase 5: Dedicated Public Web Foundation
 
-- [ ] 5.1 Create `apps/public-web` with Next.js, route shell(s) for `/barberias/[slug]` and booking/confirmation pages, and a small API client boundary.
-- [ ] 5.2 Add responsive layout, loading/empty/error states, keyboard/focus management, and localized date/time formatting based on barbershop timezone.
-- [ ] 5.3 Add unit/render tests for route loading, missing shop, and accessible form scaffolding.
+- [x] 5.1 Create `apps/public-web` with Next.js, route shell(s) for `/barberias/[slug]` and booking/confirmation pages, and a small API client boundary.
+- [x] 5.2 Add responsive layout, loading/empty/error states, keyboard/focus management, and localized date/time formatting based on barbershop timezone.
+- [x] 5.3 Add unit/render tests for route loading, missing shop, and accessible form scaffolding.
 
 ## Phase 6: Complete Customer Booking Flow
 
-- [ ] 6.1 Implement service, barber, date, and slot selection backed by the public API.
-- [ ] 6.2 Implement customer name/phone/consent form validation and submission retry behavior with preserved fields.
-- [ ] 6.3 Add stale-slot conflict recovery, rate-limit handling, and success-page behavior that does not require reference lookup-by-URL.
+- [x] 6.1 Implement service, barber, date, and slot selection backed by the public API.
+- [x] 6.2 Implement customer name/phone/consent form validation and submission retry behavior with preserved fields.
+- [x] 6.3 Add stale-slot conflict recovery, rate-limit handling, and success-page behavior that does not require reference lookup-by-URL.
 
 ## Phase 7: Security, Privacy, and Abuse Hardening
 

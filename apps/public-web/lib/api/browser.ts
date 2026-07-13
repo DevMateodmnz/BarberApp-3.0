@@ -1,4 +1,9 @@
-import type { PublicAvailability, PublicBarber } from '@/lib/api/types';
+import type {
+  PublicAvailability,
+  PublicBarber,
+  PublicBookingConfirmation,
+  PublicCreateAppointmentPayload,
+} from '@/lib/api/types';
 
 interface ApiEnvelope<T> {
   success: boolean;
@@ -64,5 +69,23 @@ export function loadAvailabilityForSelection(input: {
 
   return fetchEnvelope<PublicAvailability>(
     `/api/public-booking/shops/${encodeURIComponent(input.slug)}/availability?${params.toString()}`
+  );
+}
+
+export function submitPublicBooking(input: {
+  slug: string;
+  idempotencyKey: string;
+  payload: PublicCreateAppointmentPayload;
+}) {
+  return fetchEnvelope<PublicBookingConfirmation>(
+    `/api/public-booking/shops/${encodeURIComponent(input.slug)}/appointments`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': input.idempotencyKey,
+      },
+      body: JSON.stringify(input.payload),
+    }
   );
 }

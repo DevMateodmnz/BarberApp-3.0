@@ -4,6 +4,9 @@ import type {
   ApiEnvelope,
   PublicAvailability,
   PublicBarber,
+  PublicBookingConfig,
+  PublicBookingConfirmation,
+  PublicCreateAppointmentPayload,
   PublicService,
   PublicShop,
 } from '@/lib/api/types';
@@ -31,10 +34,10 @@ async function parseApiEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> 
   return (await response.json()) as ApiEnvelope<T>;
 }
 
-export async function fetchPublicApi<T>(
+export async function requestPublicApi<T>(
   path: string,
   init?: RequestInit
-): Promise<T> {
+): Promise<{ response: Response; payload: ApiEnvelope<T> }> {
   const { apiBaseUrl } = getPublicWebRuntime();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
@@ -45,7 +48,17 @@ export async function fetchPublicApi<T>(
     },
   });
 
-  const payload = await parseApiEnvelope<T>(response);
+  return {
+    response,
+    payload: await parseApiEnvelope<T>(response),
+  };
+}
+
+export async function fetchPublicApi<T>(
+  path: string,
+  init?: RequestInit
+): Promise<T> {
+  const { response, payload } = await requestPublicApi<T>(path, init);
 
   if (!response.ok || !payload.success || payload.data === undefined) {
     throw new PublicApiError(
@@ -66,6 +79,12 @@ export async function getPublicShop(slug: string) {
 export async function getPublicServices(slug: string) {
   return fetchPublicApi<PublicService[]>(
     `/public/barbershops/${encodeURIComponent(slug)}/services`
+  );
+}
+
+export async function getPublicBookingConfig(slug: string) {
+  return fetchPublicApi<PublicBookingConfig>(
+    `/public/barbershops/${encodeURIComponent(slug)}/booking-config`
   );
 }
 
@@ -91,5 +110,23 @@ export async function getPublicAvailability(input: {
     `/public/barbershops/${encodeURIComponent(input.slug)}/barbers/${encodeURIComponent(
       input.barberId
     )}/availability?${params.toString()}`
+  );
+}
+
+export async function createPublicAppointment(input: {
+  slug: string;
+  idempotencyKey: string;
+  payload: PublicCreateAppointmentPayload;
+}) {
+  return fetchPublicApi<PublicBookingConfirmation>(
+    `/public/barbershops/${encodeURIComponent(input.slug)}/appointments`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': input.idempotencyKey,
+      },
+      body: JSON.stringify(input.payload),
+    }
   );
 }

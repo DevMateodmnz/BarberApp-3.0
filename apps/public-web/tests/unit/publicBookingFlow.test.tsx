@@ -29,6 +29,18 @@ describe('PublicBookingFlow', () => {
     },
   ];
 
+  const bookingConfig = {
+    consent: {
+      version: 'public-booking-v1',
+      text: 'Acepto compartir mis datos y reservar este turno.',
+    },
+    policy: {
+      minimumNoticeMinutes: 60,
+      maximumBookingHorizonDays: 30,
+      slotIntervalMinutes: 30,
+    },
+  };
+
   it('lets the customer pick service, barber, date, and slot', async () => {
     const user = userEvent.setup();
     const loadBarbers = vi.fn().mockResolvedValue([
@@ -59,6 +71,7 @@ describe('PublicBookingFlow', () => {
       <PublicBookingFlow
         shop={shop}
         services={services}
+        bookingConfig={bookingConfig}
         loadBarbers={loadBarbers}
         loadAvailability={loadAvailability}
       />
@@ -111,6 +124,7 @@ describe('PublicBookingFlow', () => {
       <PublicBookingFlow
         shop={shop}
         services={services}
+        bookingConfig={bookingConfig}
         loadBarbers={loadBarbers}
         loadAvailability={vi.fn()}
       />
@@ -121,5 +135,91 @@ describe('PublicBookingFlow', () => {
     expect(
       await screen.findByText(/no hay barberos disponibles para este servicio/i)
     ).toBeInTheDocument();
+  });
+
+  it('shows the booking form after slot selection and submits the booking with consent', async () => {
+    const user = userEvent.setup();
+    const submitBooking = vi.fn().mockResolvedValue({
+      bookingReference: 'pb_TEST1234567890',
+      barbershopName: 'Mateo Barber',
+      serviceName: 'Corte clásico',
+      barberName: 'Mateo',
+      timezone: shop.timezone,
+      localDate: '2026-07-20',
+      localStartTime: '10:00',
+      startAt: '2026-07-20T13:00:00.000Z',
+      endAt: '2026-07-20T13:30:00.000Z',
+      clientPhoneDisplay: '+543811234567',
+      status: 'CONFIRMED',
+    });
+    const onBookingConfirmed = vi.fn();
+
+    render(
+      <PublicBookingFlow
+        shop={shop}
+        services={services}
+        bookingConfig={bookingConfig}
+        loadBarbers={vi.fn().mockResolvedValue([
+          { barberId: 'barber_1', displayName: 'Mateo' },
+        ])}
+        loadAvailability={vi.fn().mockResolvedValue({
+          slug: shop.slug,
+          serviceId: 'svc_1',
+          barberId: 'barber_1',
+          localDate: '2026-07-20',
+          timezone: shop.timezone,
+          slotIntervalMinutes: 30,
+          serviceDurationMinutes: 30,
+          slots: [
+            {
+              startAt: '2026-07-20T13:00:00.000Z',
+              endAt: '2026-07-20T13:30:00.000Z',
+            },
+          ],
+        })}
+        submitBooking={submitBooking}
+        onBookingConfirmed={onBookingConfirmed}
+      />
+    );
+
+    await user.click(screen.getByRole('radio', { name: /corte clásico/i }));
+    await user.click(await screen.findByRole('radio', { name: /mateo/i }));
+    await user.type(
+      screen.getByLabelText(/fecha de reserva/i),
+      '2026-07-20'
+    );
+    await user.click(
+      screen.getByRole('button', { name: /ver horarios disponibles/i })
+    );
+    await user.click(await screen.findByRole('button', { name: /10:00/i }));
+
+    await user.type(screen.getByLabelText(/nombre y apellido/i), 'Mateo');
+    await user.type(screen.getByLabelText(/teléfono/i), '+543811234567');
+    await user.click(
+      screen.getByRole('checkbox', { name: /acepto compartir mis datos/i })
+    );
+    await user.click(screen.getByRole('button', { name: /reservar turno/i }));
+
+    await waitFor(() => {
+      expect(submitBooking).toHaveBeenCalledWith({
+        idempotencyKey: expect.any(String),
+        payload: {
+          serviceId: 'svc_1',
+          barberId: 'barber_1',
+          startAt: '2026-07-20T13:00:00.000Z',
+          clientName: 'Mateo',
+          clientPhone: '+543811234567',
+          notes: undefined,
+          consentAccepted: true,
+          consentVersion: bookingConfig.consent.version,
+        },
+      });
+    });
+
+    expect(onBookingConfirmed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingReference: 'pb_TEST1234567890',
+      })
+    );
   });
 });

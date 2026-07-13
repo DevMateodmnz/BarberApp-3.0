@@ -1,5 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../lib/errors.js';
+import { getPublicBookingConsent } from '../lib/publicBookingConsent.js';
+import { getPublicBookingPolicy } from '../lib/publicBookingPolicy.js';
 import { validatePublicSlug } from '../lib/publicSlug.js';
 
 export interface PublicBarbershopDto {
@@ -20,6 +22,18 @@ export interface PublicServiceDto {
 export interface PublicBarberDto {
   barberId: string;
   displayName: string;
+}
+
+export interface PublicBookingConfigDto {
+  consent: {
+    version: string;
+    text: string;
+  };
+  policy: {
+    minimumNoticeMinutes: number;
+    maximumBookingHorizonDays: number;
+    slotIntervalMinutes: number;
+  };
 }
 
 interface ResolvedPublicBarbershop {
@@ -174,4 +188,25 @@ export async function listEligiblePublicBarbersBySlug(
     barberId: employee.id,
     displayName: resolvePublicBarberDisplayName(employee.user.name),
   }));
+}
+
+export async function getPublicBookingConfigBySlug(
+  slug: string
+): Promise<PublicBookingConfigDto> {
+  await resolvePublishedPublicBarbershop(slug);
+
+  const consent = getPublicBookingConsent();
+  const policy = getPublicBookingPolicy();
+
+  return {
+    consent: {
+      version: consent.version,
+      text: consent.text,
+    },
+    policy: {
+      minimumNoticeMinutes: policy.minimumNoticeMinutes,
+      maximumBookingHorizonDays: policy.maximumBookingHorizonDays,
+      slotIntervalMinutes: policy.slotIntervalMinutes,
+    },
+  };
 }
