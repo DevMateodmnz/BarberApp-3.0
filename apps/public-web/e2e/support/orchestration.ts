@@ -188,7 +188,7 @@ export function getApiServerCommand() {
 export function getNextServerCommand() {
   ensureLogDir();
   const logPath = path.join(E2E_LOG_DIR, 'next-server.log');
-  return `bash -lc "mkdir -p '${E2E_LOG_DIR}' && cd '${PUBLIC_WEB_ROOT}' && export PUBLIC_WEB_API_URL='http://127.0.0.1:3000/api/v1' PORT=3001 && (npm run build && exec npm run start) > '${logPath}' 2>&1"`;
+  return `bash -lc "mkdir -p '${E2E_LOG_DIR}' && cd '${PUBLIC_WEB_ROOT}' && export NODE_ENV=production PUBLIC_WEB_API_URL='http://127.0.0.1:3000/api/v1' PORT=3001 && (npm run build && exec npm run start) > '${logPath}' 2>&1"`;
 }
 
 export async function runPlaywrightCli(args: string[]) {

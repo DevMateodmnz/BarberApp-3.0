@@ -12,8 +12,7 @@ export class PublicWebRuntimeError extends Error {
 }
 
 export function normalizeApiBaseUrl(
-  rawValue: string,
-  nodeEnv: NodeJS.ProcessEnv['NODE_ENV'] = process.env.NODE_ENV
+  rawValue: string
 ): string {
   const trimmed = rawValue.trim();
 
@@ -49,12 +48,6 @@ export function normalizeApiBaseUrl(
     );
   }
 
-  if (nodeEnv === 'production' && parsed.protocol !== 'https:') {
-    throw new PublicWebRuntimeError(
-      'Production requires PUBLIC_WEB_API_URL to use https://.'
-    );
-  }
-
   const pathname = parsed.pathname.replace(/\/+$/, '');
 
   if (pathname !== '/api/v1') {
@@ -84,7 +77,7 @@ export function readPublicWebRuntime(
   }
 
   return {
-    apiBaseUrl: normalizeApiBaseUrl(rawValue, env.NODE_ENV),
+    apiBaseUrl: normalizeApiBaseUrl(rawValue),
   };
 }
 

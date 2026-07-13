@@ -51,6 +51,13 @@ export default async function PublicBookingPage({
       );
     }
 
+    console.error('[public-web][booking-page]', {
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      message:
+        error instanceof Error ? error.message : 'Unknown public booking error',
+      slug,
+    });
+
     return (
       <main
         style={{

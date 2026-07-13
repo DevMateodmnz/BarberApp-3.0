@@ -18,14 +18,20 @@ describe('public web runtime', () => {
   });
 
   it('normalizes a valid API base URL', () => {
-    expect(
-      normalizeApiBaseUrl(' https://api.example.com/api/v1/// ', 'production')
-    ).toBe('https://api.example.com/api/v1');
+    expect(normalizeApiBaseUrl(' https://api.example.com/api/v1/// ')).toBe(
+      'https://api.example.com/api/v1'
+    );
+  });
+
+  it('allows a server-only http API base URL in production', () => {
+    expect(normalizeApiBaseUrl('http://127.0.0.1:3000/api/v1')).toBe(
+      'http://127.0.0.1:3000/api/v1'
+    );
   });
 
   it('rejects URLs that do not target /api/v1 exactly', () => {
-    expect(() =>
-      normalizeApiBaseUrl('https://api.example.com/public', 'production')
-    ).toThrow(/\/api\/v1/);
+    expect(() => normalizeApiBaseUrl('https://api.example.com/public')).toThrow(
+      /\/api\/v1/
+    );
   });
 });

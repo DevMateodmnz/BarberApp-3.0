@@ -16,7 +16,6 @@ runtimeEnv.CLERK_SECRET_KEY = runtimeEnv.CLERK_SECRET_KEY ?? 'sk_test_mock';
 runtimeEnv.CLERK_WEBHOOK_SECRET =
   runtimeEnv.CLERK_WEBHOOK_SECRET ?? 'whsec_test_mock';
 Object.assign(runtimeEnv, {
-  NODE_ENV: 'test',
   RATE_LIMIT_ENABLED: 'true',
   PUBLIC_WEB_API_URL: 'http://127.0.0.1:3000/api/v1',
 });

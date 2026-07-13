@@ -30,27 +30,101 @@ export class PublicApiError extends Error {
   }
 }
 
-async function parseApiEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
-  return (await response.json()) as ApiEnvelope<T>;
+interface PublicApiLogContext {
+  apiBaseUrl?: string;
+  code?: string;
+  contentType?: string | null;
+  errorName?: string;
+  message?: string;
+  path: string;
+  status?: number;
+}
+
+function logPublicApiFailure(
+  category:
+    | 'runtime_config_error'
+    | 'upstream_connection_failure'
+    | 'upstream_malformed_response'
+    | 'upstream_non_ok_status'
+    | 'upstream_invalid_envelope',
+  context: PublicApiLogContext
+) {
+  console.error('[public-web][public-api]', {
+    category,
+    ...context,
+  });
+}
+
+async function parseApiEnvelope<T>(
+  response: Response,
+  path: string,
+  apiBaseUrl: string
+): Promise<ApiEnvelope<T>> {
+  const body = await response.text();
+
+  try {
+    return JSON.parse(body) as ApiEnvelope<T>;
+  } catch (error) {
+    logPublicApiFailure('upstream_malformed_response', {
+      apiBaseUrl,
+      contentType: response.headers.get('content-type'),
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      message:
+        error instanceof Error ? error.message : 'Failed to parse JSON body',
+      path,
+      status: response.status,
+    });
+
+    throw new PublicApiError(
+      response.status,
+      'PUBLIC_API_INVALID_RESPONSE',
+      'Public API returned an invalid response.'
+    );
+  }
 }
 
 export async function requestPublicApi<T>(
   path: string,
   init?: RequestInit
 ): Promise<{ response: Response; payload: ApiEnvelope<T> }> {
-  const { apiBaseUrl } = getPublicWebRuntime();
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    cache: 'no-store',
-    headers: {
-      Accept: 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+  let apiBaseUrl: string;
+
+  try {
+    apiBaseUrl = getPublicWebRuntime().apiBaseUrl;
+  } catch (error) {
+    logPublicApiFailure('runtime_config_error', {
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      message: error instanceof Error ? error.message : 'Unknown runtime error',
+      path,
+    });
+    throw error;
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    logPublicApiFailure('upstream_connection_failure', {
+      apiBaseUrl,
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      message:
+        error instanceof Error ? error.message : 'Failed to reach public API',
+      path,
+    });
+    throw error;
+  }
 
   return {
     response,
-    payload: await parseApiEnvelope<T>(response),
+    payload: await parseApiEnvelope<T>(response, path, apiBaseUrl),
   };
 }
 
@@ -60,7 +134,25 @@ export async function fetchPublicApi<T>(
 ): Promise<T> {
   const { response, payload } = await requestPublicApi<T>(path, init);
 
+  if (!response.ok) {
+    logPublicApiFailure('upstream_non_ok_status', {
+      code: payload.error?.code ?? 'PUBLIC_API_ERROR',
+      message: payload.error?.message ?? 'Public API request failed',
+      path,
+      status: response.status,
+    });
+  }
+
   if (!response.ok || !payload.success || payload.data === undefined) {
+    if (response.ok) {
+      logPublicApiFailure('upstream_invalid_envelope', {
+        code: payload.error?.code ?? 'PUBLIC_API_ERROR',
+        message: payload.error?.message ?? 'Public API request failed',
+        path,
+        status: response.status,
+      });
+    }
+
     throw new PublicApiError(
       response.status,
       payload.error?.code ?? 'PUBLIC_API_ERROR',
