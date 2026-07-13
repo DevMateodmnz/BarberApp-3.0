@@ -98,6 +98,10 @@ interface LocalDateTimeParts {
   minute: number;
 }
 
+// Some Intl/ICU combinations format local midnight as 24:00 when callers only
+// request hour12=false. We need stable 00-23 hour values for local-date matching.
+const STRICT_24_HOUR_CYCLE: Intl.DateTimeFormatOptions['hourCycle'] = 'h23';
+
 function getLocalDateTimeParts(
   timezone: string,
   date: Date,
@@ -109,7 +113,7 @@ function getLocalDateTimeParts(
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hourCycle: STRICT_24_HOUR_CYCLE,
   }).formatToParts(date);
 
   return {
@@ -133,7 +137,7 @@ function parseTimeZoneOffsetMinutes(
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hourCycle: STRICT_24_HOUR_CYCLE,
   }).formatToParts(date);
 
   const offsetValue = parts.find((part) => part.type === 'timeZoneName')?.value;
@@ -230,7 +234,7 @@ export function getLocalTimeStringInTimeZone(
     timeZone: timezone,
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false,
+    hourCycle: STRICT_24_HOUR_CYCLE,
   }).formatToParts(date);
 
   const hour = parts.find((part) => part.type === 'hour')?.value ?? '00';
