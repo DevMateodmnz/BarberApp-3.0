@@ -26,6 +26,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "public-slug": "tsx --env-file=.env src/scripts/publicSlug.ts",
+    "schedule-exception": "tsx --env-file=.env src/scripts/scheduleException.ts",
     "qa:bootstrap": "tsx --env-file=.env src/scripts/qaBootstrap.ts",
     "qa:verify": "tsx --env-file=.env src/scripts/qaVerify.ts"
   },
