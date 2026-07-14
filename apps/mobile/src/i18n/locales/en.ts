@@ -353,6 +353,13 @@ export const en = {
       invalidDate: 'Select a valid date.',
       staleSlot: 'Select an available time again.',
     },
+    warnings: {
+      repeatingCustomer: {
+        title: 'Heads up: repeat customer',
+        bodyWithLastNoShow: 'This customer had {{count}} no-shows. The last one was on {{date}}.',
+        bodyGeneric: 'This customer had {{count}} previous no-shows.',
+      },
+    },
     errors: {
       screenFallback: 'We could not create the appointment. Please try again.',
       semantic: {

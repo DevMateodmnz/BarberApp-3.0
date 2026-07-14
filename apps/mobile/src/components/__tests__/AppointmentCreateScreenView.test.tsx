@@ -113,6 +113,7 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
     clientName: 'Mateo',
     clientPhone: '+54 381 555 1234',
     notes: 'Walk-in guest',
+    customerWarning: null,
     fieldErrors: {},
     submissionErrorKey: null,
     summary: makeSummary(),

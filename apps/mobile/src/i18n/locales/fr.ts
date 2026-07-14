@@ -345,8 +345,15 @@ export const fr = {
       clientNameTooLong: 'Le nom du client doit contenir au maximum 200 caractères.',
       clientPhoneTooLong: 'Le téléphone du client doit contenir au maximum 50 caractères.',
       notesTooLong: 'Les notes doivent contenir au maximum 500 caractères.',
-      invalidDate: 'Sélectionne une date valide.',
-      staleSlot: 'Sélectionne à nouveau un horaire disponible.',
+      invalidDate: 'Sélectionnez une date valide.',
+      staleSlot: 'Veuillez sélectionner un créneau disponible à nouveau.',
+    },
+    warnings: {
+      repeatingCustomer: {
+        title: 'Attention : client récurrent',
+        bodyWithLastNoShow: 'Ce client a eu {{count}} absences. La dernière était le {{date}}.',
+        bodyGeneric: 'Ce client a eu {{count}} absences précédentes.',
+      },
     },
     errors: {
       screenFallback: 'Nous n’avons pas pu créer le rendez-vous. Réessaie.',

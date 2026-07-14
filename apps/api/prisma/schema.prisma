@@ -255,9 +255,24 @@ model Appointment {
   endAt                   DateTime          @map("end_at")
   status                  AppointmentStatus @default(PENDING)
   notes                   String?
-  createdAt               DateTime          @default(now()) @map("created_at")
-  updatedAt               DateTime          @updatedAt @map("updated_at")
-  deletedAt               DateTime?         @map("deleted_at")
+  // Lifecycle tracking — Phase 1 no-show prevention foundation.
+  // All fields are nullable so existing rows remain valid and the migration
+  // is purely additive. Timestamps are stamped in the barbershop's UTC instant
+  // by the service layer; cancelledByRole records the role of the actor.
+  startedAt              DateTime?  @map("started_at")
+  confirmedAt            DateTime?  @map("confirmed_at")
+  completedAt            DateTime?  @map("completed_at")
+  cancelledAt            DateTime?  @map("cancelled_at")
+  noShowAt               DateTime?  @map("no_show_at")
+  cancelledByRole        UserRole?  @map("cancelled_by_role")
+  cancelReason           String?    @map("cancel_reason") @db.VarChar(500)
+  // Normalized E.164 client phone, populated by the service for new
+  // bookings. Legacy rows remain NULL; the customer lookup endpoint
+  // only matches when the normalized value is present.
+  clientPhoneNormalized   String?    @map("client_phone_normalized") @db.VarChar(20)
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
+  deletedAt              DateTime?  @map("deleted_at")
 
   // Relations
   barbershop                      Barbershop                 @relation(fields: [barbershopId], references: [id])
@@ -274,6 +289,7 @@ model Appointment {
   @@index([startAt])
   @@index([barbershopId, employeeId, startAt])
   @@index([employeeId, startAt, status])
+  @@index([barbershopId, clientPhoneNormalized])
   @@map("appointments")
 }
 

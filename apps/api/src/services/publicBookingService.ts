@@ -14,12 +14,16 @@ import {
 } from '../lib/publicBookingInput.js';
 import { normalizePublicBookingPhone } from '../lib/publicBookingPhone.js';
 import { prisma } from '../lib/prisma.js';
-import { generatePublicBookingReference } from '../lib/publicBookingReference.js';
+import {
+  generatePublicBookingReference,
+  isPublicBookingReference,
+} from '../lib/publicBookingReference.js';
 import { getPublicBookingPolicy } from '../lib/publicBookingPolicy.js';
 import {
   getLocalDateStringInTimeZone,
   getLocalTimeStringInTimeZone,
 } from '../lib/dateUtils.js';
+import { buildLifecycleUpdateForCancel } from '../lib/appointmentLifecycle.js';
 import type { PublicCreateAppointmentInput } from '../schemas/publicBooking.js';
 import {
   buildServiceSnapshot,
@@ -288,6 +292,10 @@ export async function createPublicBookingBySlug(
           status: 'CONFIRMED',
           clientName,
           clientPhone,
+          // Public booking input is already E.164 (validated upstream);
+          // mirror it into the normalized column so the customer lookup
+          // endpoint can aggregate public + staff history.
+          clientPhoneNormalized: clientPhone,
           publicReference: generatePublicBookingReference(),
           publicConsentAcceptedAt: now,
           publicConsentVersion: consent.version,
@@ -378,4 +386,130 @@ export async function createPublicBookingBySlug(
 
     throw error;
   }
+}
+
+// ============================================
+// PUBLIC CANCEL BY REFERENCE
+// ============================================
+
+interface CancelPublicBookingInput {
+  slug: string;
+  publicReference: string;
+  reason?: string | null;
+  now?: Date;
+}
+
+interface PublicCancelResult {
+  appointment: {
+    id: string;
+    publicReference: string;
+    status: 'CANCELLED';
+    cancelledAt: string;
+    cancelledByRole: 'CLIENT';
+    cancelReason: string | null;
+  };
+}
+
+/**
+ * Cancels a public booking by reference. Intended for the anonymous
+ * customer cancel flow that runs on the public-web confirmation page.
+ *
+ * Tenant scoping: the public reference is unique across the system
+ * (database unique index), so the slug only acts as a sanity check
+ * that the booking is associated with a published barbershop. We
+ * still verify the appointment's `barbershop.publicSlug` matches the
+ * request slug to defend against probing.
+ *
+ * Records the cancellation with `cancelledByRole = CLIENT` (the
+ * public/guest customer is treated as the customer actor for the
+ * purpose of the lifecycle history). Reason is optional.
+ *
+ * Returns 404-equivalent when:
+ * - the slug does not resolve to a published barbershop
+ * - the reference does not match an appointment
+ * - the reference belongs to a different barbershop
+ *
+ * Returns 409 when the appointment is already in a terminal state.
+ */
+export async function cancelPublicBookingByReference(
+  input: CancelPublicBookingInput
+): Promise<PublicCancelResult> {
+  const trimmedReference = input.publicReference.trim();
+
+  if (!isPublicBookingReference(trimmedReference)) {
+    throw createPublicNotFoundError();
+  }
+
+  const appointment = await prisma.appointment.findUnique({
+    where: { publicReference: trimmedReference },
+    include: {
+      barbershop: {
+        select: {
+          publicSlug: true,
+          isActive: true,
+        },
+      },
+    },
+  });
+
+  if (!appointment) {
+    throw createPublicNotFoundError();
+  }
+
+  if (
+    !appointment.barbershop.publicSlug ||
+    appointment.barbershop.publicSlug !== input.slug ||
+    !appointment.barbershop.isActive
+  ) {
+    throw createPublicNotFoundError();
+  }
+
+  if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(appointment.status)) {
+    throw new AppError(
+      409,
+      'PUBLIC_BOOKING_ALREADY_TERMINAL',
+      `This booking is already ${appointment.status.toLowerCase()} and cannot be cancelled`
+    );
+  }
+
+  const lifecycleUpdate = buildLifecycleUpdateForCancel(
+    'CLIENT',
+    input.now ?? new Date(),
+    input.reason
+  );
+
+  const cancelled = await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: {
+      status: 'CANCELLED',
+      ...lifecycleUpdate,
+    },
+    select: {
+      id: true,
+      publicReference: true,
+      status: true,
+      cancelledAt: true,
+      cancelledByRole: true,
+      cancelReason: true,
+    },
+  });
+
+  if (!cancelled.publicReference) {
+    throw new AppError(
+      409,
+      'PUBLIC_BOOKING_IDEMPOTENCY_CONFLICT',
+      'The stored public booking replay record is incomplete'
+    );
+  }
+
+  return {
+    appointment: {
+      id: cancelled.id,
+      publicReference: cancelled.publicReference,
+      status: 'CANCELLED',
+      cancelledAt: (cancelled.cancelledAt as Date).toISOString(),
+      cancelledByRole: 'CLIENT',
+      cancelReason: cancelled.cancelReason,
+    },
+  };
 }

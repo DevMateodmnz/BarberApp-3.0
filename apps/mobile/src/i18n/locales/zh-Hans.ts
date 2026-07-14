@@ -346,7 +346,14 @@ export const zhHans = {
       clientPhoneTooLong: '客户电话不能超过 50 个字符。',
       notesTooLong: '备注不能超过 500 个字符。',
       invalidDate: '请选择有效日期。',
-      staleSlot: '请重新选择可用时间。',
+      staleSlot: '请重新选择可用的时间段。',
+    },
+    warnings: {
+      repeatingCustomer: {
+        title: '注意：回头客',
+        bodyWithLastNoShow: '该客户有 {{count}} 次未到场。最近一次是 {{date}}。',
+        bodyGeneric: '该客户此前有 {{count}} 次未到场。',
+      },
     },
     errors: {
       screenFallback: '无法创建预约，请重试。',

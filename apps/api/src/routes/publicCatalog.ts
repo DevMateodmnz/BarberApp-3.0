@@ -11,8 +11,12 @@ import {
   PublicAvailabilityQuerySchema,
   PublicBarberQuerySchema,
 } from '../schemas/publicCatalog.js';
-import { PublicCreateAppointmentSchema } from '../schemas/publicBooking.js';
 import {
+  PublicCancelBookingSchema,
+  PublicCreateAppointmentSchema,
+} from '../schemas/publicBooking.js';
+import {
+  cancelPublicBookingByReference,
   createPublicBookingBySlug,
 } from '../services/publicBookingService.js';
 import {
@@ -190,6 +194,26 @@ export function createPublicCatalogRouter(
         res
           .status(result.replayed ? 200 : 201)
           .json({ success: true, data: result.confirmation });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.post(
+    '/barbershops/:slug/appointments/:reference/cancel',
+    bookingWriteRateLimit,
+    validateBody(PublicCancelBookingSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const reference = req.params.reference ?? '';
+        const reason = (req.body as { reason?: string | null } | undefined)?.reason;
+        const result = await cancelPublicBookingByReference({
+          slug: paramSlug(req),
+          publicReference: reference,
+          reason,
+        });
+        res.json({ success: true, data: result.appointment });
       } catch (error) {
         next(error);
       }

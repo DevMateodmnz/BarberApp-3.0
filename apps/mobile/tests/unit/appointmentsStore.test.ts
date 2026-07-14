@@ -216,11 +216,31 @@ describe('useAppointmentsStore', () => {
 
     await useAppointmentsStore.getState().cancelAppointment(getToken, 'appt-1');
 
-    expect(mockCancelAppointment).toHaveBeenCalledWith(getToken, 'appt-1');
+    expect(mockCancelAppointment).toHaveBeenCalledWith(getToken, 'appt-1', undefined);
     // Should refetch after cancel
     expect(mockFetchAppointments).toHaveBeenCalledTimes(2);
     expect(mockFetchAppointments).toHaveBeenNthCalledWith(2, getToken, { date: selectedDate });
     expect(useAppointmentsStore.getState().appointments).toEqual(updatedAppts);
+  });
+
+  it('cancelAppointment forwards a reason when provided', async () => {
+    const { useAppointmentsStore } = await importStore();
+
+    const initialAppts = [makeAppointment({ id: 'appt-1', status: 'PENDING' })];
+    mockFetchAppointments.mockResolvedValueOnce(initialAppts);
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, selectedDate);
+
+    mockCancelAppointment.mockResolvedValueOnce({});
+    mockFetchAppointments.mockResolvedValueOnce([]);
+
+    await useAppointmentsStore
+      .getState()
+      .cancelAppointment(getToken, 'appt-1', { reason: 'Cliente no respondió' });
+
+    expect(mockCancelAppointment).toHaveBeenCalledWith(getToken, 'appt-1', {
+      reason: 'Cliente no respondió',
+    });
   });
 
   it('reloading with a different selected date triggers a date-scoped fetch for the new day', async () => {

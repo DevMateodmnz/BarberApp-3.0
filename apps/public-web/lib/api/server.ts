@@ -6,6 +6,8 @@ import type {
   PublicBarber,
   PublicBookingConfig,
   PublicBookingConfirmation,
+  PublicCancelBookingPayload,
+  PublicCancelBookingResult,
   PublicCreateAppointmentPayload,
   PublicService,
   PublicShop,
@@ -218,6 +220,21 @@ export async function createPublicAppointment(input: {
         'Content-Type': 'application/json',
         'Idempotency-Key': input.idempotencyKey,
       },
+      body: JSON.stringify(input.payload),
+    }
+  );
+}
+
+export async function cancelPublicAppointment(input: {
+  slug: string;
+  publicReference: string;
+  payload: PublicCancelBookingPayload;
+}) {
+  return fetchPublicApi<PublicCancelBookingResult>(
+    `/public/barbershops/${encodeURIComponent(input.slug)}/appointments/${encodeURIComponent(input.publicReference)}/cancel`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input.payload),
     }
   );

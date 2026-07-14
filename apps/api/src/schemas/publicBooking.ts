@@ -33,6 +33,22 @@ export const PublicCreateAppointmentSchema = z
   })
   .strict();
 
+/**
+ * Body for POST /api/v1/public/barbershops/:slug/appointments/:reference/cancel
+ *
+ * Reason is optional and trimmed; empty/whitespace reasons are stored as NULL.
+ * Body is fully optional so the customer can cancel without typing a reason.
+ */
+export const PublicCancelBookingSchema = z.preprocess(
+  (value) => (value === null || value === undefined ? {} : value),
+  z
+    .object({
+      reason: z.string().trim().max(500).optional(),
+    })
+    .strict()
+);
+
 export type PublicCreateAppointmentInput = z.infer<
   typeof PublicCreateAppointmentSchema
 >;
+export type PublicCancelBookingInput = z.infer<typeof PublicCancelBookingSchema>;

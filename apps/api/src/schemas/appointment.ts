@@ -62,6 +62,33 @@ export const AppointmentParamsSchema = z.object({
   id: z.string().min(1),
 });
 
+/**
+ * Body for DELETE /api/v1/appointments/:id
+ * Reason is optional and trimmed; empty/whitespace reasons are stored as NULL
+ * by the service. Body is fully optional so callers can cancel without
+ * sending a payload.
+ */
+export const CancelAppointmentBodySchema = z.preprocess(
+  (value) => (value === null || value === undefined ? {} : value),
+  z
+    .object({
+      reason: z.string().trim().max(500).optional(),
+    })
+    .strict()
+);
+
+export const CustomerLookupQuerySchema = z
+  .object({
+    phone: z
+      .string()
+      .trim()
+      .min(1, 'phone is required')
+      .max(20)
+      .regex(/^\+[1-9]\d{7,19}$/u, 'phone must be a canonical E.164 number'),
+    limit: z.coerce.number().int().min(1).max(50).default(10),
+  })
+  .strict();
+
 export type CreateAppointmentInput = z.infer<typeof CreateAppointmentSchema>;
 export type UpdateAppointmentInput = z.infer<typeof UpdateAppointmentSchema>;
 export type StaffCreateAppointmentInput = z.infer<
@@ -71,3 +98,5 @@ export type AppointmentAvailabilityQuery = z.infer<
   typeof AppointmentAvailabilityQuerySchema
 >;
 export type AppointmentListQuery = z.infer<typeof AppointmentListQuerySchema>;
+export type CancelAppointmentBody = z.infer<typeof CancelAppointmentBodySchema>;
+export type CustomerLookupQuery = z.infer<typeof CustomerLookupQuerySchema>;

@@ -353,6 +353,13 @@ export const es = {
       invalidDate: 'Selecciona una fecha válida.',
       staleSlot: 'Vuelve a seleccionar un horario disponible.',
     },
+    warnings: {
+      repeatingCustomer: {
+        title: 'Atención: cliente reincidente',
+        bodyWithLastNoShow: 'Este cliente tuvo {{count}} inasistencias. La última fue el {{date}}.',
+        bodyGeneric: 'Este cliente tuvo {{count}} inasistencias anteriores.',
+      },
+    },
     errors: {
       screenFallback: 'No pudimos crear el turno. Inténtalo de nuevo.',
       semantic: {

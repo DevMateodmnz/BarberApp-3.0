@@ -30,7 +30,12 @@ import {
   type AppointmentCreationState,
 } from '@/lib/appointmentCreationDomain.js';
 import { submitAppointmentCreationFlow } from '@/lib/appointmentCreationFlow.js';
-import { createStaffAppointment, fetchAppointmentAvailability } from '@/lib/appointments.js';
+import {
+  createStaffAppointment,
+  fetchAppointmentAvailability,
+  lookupCustomerByPhone,
+  type CustomerInsights,
+} from '@/lib/appointments.js';
 import { useAppointmentsStore } from '@/lib/appointmentsStore.js';
 import { fetchMyAssignedServices, fetchEmployeeServices } from '@/lib/employeeServices.js';
 import { fetchEmployees } from '@/lib/employees.js';
@@ -75,6 +80,8 @@ export default function AppointmentCreateScreen() {
   const employeeRequestIdRef = useRef(0);
   const servicesRequestIdRef = useRef(0);
   const availabilityRequestRef = useRef<ReturnType<typeof getAppointmentCreationAvailabilityRequest> | null>(null);
+  const [customerInsights, setCustomerInsights] = useState<CustomerInsights | null>(null);
+  const customerLookupRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (!isSignedIn || !getTokenRef.current || context) {
@@ -344,6 +351,67 @@ export default function AppointmentCreateScreen() {
     ));
   }, []);
 
+  /**
+   * Debounced repeat-customer lookup. The backend requires a
+   * canonical E.164 phone and returns a zeroed-out response when no
+   * history exists, so the UI can render an empty state without a
+   * special branch. We keep the most recent request id and ignore
+   * stale responses (out-of-order completion).
+   */
+  useEffect(() => {
+    const phone = creationState?.clientPhone?.trim() ?? '';
+    const barbershopId = creationContext?.barbershopId;
+    if (!barbershopId) {
+      setCustomerInsights(null);
+      return;
+    }
+
+    if (!/^\+[1-9]\d{7,19}$/u.test(phone)) {
+      // Don't query until the user has typed a real E.164 number.
+      setCustomerInsights(null);
+      return;
+    }
+
+    const requestId = customerLookupRequestIdRef.current + 1;
+    customerLookupRequestIdRef.current = requestId;
+    const handle = setTimeout(() => {
+      if (customerLookupRequestIdRef.current !== requestId) {
+        return;
+      }
+      const token = getTokenRef.current;
+      if (!token) {
+        return;
+      }
+      void lookupCustomerByPhone(token, barbershopId, phone)
+        .then((insights) => {
+          if (customerLookupRequestIdRef.current !== requestId) {
+            return;
+          }
+          setCustomerInsights(insights);
+        })
+        .catch(() => {
+          if (customerLookupRequestIdRef.current !== requestId) {
+            return;
+          }
+          setCustomerInsights(null);
+        });
+    }, 400);
+
+    return () => {
+      clearTimeout(handle);
+    };
+  }, [creationState?.clientPhone, creationContext?.barbershopId]);
+
+  const customerWarning = useMemo(() => {
+    if (!customerInsights || customerInsights.noShowCount <= 0) {
+      return null;
+    }
+    return {
+      noShowCount: customerInsights.noShowCount,
+      lastNoShowAt: customerInsights.lastNoShowAt,
+    };
+  }, [customerInsights]);
+
   const handleNotesChange = useCallback((value: string) => {
     setCreationState((current) => (
       current
@@ -553,6 +621,7 @@ export default function AppointmentCreateScreen() {
       clientName={creationState?.clientName ?? ''}
       clientPhone={creationState?.clientPhone ?? ''}
       notes={creationState?.notes ?? ''}
+      customerWarning={customerWarning}
       fieldErrors={creationState?.fieldErrors ?? {}}
       submissionErrorKey={creationState?.submissionError?.key ?? null}
       summary={summary}

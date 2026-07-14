@@ -26,6 +26,11 @@ import {
   isSlotBoundaryMinute,
 } from '../lib/appointmentScheduling.js';
 import { buildAvailabilitySlots } from '../lib/availabilitySlots.js';
+import {
+  buildLifecycleUpdateForCancel,
+  buildLifecycleUpdateForStatus,
+} from '../lib/appointmentLifecycle.js';
+import { tryNormalizeClientPhoneE164 } from '../lib/phoneNormalization.js';
 import { validateEmployeeInBarbershop } from './employeeService.js';
 import type {
   AppointmentStatus,
@@ -492,6 +497,7 @@ async function createAppointmentRecord(input: {
         status: options?.status ?? 'PENDING',
         clientName: snapshot.clientName,
         clientPhone: snapshot.clientPhone,
+        clientPhoneNormalized: tryNormalizeClientPhoneE164(snapshot.clientPhone),
         publicReference: options?.publicReference ?? null,
         publicConsentAcceptedAt: options?.publicConsentAcceptedAt ?? null,
         publicConsentVersion: options?.publicConsentVersion ?? null,
@@ -918,31 +924,45 @@ export async function updateAppointment(
 /**
  * Transitions an appointment to a new status.
  * Enforces: tenant isolation, status transition rules.
+ *
+ * Side-effects:
+ * - Stamps the matching lifecycle timestamp (confirmedAt, startedAt,
+ *   completedAt, noShowAt) on the row. Centralized in
+ *   {@link ../lib/appointmentLifecycle.ts} so no-show analytics and
+ *   customer history queries stay correct.
  */
 export async function transitionAppointmentStatus(
   appointmentId: string,
   newStatus: AppointmentStatus,
   userId: string,
-  role: UserRole
+  role: UserRole,
+  now: Date = new Date()
 ) {
   const appointment = await getAppointment(appointmentId, userId, role);
 
   validateStatusTransition(appointment.status, newStatus, role);
 
+  const lifecycleUpdate = buildLifecycleUpdateForStatus(newStatus, role, now);
+
   return prisma.appointment.update({
     where: { id: appointmentId },
-    data: { status: newStatus },
+    data: { status: newStatus, ...lifecycleUpdate },
     include: APPOINTMENT_INCLUDE,
   });
 }
 
 /**
- * Cancels an appointment (CLIENT self-cancel or OWNER cancel).
+ * Cancels an appointment (CLIENT self-cancel or OWNER/BARBER cancel).
+ *
+ * Records the cancellation actor (UserRole), timestamp, and optional
+ * reason. The reason is trimmed and clamped to 500 chars by the
+ * lifecycle helper; an empty/whitespace reason is stored as NULL.
  */
 export async function cancelAppointment(
   appointmentId: string,
   userId: string,
-  role: UserRole
+  role: UserRole,
+  options: { reason?: string | null; now?: Date } = {}
 ) {
   const appointment = await getAppointment(appointmentId, userId, role);
 
@@ -956,8 +976,163 @@ export async function cancelAppointment(
     );
   }
 
+  const lifecycleUpdate = buildLifecycleUpdateForCancel(
+    role,
+    options.now ?? new Date(),
+    options.reason
+  );
+
   return prisma.appointment.update({
     where: { id: appointmentId },
-    data: { status: 'CANCELLED' },
+    data: {
+      status: 'CANCELLED',
+      ...lifecycleUpdate,
+    },
+    include: APPOINTMENT_INCLUDE,
   });
+}
+
+// ============================================
+// CUSTOMER INSIGHTS (REPEAT-CUSTOMER LOOKUP)
+// ============================================
+
+export interface CustomerInsights {
+  phone: string;
+  visitCount: number;
+  noShowCount: number;
+  cancelledCount: number;
+  completedCount: number;
+  lastVisitAt: string | null;
+  lastNoShowAt: string | null;
+  recentAppointments: Array<{
+    id: string;
+    startAt: string;
+    endAt: string;
+    status: AppointmentStatus;
+    serviceName: string;
+    employeeName: string | null;
+  }>;
+}
+
+export interface LookupCustomerInput {
+  barbershopId: string;
+  phone: string;
+  limit: number;
+  userId: string;
+  userRole: UserRole;
+}
+
+const MAX_LOOKUP_RECENT_APPOINTMENTS = 50;
+
+/**
+ * Aggregates appointment history for a single normalized phone inside
+ * a single barbershop. Used by the staff create flow to surface
+ * repeat-customer / no-show warnings before a new booking is
+ * committed.
+ *
+ * Tenant scoping is enforced here (and again at the route via
+ * `requireBarbershopAccess`):
+ * - OWNER: must own the barbershop.
+ * - BARBER: must be an active employee of the barbershop.
+ *
+ * Returns a zeroed-out `CustomerInsights` shape when the phone has no
+ * history in this barbershop, so the mobile UI can render an empty
+ * state without a special-case branch.
+ */
+export async function lookupCustomerByPhone(
+  input: LookupCustomerInput
+): Promise<CustomerInsights> {
+  const { barbershopId, phone, limit, userId, userRole } = input;
+  const safeLimit = Math.min(
+    Math.max(Number.isFinite(limit) ? Math.trunc(limit) : 10, 1),
+    MAX_LOOKUP_RECENT_APPOINTMENTS
+  );
+
+  if (userRole === 'OWNER') {
+    const barbershop = await prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { ownerId: true },
+    });
+    if (!barbershop || barbershop.ownerId !== userId) {
+      // Hide existence: same as getAppointment returning 404 on cross-tenant.
+      throw new NotFoundError('Customer');
+    }
+  } else if (userRole === 'BARBER') {
+    const employee = await findActiveBarberEmployeeForBarbershop(
+      userId,
+      barbershopId
+    );
+    if (!employee) {
+      throw new NotFoundError('Customer');
+    }
+  } else {
+    // Customers are intentionally not granted access to this endpoint
+    // today; defer until a real customer mobile flow exists.
+    throw new ForbiddenError('Customer history is not available for this role');
+  }
+
+  const matches = await prisma.appointment.findMany({
+    where: {
+      barbershopId,
+      clientPhoneNormalized: phone,
+    },
+    select: {
+      id: true,
+      startAt: true,
+      endAt: true,
+      status: true,
+      serviceName: true,
+      employee: {
+        select: {
+          user: { select: { name: true, email: true } },
+        },
+      },
+    },
+    orderBy: { startAt: 'desc' },
+  });
+
+  let noShowCount = 0;
+  let cancelledCount = 0;
+  let completedCount = 0;
+  let lastVisitAt: Date | null = null;
+  let lastNoShowAt: Date | null = null;
+
+  for (const match of matches) {
+    if (match.status === 'NO_SHOW') {
+      noShowCount += 1;
+      if (!lastNoShowAt || match.startAt > lastNoShowAt) {
+        lastNoShowAt = match.startAt;
+      }
+    } else if (match.status === 'CANCELLED') {
+      cancelledCount += 1;
+    } else if (match.status === 'COMPLETED') {
+      completedCount += 1;
+    }
+    if (!lastVisitAt || match.startAt > lastVisitAt) {
+      lastVisitAt = match.startAt;
+    }
+  }
+
+  const recentAppointments = matches.slice(0, safeLimit).map((match) => ({
+    id: match.id,
+    startAt: match.startAt.toISOString(),
+    endAt: match.endAt.toISOString(),
+    status: match.status,
+    serviceName: match.serviceName,
+    employeeName:
+      match.employee.user.name?.trim() ||
+      match.employee.user.email ||
+      null,
+  }));
+
+  return {
+    phone,
+    visitCount: matches.length,
+    noShowCount,
+    cancelledCount,
+    completedCount,
+    lastVisitAt: lastVisitAt ? lastVisitAt.toISOString() : null,
+    lastNoShowAt: lastNoShowAt ? lastNoShowAt.toISOString() : null,
+    recentAppointments,
+  };
 }

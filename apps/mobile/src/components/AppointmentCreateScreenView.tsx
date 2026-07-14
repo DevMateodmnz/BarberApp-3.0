@@ -59,6 +59,11 @@ export interface AppointmentBookingSummaryViewModel {
   clientName?: string | null;
 }
 
+export interface CustomerWarning {
+  noShowCount: number;
+  lastNoShowAt: string | null;
+}
+
 export interface AppointmentCreateScreenViewProps {
   context: CurrentUserContext | null;
   isContextLoading: boolean;
@@ -81,6 +86,7 @@ export interface AppointmentCreateScreenViewProps {
   clientName: string;
   clientPhone: string;
   notes: string;
+  customerWarning: CustomerWarning | null;
   fieldErrors: Partial<Record<AppointmentCreationField, AppointmentCreationValidationKey>>;
   submissionErrorKey: AppointmentCreationErrorKey | null;
   summary: AppointmentBookingSummaryViewModel | null;
@@ -185,6 +191,7 @@ export function AppointmentCreateScreenView({
   clientName,
   clientPhone,
   notes,
+  customerWarning,
   fieldErrors,
   submissionErrorKey,
   summary,
@@ -562,6 +569,32 @@ export function AppointmentCreateScreenView({
                     error={fieldErrorClientPhone ?? undefined}
                   />
 
+                  {customerWarning && customerWarning.noShowCount > 0 ? (
+                    <View
+                      testID="appointment-create-customer-warning"
+                      accessibilityRole="alert"
+                      style={styles.customerWarningBanner}
+                    >
+                      <Text style={styles.customerWarningTitle}>
+                        {t('appointmentCreation.warnings.repeatingCustomer.title')}
+                      </Text>
+                      <Text style={styles.customerWarningBody}>
+                        {customerWarning.lastNoShowAt
+                          ? t('appointmentCreation.warnings.repeatingCustomer.bodyWithLastNoShow', {
+                              count: customerWarning.noShowCount,
+                              date:
+                                formatLocalizedDate(
+                                  customerWarning.lastNoShowAt.slice(0, 10),
+                                  { year: 'numeric', month: 'long', day: 'numeric' },
+                                ) ?? customerWarning.lastNoShowAt,
+                            })
+                          : t('appointmentCreation.warnings.repeatingCustomer.bodyGeneric', {
+                              count: customerWarning.noShowCount,
+                            })}
+                      </Text>
+                    </View>
+                  ) : null}
+
                   <AppTextInput
                     testID="appointment-create-notes"
                     label={t('appointmentCreation.labels.notesOptional')}
@@ -820,6 +853,25 @@ const styles = StyleSheet.create({
     minHeight: 96,
     paddingTop: tokens.spacing[3],
     textAlignVertical: 'top',
+  },
+  customerWarningBanner: {
+    backgroundColor: tokens.colors.surfaceVariant,
+    borderColor: tokens.colors.warning,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    gap: tokens.spacing[1],
+    marginTop: tokens.spacing[3],
+    paddingHorizontal: tokens.spacing[4],
+    paddingVertical: tokens.spacing[3],
+  },
+  customerWarningTitle: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.warning,
+    fontWeight: tokens.typography.weight.semibold,
+  },
+  customerWarningBody: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.textPrimary,
   },
   summaryRow: {
     gap: tokens.spacing[1],

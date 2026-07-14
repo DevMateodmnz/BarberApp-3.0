@@ -49,12 +49,14 @@ interface AppointmentsState {
   /**
    * Cancels an appointment and refetches the full list.
    *
-   * Note: The cancel endpoint returns an Appointment WITHOUT nested includes,
-   * so we refetch the list instead of relying on the response.
+   * The optional `reason` is forwarded to the API and recorded on the
+   * row as `cancelReason` for analytics. Empty/whitespace reasons are
+   * stored as NULL by the API.
    */
   cancelAppointment: (
     getToken: () => Promise<string | null>,
     appointmentId: string,
+    options?: { reason?: string | null },
   ) => Promise<void>;
 
   /**
@@ -127,8 +129,8 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
     }
   },
 
-  cancelAppointment: async (getToken, appointmentId) => {
-    await cancelAppointmentApi(getToken, appointmentId);
+  cancelAppointment: async (getToken, appointmentId, options) => {
+    await cancelAppointmentApi(getToken, appointmentId, options);
     // Refetch the full list — cancel endpoint doesn't return nested includes
     if (_lastContext && _lastSelectedDate) {
       const { loadAppointments } = get();

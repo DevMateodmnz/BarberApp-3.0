@@ -18,6 +18,7 @@ import {
   UpdateAppointmentSchema,
   AppointmentStatusSchema,
   AppointmentListQuerySchema,
+  CancelAppointmentBodySchema,
 } from '../schemas/appointment.js';
 import * as appointmentService from '../services/appointmentService.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
@@ -156,12 +157,15 @@ router.put(
 router.delete(
   '/:id',
   requireRole('CLIENT', 'OWNER'),
+  validateBody(CancelAppointmentBodySchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const reason = (req.body as { reason?: string | null } | undefined)?.reason;
       const appointment = await appointmentService.cancelAppointment(
         paramId(req),
         req.userId,
-        req.userRole
+        req.userRole,
+        { reason }
       );
       res.json({ success: true, data: appointment });
     } catch (error) {

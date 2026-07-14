@@ -348,6 +348,13 @@ export const it = {
       invalidDate: 'Seleziona una data valida.',
       staleSlot: 'Seleziona di nuovo un orario disponibile.',
     },
+    warnings: {
+      repeatingCustomer: {
+        title: 'Attenzione: cliente recidivo',
+        bodyWithLastNoShow: 'Questo cliente ha avuto {{count}} assenze. L\'ultima è stata il {{date}}.',
+        bodyGeneric: 'Questo cliente ha avuto {{count}} assenze precedenti.',
+      },
+    },
     errors: {
       screenFallback: 'Non siamo riusciti a creare l’appuntamento. Riprova.',
       semantic: {

@@ -34,6 +34,7 @@ import { AssignServiceSchema } from '../schemas/employeeService.js';
 import {
   AppointmentAvailabilityQuerySchema,
   AppointmentListQuerySchema,
+  CustomerLookupQuerySchema,
   StaffCreateAppointmentSchema,
 } from '../schemas/appointment.js';
 import { CreateServiceSchema, UpdateServiceSchema } from '../schemas/service.js';
@@ -468,6 +469,43 @@ router.get(
         authenticatedEmployeeId: req.employeeId,
       });
       res.json({ success: true, data: availability });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/customers/lookup
+// Repeat-customer insights (OWNER + BARBER scoped) used to surface
+// no-show history before a new appointment is committed.
+//
+// Tenant scoping is enforced inside the service so cross-tenant probes
+// return 404 (existence hidden) instead of 403, matching the
+// convention used by `getAppointment`.
+// ============================================
+router.get(
+  '/:barbershopId/customers/lookup',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = CustomerLookupQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        throw new ValidationError(
+          'Invalid customer lookup query parameters',
+          parsed.error.flatten()
+        );
+      }
+
+      const insights = await appointmentService.lookupCustomerByPhone({
+        barbershopId: paramBarbershopId(req),
+        phone: parsed.data.phone,
+        limit: parsed.data.limit,
+        userId: req.userId,
+        userRole: req.userRole,
+      });
+
+      res.json({ success: true, data: insights });
     } catch (error) {
       next(error);
     }

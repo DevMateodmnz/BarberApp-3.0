@@ -354,8 +354,15 @@ export const de = {
       clientNameTooLong: 'Der Kundenname darf höchstens 200 Zeichen lang sein.',
       clientPhoneTooLong: 'Die Kundentelefonnummer darf höchstens 50 Zeichen lang sein.',
       notesTooLong: 'Notizen dürfen höchstens 500 Zeichen lang sein.',
-      invalidDate: 'Wähle ein gültiges Datum aus.',
-      staleSlot: 'Wähle erneut eine verfügbare Uhrzeit aus.',
+      invalidDate: 'Wähle ein gültiges Datum.',
+      staleSlot: 'Wähle erneut einen verfügbaren Termin.',
+    },
+    warnings: {
+      repeatingCustomer: {
+        title: 'Achtung: Wiederholungskunde',
+        bodyWithLastNoShow: 'Dieser Kunde hatte {{count}} Nichterscheinen. Das letzte war am {{date}}.',
+        bodyGeneric: 'Dieser Kunde hatte {{count}} vorherige Nichterscheinen.',
+      },
     },
     errors: {
       screenFallback: 'Der Termin konnte nicht erstellt werden. Bitte versuche es erneut.',

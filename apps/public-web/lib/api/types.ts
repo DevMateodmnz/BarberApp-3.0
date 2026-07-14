@@ -78,3 +78,16 @@ export interface PublicCreateAppointmentPayload {
   consentAccepted: true;
   consentVersion: string;
 }
+
+export interface PublicCancelBookingPayload {
+  reason?: string;
+}
+
+export interface PublicCancelBookingResult {
+  id: string;
+  publicReference: string;
+  status: 'CANCELLED';
+  cancelledAt: string;
+  cancelledByRole: 'CLIENT';
+  cancelReason: string | null;
+}

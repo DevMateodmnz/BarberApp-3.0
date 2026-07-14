@@ -122,16 +122,23 @@ export async function transitionAppointmentStatus(
  * Cancels (deletes) an appointment.
  *
  * DELETE /appointments/:appointmentId
- * Response returns Appointment WITHOUT nested includes — refetch after call.
+ * Body (optional): { reason?: string }
+ * Response returns the full Appointment with lifecycle fields populated
+ * (cancelledAt, cancelledByRole, cancelReason).
  */
 export async function cancelAppointment(
   getToken: GetToken,
   appointmentId: string,
+  options: { reason?: string | null } = {},
 ): Promise<Appointment> {
   const token = await getToken();
+  const trimmedReason = options.reason?.trim();
   const response = await api.delete<ApiResponse<Appointment>>(
     `/appointments/${appointmentId}`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      data: trimmedReason ? { reason: trimmedReason } : {},
+    },
   );
 
   const { data } = response;
@@ -140,6 +147,54 @@ export async function cancelAppointment(
   }
 
   return data.data;
+}
+
+/**
+ * Customer insight summary returned by the backend lookup endpoint.
+ * The mobile UI uses this to surface no-show history before staff
+ * confirm a new appointment.
+ */
+export interface CustomerInsights {
+  phone: string;
+  visitCount: number;
+  noShowCount: number;
+  cancelledCount: number;
+  completedCount: number;
+  lastVisitAt: string | null;
+  lastNoShowAt: string | null;
+  recentAppointments: Array<{
+    id: string;
+    startAt: string;
+    endAt: string;
+    status: AppointmentStatus;
+    serviceName: string;
+    employeeName: string | null;
+  }>;
+}
+
+/**
+ * Fetches repeat-customer history for a normalized E.164 phone.
+ *
+ * GET /barbershops/:barbershopId/customers/lookup?phone=...
+ *
+ * Returns a zeroed-out shape (visitCount: 0, etc.) when the phone has
+ * no history in the tenant, so the UI does not need a special branch.
+ */
+export async function lookupCustomerByPhone(
+  getToken: GetToken,
+  barbershopId: string,
+  phone: string,
+): Promise<CustomerInsights> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<CustomerInsights>>(
+    `/barbershops/${barbershopId}/customers/lookup`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: { phone },
+    },
+  );
+
+  return ensureSuccess(response, localizeUnknownError('Failed to fetch customer insights'));
 }
 
 export async function fetchAppointmentAvailability(
