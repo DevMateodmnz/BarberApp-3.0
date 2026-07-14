@@ -350,11 +350,11 @@ export const zhHans = {
     },
     warnings: {
       customerHistory: {
-        title: '客户历史',
-        bodyWithLastNoShow_one: '该客户此前有 1 次未到场。最近一次是 {{date}}。',
-        bodyWithLastNoShow_other: '该客户此前有 {{count}} 次未到场。最近一次是 {{date}}。',
-        bodyGeneric_one: '该客户此前有 1 次未到场。',
-        bodyGeneric_other: '该客户此前有 {{count}} 次未到场。',
+        title: '与该号码关联的历史',
+        bodyWithLastNoShow_one: '该号码此前有 1 次未到场。最近一次是 {{date}}。',
+        bodyWithLastNoShow_other: '该号码此前有 {{count}} 次未到场。最近一次是 {{date}}。',
+        bodyGeneric_one: '该号码此前有 1 次未到场。',
+        bodyGeneric_other: '该号码此前有 {{count}} 次未到场。',
       },
     },
     errors: {

@@ -359,11 +359,11 @@ export const de = {
     },
     warnings: {
       customerHistory: {
-        title: 'Kundenhistorie',
-        bodyWithLastNoShow_one: 'Dieser Kunde hat 1 vorheriges Nichterscheinen. Das letzte war am {{date}}.',
-        bodyWithLastNoShow_other: 'Dieser Kunde hat {{count}} vorherige Nichterscheinen. Das letzte war am {{date}}.',
-        bodyGeneric_one: 'Dieser Kunde hat 1 vorheriges Nichterscheinen.',
-        bodyGeneric_other: 'Dieser Kunde hat {{count}} vorherige Nichterscheinen.',
+        title: 'Mit der Nummer verbundene Historie',
+        bodyWithLastNoShow_one: 'Diese Nummer hat 1 vorheriges Nichterscheinen. Das letzte war am {{date}}.',
+        bodyWithLastNoShow_other: 'Diese Nummer hat {{count}} vorherige Nichterscheinen. Das letzte war am {{date}}.',
+        bodyGeneric_one: 'Diese Nummer hat 1 vorheriges Nichterscheinen.',
+        bodyGeneric_other: 'Diese Nummer hat {{count}} vorherige Nichterscheinen.',
       },
     },
     errors: {

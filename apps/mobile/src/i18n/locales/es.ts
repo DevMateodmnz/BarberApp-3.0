@@ -355,14 +355,14 @@ export const es = {
     },
     warnings: {
       customerHistory: {
-        title: 'Historial del cliente',
+        title: 'Historial asociado al número',
         // One prior no-show (singular)
-        bodyWithLastNoShow_one: 'Este cliente registra 1 inasistencia anterior. La última fue el {{date}}.',
+        bodyWithLastNoShow_one: 'Este número registra 1 inasistencia anterior. La última fue el {{date}}.',
         // Multiple prior no-shows (plural)
-        bodyWithLastNoShow_other: 'Este cliente registra {{count}} inasistencias anteriores. La última fue el {{date}}.',
+        bodyWithLastNoShow_other: 'Este número registra {{count}} inasistencias anteriores. La última fue el {{date}}.',
         // No timestamp available (legacy rows without noShowAt)
-        bodyGeneric_one: 'Este cliente registra 1 inasistencia anterior.',
-        bodyGeneric_other: 'Este cliente registra {{count}} inasistencias anteriores.',
+        bodyGeneric_one: 'Este número registra 1 inasistencia anterior.',
+        bodyGeneric_other: 'Este número registra {{count}} inasistencias anteriores.',
       },
     },
     errors: {

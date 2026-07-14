@@ -30,6 +30,10 @@ import {
   buildLifecycleUpdateForCancel,
   buildLifecycleUpdateForStatus,
 } from '../lib/appointmentLifecycle.js';
+import {
+  AppointmentTransitionConflictError,
+  compareAndSwapAppointmentStatus,
+} from '../lib/atomicTransition.js';
 import { tryNormalizeClientPhoneE164 } from '../lib/phoneNormalization.js';
 import { validateEmployeeInBarbershop } from './employeeService.js';
 import type {
@@ -923,13 +927,25 @@ export async function updateAppointment(
 
 /**
  * Transitions an appointment to a new status.
- * Enforces: tenant isolation, status transition rules.
+ * Enforces: tenant isolation, status transition rules, and
+ * compare-and-swap atomicity.
  *
  * Side-effects:
  * - Stamps the matching lifecycle timestamp (confirmedAt, startedAt,
  *   completedAt, noShowAt) on the row. Centralized in
  *   {@link ../lib/appointmentLifecycle.ts} so no-show analytics and
  *   customer history queries stay correct.
+ *
+ * Atomicity:
+ * - The update is performed as `updateMany({ where: { id, status:
+ *   fromStatus } })` so a competing transition (e.g. another
+ *   staff member racing the same row) cannot interleave: the
+ *   loser observes `count = 0` and the function throws an
+ *   {@link AppointmentTransitionConflictError} with the stable
+ *   `APPOINTMENT_TRANSITION_CONFLICT` code.
+ * - The role check still runs first so a 403 is returned when the
+ *   caller is not allowed; the CAS only protects against
+ *   concurrent same-role transitions.
  */
 export async function transitionAppointmentStatus(
   appointmentId: string,
@@ -944,9 +960,22 @@ export async function transitionAppointmentStatus(
 
   const lifecycleUpdate = buildLifecycleUpdateForStatus(newStatus, role, now);
 
-  return prisma.appointment.update({
+  const result = await compareAndSwapAppointmentStatus({
+    id: appointmentId,
+    fromStatus: appointment.status,
+    toStatus: newStatus,
+    lifecycle: lifecycleUpdate,
+  });
+
+  if (result.count === 0) {
+    throw new AppointmentTransitionConflictError(
+      appointment.status,
+      newStatus
+    );
+  }
+
+  return prisma.appointment.findUniqueOrThrow({
     where: { id: appointmentId },
-    data: { status: newStatus, ...lifecycleUpdate },
     include: APPOINTMENT_INCLUDE,
   });
 }
@@ -990,12 +1019,27 @@ export async function cancelAppointment(
     reason: options.reason,
   });
 
-  return prisma.appointment.update({
+  // Compare-and-swap: the cancellation succeeds only when the
+  // row is still in a non-terminal state. A concurrent staff
+  // cancel or a public cancel that wins the race will leave the
+  // row in a terminal state; this caller then observes count = 0
+  // and gets a deterministic 409 conflict.
+  const result = await compareAndSwapAppointmentStatus({
+    id: appointmentId,
+    fromStatus: appointment.status,
+    toStatus: 'CANCELLED',
+    lifecycle: lifecycleUpdate,
+  });
+
+  if (result.count === 0) {
+    throw new AppointmentTransitionConflictError(
+      appointment.status,
+      'CANCELLED'
+    );
+  }
+
+  return prisma.appointment.findUniqueOrThrow({
     where: { id: appointmentId },
-    data: {
-      status: 'CANCELLED',
-      ...lifecycleUpdate,
-    },
     include: APPOINTMENT_INCLUDE,
   });
 }

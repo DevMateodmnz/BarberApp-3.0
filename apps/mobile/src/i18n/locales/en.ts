@@ -355,11 +355,11 @@ export const en = {
     },
     warnings: {
       customerHistory: {
-        title: 'Customer history',
-        bodyWithLastNoShow_one: 'This customer has 1 prior no-show. The last one was on {{date}}.',
-        bodyWithLastNoShow_other: 'This customer has {{count}} prior no-shows. The last one was on {{date}}.',
-        bodyGeneric_one: 'This customer has 1 prior no-show.',
-        bodyGeneric_other: 'This customer has {{count}} prior no-shows.',
+        title: 'History associated with the number',
+        bodyWithLastNoShow_one: 'This number has 1 prior no-show. The last one was on {{date}}.',
+        bodyWithLastNoShow_other: 'This number has {{count}} prior no-shows. The last one was on {{date}}.',
+        bodyGeneric_one: 'This number has 1 prior no-show.',
+        bodyGeneric_other: 'This number has {{count}} prior no-shows.',
       },
     },
     errors: {

@@ -448,76 +448,98 @@ export async function cancelPublicBookingByReference(
     throw createPublicNotFoundError();
   }
 
-  // Atomic check + mutate: open a transaction, re-read with the same
-  // conditions the route would check, and only commit if the row is
-  // still eligible. Any competing transition (staff cancel, no-show
-  // sweep) will collide and this transaction will fail with a
-  // known/handled error, never silently overwriting the other side.
-  const cancelled = await prisma.$transaction(async (tx) => {
-    const appointment = await tx.appointment.findUnique({
+  // Compare-and-swap on the source state and the future-start
+  // cutoff in a single atomic updateMany. PostgreSQL evaluates
+  // the WHERE predicate and the SET atomically: a concurrent
+  // staff cancel or no-show sweep that wins the race leaves the
+  // row in a terminal or non-CONFIRMED state, and our update
+  // returns count = 0. The 404 vs 409 vs ALREADY_TERMINAL
+  // distinction is then resolved by a follow-up read inside the
+  // same transaction.
+  const lifecycleUpdate = buildLifecycleUpdateForCancel({
+    actorRole: null,
+    source: 'PUBLIC_BOOKING',
+    now,
+    reason: input.reason,
+  });
+
+  const casResult = await prisma.$transaction(async (tx) => {
+    // 1. Existence + slug check on the row. If the row does not
+    //    exist, has the wrong slug, or its shop is inactive, we
+    //    never want the CAS to match — so we return early with a
+    //    404 without ever attempting the update.
+    const diagnostic = await tx.appointment.findUnique({
       where: { publicReference: trimmedReference },
-      include: {
-        barbershop: {
-          select: {
-            publicSlug: true,
-            isActive: true,
-          },
-        },
+      select: {
+        id: true,
+        status: true,
+        startAt: true,
+        barbershop: { select: { publicSlug: true, isActive: true } },
       },
     });
 
-    if (!appointment) {
+    if (!diagnostic) {
       throw createPublicNotFoundError();
     }
 
     if (
-      !appointment.barbershop.publicSlug ||
-      appointment.barbershop.publicSlug !== input.slug ||
-      !appointment.barbershop.isActive
+      !diagnostic.barbershop.publicSlug ||
+      diagnostic.barbershop.publicSlug !== input.slug ||
+      !diagnostic.barbershop.isActive
     ) {
       throw createPublicNotFoundError();
     }
 
-    if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(appointment.status)) {
-      throw new AppError(
-        409,
-        'PUBLIC_BOOKING_ALREADY_TERMINAL',
-        `This booking is already ${appointment.status.toLowerCase()} and cannot be cancelled`
-      );
-    }
-
-    if (appointment.status !== 'CONFIRMED') {
-      // PENDING or IN_PROGRESS rows are still active but cannot be
-      // publicly cancelled. Reuse the same 409 with a different
-      // stable code so the client can render a precise message.
-      throw new AppError(
-        409,
-        'PUBLIC_BOOKING_CANCELLATION_CLOSED',
-        `This booking is ${appointment.status.toLowerCase()} and cannot be cancelled by the customer`
-      );
-    }
-
-    if (appointment.startAt.getTime() <= now.getTime()) {
-      throw new AppError(
-        409,
-        'PUBLIC_BOOKING_CANCELLATION_CLOSED',
-        'This booking can no longer be cancelled because it has already started'
-      );
-    }
-
-    const lifecycleUpdate = buildLifecycleUpdateForCancel({
-      actorRole: null,
-      source: 'PUBLIC_BOOKING',
-      now,
-      reason: input.reason,
-    });
-
-    return tx.appointment.update({
-      where: { id: appointment.id },
+    // 2. The atomic CAS. PostgreSQL evaluates the predicate and
+    //    the SET atomically: the only writer that can succeed is
+    //    the one that finds status='CONFIRMED' AND startAt > now.
+    const updated = await tx.appointment.updateMany({
+      where: {
+        id: diagnostic.id,
+        status: 'CONFIRMED',
+        startAt: { gt: now },
+      },
       data: {
         status: 'CANCELLED',
         ...lifecycleUpdate,
       },
+    });
+
+    if (updated.count === 0) {
+      // The CAS lost the race. Read the current state to decide
+      // between ALREADY_TERMINAL (the row is now terminal) and
+      // CANCELLATION_CLOSED (the row is still active but the
+      // future-start window has closed or the status is not
+      // CONFIRMED).
+      const current = await tx.appointment.findUnique({
+        where: { id: diagnostic.id },
+        select: { status: true, startAt: true },
+      });
+      const currentStatus = current?.status ?? diagnostic.status;
+      if (
+        currentStatus === 'CANCELLED' ||
+        currentStatus === 'COMPLETED' ||
+        currentStatus === 'NO_SHOW'
+      ) {
+        throw new AppError(
+          409,
+          'PUBLIC_BOOKING_ALREADY_TERMINAL',
+          `This booking is already ${currentStatus.toLowerCase()} and cannot be cancelled`
+        );
+      }
+      throw new AppError(
+        409,
+        'PUBLIC_BOOKING_CANCELLATION_CLOSED',
+        currentStatus !== 'CONFIRMED'
+          ? `This booking is ${currentStatus.toLowerCase()} and cannot be cancelled by the customer`
+          : 'This booking can no longer be cancelled because it has already started'
+      );
+    }
+
+    // 3. CAS won. Read back the full row (still inside the
+    //    transaction) so the response is consistent.
+    return tx.appointment.findUniqueOrThrow({
+      where: { id: diagnostic.id },
       select: {
         id: true,
         publicReference: true,
@@ -529,13 +551,16 @@ export async function cancelPublicBookingByReference(
     });
   });
 
-  if (!cancelled.publicReference) {
+  if (!casResult.publicReference) {
     throw new AppError(
       409,
       'PUBLIC_BOOKING_IDEMPOTENCY_CONFLICT',
       'The stored public booking replay record is incomplete'
     );
   }
+
+  // Rename the local so the rest of the function reads naturally.
+  const cancelled = casResult;
 
   return {
     appointment: {

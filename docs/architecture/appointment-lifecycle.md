@@ -93,6 +93,51 @@ authenticated staff/client entry point. The public flow lives in
 `publicBookingService.cancelPublicBookingByReference` and is
 described separately in [Public cancellation](#public-cancellation).
 
+### Atomic CAS for every transition
+
+Every status change (staff transition, staff cancel, public
+cancel) goes through `compareAndSwapAppointmentStatus` in
+`apps/api/src/lib/atomicTransition.ts`. The helper issues a
+single `prisma.appointment.updateMany({ where: { id, status:
+expectedSource }, data: { status: newStatus, ...lifecycle } })`
+and returns `count = 1` only when the row still had the expected
+source status at write time. A concurrent transition that wins
+the race leaves the row in a different state, the helper returns
+`count = 0`, and the service throws
+`AppointmentTransitionConflictError` with the stable
+`APPOINTMENT_TRANSITION_CONFLICT` (409).
+
+This is the only way to prove race safety under default
+READ COMMITTED isolation. A plain `findUnique` + `update` pair,
+even inside a `prisma.$transaction`, is read-then-write and is
+not race-safe.
+
+### Database CHECK constraint
+
+The cancellation metadata invariants are enforced at the
+database level by a CHECK constraint
+(`appointments_cancellation_metadata_check`) added by the
+`20260714200000_add_cancellation_metadata_check` migration.
+The constraint enforces:
+
+| `cancellation_source` | required `cancelled_by_role` |
+| --- | --- |
+| `STAFF` | `OWNER` or `BARBER` |
+| `AUTHENTICATED_CLIENT` | `CLIENT` |
+| `PUBLIC_BOOKING` | `NULL` |
+| `SYSTEM` | `NULL` |
+| `NULL` (legacy) | unrestricted (backward compat) |
+
+The constraint also rejects `cancelled_at IS NULL` rows that have
+a non-NULL `cancellation_source` (a nonsense state). Application
+code passes these rules by construction; the constraint is a
+second line of defense against ad-hoc SQL, future migration
+scripts, and bugs in the application layer.
+
+Legacy rows with `cancellation_source IS NULL` are accepted as-is;
+no backfill is required. New cancels stamp the column
+transactionally with the CAS.
+
 The cancellation model has two coupled fields:
 
 - `cancelledByRole` (`UserRole?`) — the authenticated actor's role,

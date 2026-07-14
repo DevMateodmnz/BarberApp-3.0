@@ -142,12 +142,12 @@ function expectedWarningBody(
 ): string {
   if (date) {
     return count === 1
-      ? `This customer has 1 prior no-show. The last one was on ${date}.`
-      : `This customer has ${count} prior no-shows. The last one was on ${date}.`;
+      ? `This number has 1 prior no-show. The last one was on ${date}.`
+      : `This number has ${count} prior no-shows. The last one was on ${date}.`;
   }
   return count === 1
-    ? 'This customer has 1 prior no-show.'
-    : `This customer has ${count} prior no-shows.`;
+    ? 'This number has 1 prior no-show.'
+    : `This number has ${count} prior no-shows.`;
 }
 
 describe('AppointmentCreateScreenView', () => {
@@ -273,7 +273,7 @@ describe('AppointmentCreateScreenView customer history warning', () => {
     expect(
       (banner.props as { accessibilityRole?: string }).accessibilityRole
     ).toBe('alert');
-    expect(findByText(tree, 'Customer history')).toBeDefined();
+    expect(findByText(tree, 'History associated with the number')).toBeDefined();
     // Singular form ("1 prior no-show") is rendered.
     expect(findByText(tree, expectedWarningBody(1, 'May 4, 2026'))).toBeDefined();
   });

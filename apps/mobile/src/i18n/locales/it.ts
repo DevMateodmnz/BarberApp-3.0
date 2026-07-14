@@ -350,11 +350,11 @@ export const it = {
     },
     warnings: {
       customerHistory: {
-        title: 'Storico del cliente',
-        bodyWithLastNoShow_one: 'Questo cliente ha 1 assenza precedente. L\'ultima è stata il {{date}}.',
-        bodyWithLastNoShow_other: 'Questo cliente ha {{count}} assenze precedenti. L\'ultima è stata il {{date}}.',
-        bodyGeneric_one: 'Questo cliente ha 1 assenza precedente.',
-        bodyGeneric_other: 'Questo cliente ha {{count}} assenze precedenti.',
+        title: 'Storico associato al numero',
+        bodyWithLastNoShow_one: 'Questo numero ha 1 assenza precedente. L\'ultima è stata il {{date}}.',
+        bodyWithLastNoShow_other: 'Questo numero ha {{count}} assenze precedenti. L\'ultima è stata il {{date}}.',
+        bodyGeneric_one: 'Questo numero ha 1 assenza precedente.',
+        bodyGeneric_other: 'Questo numero ha {{count}} assenze precedenti.',
       },
     },
     errors: {
