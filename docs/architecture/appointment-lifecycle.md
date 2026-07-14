@@ -116,9 +116,24 @@ not race-safe.
 
 The cancellation metadata invariants are enforced at the
 database level by a CHECK constraint
-(`appointments_cancellation_metadata_check`) added by the
-`20260714200000_add_cancellation_metadata_check` migration.
-The constraint enforces:
+(`appointments_cancellation_metadata_check`). The constraint
+distinguishes three states:
+
+**A. No cancellation metadata.** `cancelled_at`, `cancellation_source`,
+`cancelled_by_role`, and `cancel_reason` are all `NULL`.
+This is the state of every active appointment and any row that
+predates lifecycle tracking. Partial cancellation metadata on
+an uncancelled row is a nonsense state and is rejected.
+
+**B. Legacy recorded cancellation.** `cancelled_at IS NOT NULL`
+and `cancellation_source IS NULL` (with `cancelled_by_role`
+either NULL or populated, and `status = 'CANCELLED'`). This is
+the explicit backward-compat branch for rows written between the
+first and second lifecycle migrations. No backfill is required.
+
+**C. Fully classified cancellation.** `cancelled_at IS NOT NULL`
+and `cancellation_source IS NOT NULL` and `status = 'CANCELLED'`.
+The `cancelled_by_role` value must match the source's contract:
 
 | `cancellation_source` | required `cancelled_by_role` |
 | --- | --- |
@@ -126,17 +141,49 @@ The constraint enforces:
 | `AUTHENTICATED_CLIENT` | `CLIENT` |
 | `PUBLIC_BOOKING` | `NULL` |
 | `SYSTEM` | `NULL` |
-| `NULL` (legacy) | unrestricted (backward compat) |
 
-The constraint also rejects `cancelled_at IS NULL` rows that have
-a non-NULL `cancellation_source` (a nonsense state). Application
-code passes these rules by construction; the constraint is a
-second line of defense against ad-hoc SQL, future migration
-scripts, and bugs in the application layer.
+The constraint is added `NOT VALID` and then `VALIDATE`d in the
+same transaction. The `VALIDATE` step DOES scan existing rows.
+If any pre-existing row violates the corrected invariant, the
+entire migration rolls back and the constraint is removed. This
+is intentional and correct: it forces a preflight to find and
+fix the rows before the migration is re-applied. It is NOT a
+harmless warning.
 
-Legacy rows with `cancellation_source IS NULL` are accepted as-is;
-no backfill is required. New cancels stamp the column
-transactionally with the CAS.
+The corrected migration is
+`20260714210000_fix_cancellation_metadata_check/migration.sql`.
+The earlier migration
+`20260714200000_add_cancellation_metadata_check/migration.sql`
+contained a broken first branch (`cancelled_at IS NULL`) that
+trivially accepted any row with a null `cancelled_at`, regardless
+of the other metadata fields. It is preserved untouched per the
+batch rule "do not edit the existing committed migration", but
+the corrected constraint supersedes it. The pre-existing
+constraint is dropped by the new migration before the corrected
+one is added.
+
+### Preflight: detect violating rows before production cutover
+
+Run the query in
+`apps/api/prisma/migrations/20260714210000_fix_cancellation_metadata_check/preflight.sql`
+against the target database BEFORE applying the migration. The
+query must return zero rows; otherwise the migration's `VALIDATE
+CONSTRAINT` step will roll back the entire transaction.
+
+The preflight identifies five classes of violation:
+
+1. `cancelled_at IS NULL` with `cancellation_source IS NOT NULL`
+   (partial metadata on an active row).
+2. `cancelled_at IS NULL` with `cancelled_by_role IS NOT NULL`.
+3. `cancelled_at IS NULL` with `cancel_reason IS NOT NULL`.
+4. `cancelled_at IS NOT NULL AND status <> 'CANCELLED'`.
+5. Classified cancellation metadata where the role does not match
+   the source's contract.
+
+Resolution per row: clear spurious metadata on uncancelled rows;
+on cancelled rows, fix the role to match the source, or set the
+source to `NULL` to fall back to the legacy branch. Do not delete
+or rewrite data merely to make the constraint pass.
 
 The cancellation model has two coupled fields:
 

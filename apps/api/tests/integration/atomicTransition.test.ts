@@ -392,10 +392,53 @@ describe('Atomic CAS for public cancellation', () => {
 });
 
 describe('PostgreSQL CHECK constraint enforces cancellation metadata', () => {
-  it('rejects a cancel with cancellationSource=STAFF but cancelledByRole=CLIENT', async () => {
-    // A CONFIRMED row we can mutate directly.
-    const appointment = await createAppointment('CONFIRMED');
+  // The corrected constraint distinguishes three states:
+  //   A. cancelled_at NULL  => all metadata fields NULL
+  //   B. cancelled_at NOT NULL + cancellation_source NULL (legacy)
+  //   C. cancelled_at NOT NULL + cancellation_source NOT NULL
+  //      => role must match the source's contract
+  //
+  // The brief requires 8 rejection cases + 8 acceptance cases
+  // that exercise the real PostgreSQL constraint, not only the
+  // application-level validation.
 
+  // -------- REJECTION: 8 cases the database must refuse --------
+
+  it('rejects: cancelled_at NULL + cancellation_source PUBLIC_BOOKING', async () => {
+    const appointment = await createAppointment('CONFIRMED');
+    await expect(
+      prisma.appointment.update({
+        where: { id: appointment.id },
+        data: { cancellationSource: 'PUBLIC_BOOKING' },
+      })
+    ).rejects.toThrow();
+  });
+
+  it('rejects: cancelled_at NULL + cancellation_source STAFF + cancelled_by_role OWNER', async () => {
+    const appointment = await createAppointment('CONFIRMED');
+    await expect(
+      prisma.appointment.update({
+        where: { id: appointment.id },
+        data: {
+          cancellationSource: 'STAFF',
+          cancelledByRole: 'OWNER',
+        },
+      })
+    ).rejects.toThrow();
+  });
+
+  it('rejects: cancelled_at NULL + cancel_reason populated', async () => {
+    const appointment = await createAppointment('CONFIRMED');
+    await expect(
+      prisma.appointment.update({
+        where: { id: appointment.id },
+        data: { cancelReason: 'spurious reason' },
+      })
+    ).rejects.toThrow();
+  });
+
+  it('rejects: cancelled_at populated + STAFF + cancelled_by_role CLIENT', async () => {
+    const appointment = await createAppointment('CONFIRMED');
     await expect(
       prisma.appointment.update({
         where: { id: appointment.id },
@@ -409,25 +452,8 @@ describe('PostgreSQL CHECK constraint enforces cancellation metadata', () => {
     ).rejects.toThrow();
   });
 
-  it('rejects a cancel with cancellationSource=PUBLIC_BOOKING and a non-null cancelledByRole', async () => {
+  it('rejects: cancelled_at populated + AUTHENTICATED_CLIENT + cancelled_by_role OWNER', async () => {
     const appointment = await createAppointment('CONFIRMED');
-
-    await expect(
-      prisma.appointment.update({
-        where: { id: appointment.id },
-        data: {
-          status: 'CANCELLED',
-          cancelledAt: new Date(),
-          cancellationSource: 'PUBLIC_BOOKING',
-          cancelledByRole: 'OWNER',
-        },
-      })
-    ).rejects.toThrow();
-  });
-
-  it('rejects a cancel with cancellationSource=AUTHENTICATED_CLIENT but cancelledByRole=OWNER', async () => {
-    const appointment = await createAppointment('CONFIRMED');
-
     await expect(
       prisma.appointment.update({
         where: { id: appointment.id },
@@ -441,9 +467,106 @@ describe('PostgreSQL CHECK constraint enforces cancellation metadata', () => {
     ).rejects.toThrow();
   });
 
-  it('accepts a cancel with cancellationSource=STAFF and cancelledByRole=OWNER', async () => {
+  it('rejects: cancelled_at populated + PUBLIC_BOOKING + cancelled_by_role OWNER', async () => {
     const appointment = await createAppointment('CONFIRMED');
+    await expect(
+      prisma.appointment.update({
+        where: { id: appointment.id },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+          cancellationSource: 'PUBLIC_BOOKING',
+          cancelledByRole: 'OWNER',
+        },
+      })
+    ).rejects.toThrow();
+  });
 
+  it('rejects: classified cancellation metadata on status CONFIRMED', async () => {
+    const appointment = await createAppointment('CONFIRMED');
+    // CONFIRMED is not 'CANCELLED' but we are stamping cancellation
+    // metadata. The new constraint requires status = 'CANCELLED'
+    // whenever cancelled_at is set.
+    await expect(
+      prisma.appointment.update({
+        where: { id: appointment.id },
+        data: {
+          // Keep status as CONFIRMED but add cancellation metadata.
+          cancelledAt: new Date(),
+          cancellationSource: 'STAFF',
+          cancelledByRole: 'OWNER',
+        },
+      })
+    ).rejects.toThrow();
+  });
+
+  it('rejects: classified cancellation metadata on status COMPLETED', async () => {
+    const appointment = await createAppointment('CONFIRMED');
+    await expect(
+      prisma.appointment.update({
+        where: { id: appointment.id },
+        data: {
+          status: 'COMPLETED',
+          cancelledAt: new Date(),
+          cancellationSource: 'STAFF',
+          cancelledByRole: 'OWNER',
+        },
+      })
+    ).rejects.toThrow();
+  });
+
+  // -------- ACCEPTANCE: 8 cases the database must accept --------
+
+  it('accepts: normal active row with all cancellation metadata NULL', async () => {
+    // The default row created by `createAppointment('CONFIRMED')` is
+    // already in this state. We re-confirm by reading it.
+    const appointment = await createAppointment('CONFIRMED');
+    const reloaded = await readRow(appointment.id);
+    expect(reloaded.cancelledAt).toBeNull();
+    expect(reloaded.cancellationSource).toBeNull();
+    expect(reloaded.cancelledByRole).toBeNull();
+    expect(reloaded.cancelReason).toBeNull();
+  });
+
+  it('accepts: legacy CANCELLED row with all cancellation metadata NULL', async () => {
+    // status = CANCELLED + no cancellation metadata: allowed for
+    // any CANCELLED row that pre-dates the cancellation_source
+    // column. The new constraint requires status = CANCELLED and
+    // either cancellation_source is NULL (legacy, branch B) or
+    // the full classified set (branch C). Here we exercise the
+    // CANCELLED + all-NULL combination, which is legal: a row
+    // marked CANCELLED with no recorded metadata is fine
+    // (legacy compatibility).
+    const appointment = await createAppointment('CONFIRMED');
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: { status: 'CANCELLED' },
+    });
+    expect(updated.status).toBe('CANCELLED');
+    expect(updated.cancelledAt).toBeNull();
+    expect(updated.cancellationSource).toBeNull();
+    expect(updated.cancelledByRole).toBeNull();
+  });
+
+  it('accepts: legacy CANCELLED row with cancelled_at populated and source NULL', async () => {
+    const appointment = await createAppointment('CONFIRMED');
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancellationSource: null,
+        cancelledByRole: 'OWNER',
+        cancelReason: 'legacy cancel',
+      },
+    });
+    expect(updated.cancelledAt).toBeInstanceOf(Date);
+    expect(updated.cancellationSource).toBeNull();
+    expect(updated.cancelledByRole).toBe('OWNER');
+  });
+
+  it('accepts: STAFF + OWNER', async () => {
+    const appointment = await createAppointment('CONFIRMED');
     const updated = await prisma.appointment.update({
       where: { id: appointment.id },
       data: {
@@ -454,14 +577,44 @@ describe('PostgreSQL CHECK constraint enforces cancellation metadata', () => {
         cancelReason: 'STAFF owner cancel',
       },
     });
-    expect(updated.status).toBe('CANCELLED');
     expect(updated.cancellationSource).toBe('STAFF');
     expect(updated.cancelledByRole).toBe('OWNER');
   });
 
-  it('accepts a cancel with cancellationSource=PUBLIC_BOOKING and cancelledByRole=NULL', async () => {
+  it('accepts: STAFF + BARBER', async () => {
     const appointment = await createAppointment('CONFIRMED');
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancellationSource: 'STAFF',
+        cancelledByRole: 'BARBER',
+        cancelReason: 'STAFF barber cancel',
+      },
+    });
+    expect(updated.cancellationSource).toBe('STAFF');
+    expect(updated.cancelledByRole).toBe('BARBER');
+  });
 
+  it('accepts: AUTHENTICATED_CLIENT + CLIENT', async () => {
+    const appointment = await createAppointment('CONFIRMED');
+    const updated = await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancellationSource: 'AUTHENTICATED_CLIENT',
+        cancelledByRole: 'CLIENT',
+        cancelReason: 'client self-cancel',
+      },
+    });
+    expect(updated.cancellationSource).toBe('AUTHENTICATED_CLIENT');
+    expect(updated.cancelledByRole).toBe('CLIENT');
+  });
+
+  it('accepts: PUBLIC_BOOKING + NULL role', async () => {
+    const appointment = await createAppointment('CONFIRMED');
     const updated = await prisma.appointment.update({
       where: { id: appointment.id },
       data: {
@@ -469,25 +622,26 @@ describe('PostgreSQL CHECK constraint enforces cancellation metadata', () => {
         cancelledAt: new Date(),
         cancellationSource: 'PUBLIC_BOOKING',
         cancelledByRole: null,
+        cancelReason: 'public cancel',
       },
     });
     expect(updated.cancellationSource).toBe('PUBLIC_BOOKING');
     expect(updated.cancelledByRole).toBeNull();
   });
 
-  it('accepts a legacy cancel with cancellationSource=NULL and a non-null cancelledByRole (backward compat)', async () => {
+  it('accepts: SYSTEM + NULL role', async () => {
     const appointment = await createAppointment('CONFIRMED');
-
     const updated = await prisma.appointment.update({
       where: { id: appointment.id },
       data: {
         status: 'CANCELLED',
         cancelledAt: new Date(),
-        cancellationSource: null,
-        cancelledByRole: 'OWNER',
+        cancellationSource: 'SYSTEM',
+        cancelledByRole: null,
+        cancelReason: 'automated cancel',
       },
     });
-    expect(updated.cancellationSource).toBeNull();
-    expect(updated.cancelledByRole).toBe('OWNER');
+    expect(updated.cancellationSource).toBe('SYSTEM');
+    expect(updated.cancelledByRole).toBeNull();
   });
 });
