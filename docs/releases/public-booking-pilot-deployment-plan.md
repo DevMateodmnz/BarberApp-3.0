@@ -21,6 +21,14 @@
 | Next.js public web | Unverified from repository metadata; deployable Next.js production host required | `apps/public-web` builds with `next build` and starts with `next start --port 3001`; server runtime requires `PUBLIC_WEB_API_URL` ending in `/api/v1`; public routes live under `/barberias/:slug`. | Actual hosting platform, production domain/TLS, server env injection for `PUBLIC_WEB_API_URL`, deploy credentials, whether deploy is Git-triggered. | Mateo: choose/confirm host, configure env/domain/TLS, deploy after API is healthy. |
 | Clerk webhook / auth dependencies | Clerk production environment | API expects `CLERK_SECRET_KEY` and `CLERK_WEBHOOK_SECRET`; webhook route is `/api/v1/webhooks/clerk`; staff auth remains Clerk-backed. | Production Clerk instance confirmation, live secrets, webhook endpoint registration to the final API domain, delivery validation. | Mateo: set prod Clerk secrets and register the production webhook URL. |
 
+## 2026-07-14 preflight evidence snapshot
+
+- Git truth verified on `main`: clean working tree, `main` = `origin/main` = `3415c3ca8eebf928e219dc151f9f07a5b6824b17`, annotated tag `mvp-1.1.1` object `7ab4546dc63679af10c792a46c11ad638cf52db7` peels to the same commit, and `mvp-1.1.0` remains unchanged at object `48525c4e099ac7cafd21dfdc386e1d2ffd6a8045` / target `49f69c4e323eab5f2226458979e7d2046ec208fa`.
+- GitHub audit verified against `DevMateodmnz/BarberApp-3.0`: private repo, default branch `main`, push workflow run `29289756782` completed successfully for commit `3415c3c`, and the repository currently exposes zero GitHub environments, zero Actions secrets, zero Actions variables, zero GitHub deployment records, and zero repository webhooks.
+- Local tool inventory is currently minimal: `gh` `2.46.0` is installed and authenticated as `DevMateodmnz`; `railway`, `vercel`, and `clerk` CLIs are not installed on this machine.
+- Public-web hosting linkage is still unconfirmed: no `.vercel/project.json`, no `vercel.json`, and no `.openai/hosting.json` exist in the repository; a read-only Vercel connector audit returned no teams, so no existing Vercel project could be confirmed from current local or connected evidence.
+- Railway linkage is still unconfirmed: the repository contains `railway.json`, but there is no local Railway CLI or checked-in Railway project-link metadata, so the production Railway project, services, domains, and PostgreSQL state remain external/unverified.
+
 ## Required environment variables
 
 ### API
