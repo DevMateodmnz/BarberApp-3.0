@@ -102,7 +102,7 @@ describe('DB Double-Booking Constraint', () => {
     } catch (err) {
       expect(err).toBeInstanceOf(Prisma.PrismaClientUnknownRequestError);
       expect((err as Error).message).toContain('no_double_booking');
-      expect((err as any).code).toBeUndefined(); // Unknown errors have no code
+      expect((err as unknown as { code?: string }).code).toBeUndefined(); // Unknown errors have no code
     }
   });
 

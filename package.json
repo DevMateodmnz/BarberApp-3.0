@@ -17,6 +17,7 @@
     "validate": "npm run typecheck && npm run lint && npm run test",
     "qa:public-booking": "node scripts/qaPublicBooking.mjs && npm run qa:public-booking:production",
     "qa:public-booking:production": "node scripts/qaPublicBookingProduction.mjs",
+    "qa:verify": "npm run qa:verify --workspace @barberapp/api",
     "dev": "npm run dev --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "build": "npm run build --workspaces --if-present"

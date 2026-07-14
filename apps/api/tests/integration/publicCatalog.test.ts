@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
-import { createApp, createAppFromEnv } from '../../src/app.js';
+import { createAppFromEnv } from '../../src/app.js';
 import { readApiRuntimeConfig } from '../../src/config/runtime.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { CURRENT_PUBLIC_BOOKING_CONSENT_VERSION } from '../../src/lib/publicBookingConsent.js';

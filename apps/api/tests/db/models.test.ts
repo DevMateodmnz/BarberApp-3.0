@@ -302,7 +302,7 @@ describe('WorkingHours Default Setup', () => {
   });
 
   it('new barbershop can immediately accept appointments (within hours)', async () => {
-    const { barbershop, owner } = await createTestBarbershop();
+    const { barbershop } = await createTestBarbershop();
     const client = await createTestUser({ role: UserRole.CLIENT });
     const { employee } = await createTestEmployee({
       barbershopId: barbershop.id,

@@ -1346,7 +1346,10 @@ describe('Appointment List Query Correctness', () => {
       service: fixtures.serviceA1,
       startAt: localDateTimeToUtc(monday, '10:00'),
     });
-    const olderAppointment = await createAppointmentRecord({
+    // Different-day appointment: the OWNER filter for `date=monday`
+    // must exclude it. The row is created for its side-effect only;
+    // it is never read after this point.
+    await createAppointmentRecord({
       barbershopId: fixtures.shopA.id,
       employeeId: fixtures.employeeA1.employee.id,
       clientId: fixtures.clientA.id,

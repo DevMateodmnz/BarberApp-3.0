@@ -4,7 +4,7 @@
  * Validates the OWNER-managed employee creation endpoint:
  * POST /api/v1/barbershops/:barbershopId/employees
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { createAppFromEnv } from '../../src/app.js';
