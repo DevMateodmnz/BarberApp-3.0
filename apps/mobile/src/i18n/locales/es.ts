@@ -354,10 +354,15 @@ export const es = {
       staleSlot: 'Vuelve a seleccionar un horario disponible.',
     },
     warnings: {
-      repeatingCustomer: {
-        title: 'Atención: cliente reincidente',
-        bodyWithLastNoShow: 'Este cliente tuvo {{count}} inasistencias. La última fue el {{date}}.',
-        bodyGeneric: 'Este cliente tuvo {{count}} inasistencias anteriores.',
+      customerHistory: {
+        title: 'Historial del cliente',
+        // One prior no-show (singular)
+        bodyWithLastNoShow_one: 'Este cliente registra 1 inasistencia anterior. La última fue el {{date}}.',
+        // Multiple prior no-shows (plural)
+        bodyWithLastNoShow_other: 'Este cliente registra {{count}} inasistencias anteriores. La última fue el {{date}}.',
+        // No timestamp available (legacy rows without noShowAt)
+        bodyGeneric_one: 'Este cliente registra 1 inasistencia anterior.',
+        bodyGeneric_other: 'Este cliente registra {{count}} inasistencias anteriores.',
       },
     },
     errors: {

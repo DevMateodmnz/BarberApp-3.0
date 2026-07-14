@@ -153,9 +153,12 @@ export async function cancelAppointment(
  * Customer insight summary returned by the backend lookup endpoint.
  * The mobile UI uses this to surface no-show history before staff
  * confirm a new appointment.
+ *
+ * Note: the backend intentionally does NOT echo the submitted phone
+ * in the response (caller already has it; repeating would put PII
+ * in API logs that capture response bodies).
  */
 export interface CustomerInsights {
-  phone: string;
   visitCount: number;
   noShowCount: number;
   cancelledCount: number;
@@ -175,7 +178,11 @@ export interface CustomerInsights {
 /**
  * Fetches repeat-customer history for a normalized E.164 phone.
  *
- * GET /barbershops/:barbershopId/customers/lookup?phone=...
+ * POST /barbershops/:barbershopId/customers/lookup
+ * Body: { phone: E164 }
+ *
+ * Body-only by design: customer phone numbers are PII and must not
+ * appear in URLs, access logs, proxies, or referer headers.
  *
  * Returns a zeroed-out shape (visitCount: 0, etc.) when the phone has
  * no history in the tenant, so the UI does not need a special branch.
@@ -186,12 +193,10 @@ export async function lookupCustomerByPhone(
   phone: string,
 ): Promise<CustomerInsights> {
   const token = await getToken();
-  const response = await api.get<ApiResponse<CustomerInsights>>(
+  const response = await api.post<ApiResponse<CustomerInsights>>(
     `/barbershops/${barbershopId}/customers/lookup`,
-    {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      params: { phone },
-    },
+    { phone },
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
   );
 
   return ensureSuccess(response, localizeUnknownError('Failed to fetch customer insights'));

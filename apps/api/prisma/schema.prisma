@@ -44,6 +44,17 @@ enum EmployeeInvitationStatus {
   DELIVERY_FAILED
 }
 
+// Where a cancellation originated. Decoupled from UserRole because
+// anonymous public bookings and automated (system) jobs have no
+// UserRole identity. A row that was cancelled has at least one of
+// (cancelledByRole, cancellationSource) populated, never both null.
+enum AppointmentCancellationSource {
+  STAFF
+  AUTHENTICATED_CLIENT
+  PUBLIC_BOOKING
+  SYSTEM
+}
+
 // ============================================
 // USER
 // ============================================
@@ -265,6 +276,7 @@ model Appointment {
   cancelledAt            DateTime?  @map("cancelled_at")
   noShowAt               DateTime?  @map("no_show_at")
   cancelledByRole        UserRole?  @map("cancelled_by_role")
+  cancellationSource     AppointmentCancellationSource? @map("cancellation_source")
   cancelReason           String?    @map("cancel_reason") @db.VarChar(500)
   // Normalized E.164 client phone, populated by the service for new
   // bookings. Legacy rows remain NULL; the customer lookup endpoint

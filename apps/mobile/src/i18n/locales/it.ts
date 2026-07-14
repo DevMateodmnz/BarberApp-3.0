@@ -349,10 +349,12 @@ export const it = {
       staleSlot: 'Seleziona di nuovo un orario disponibile.',
     },
     warnings: {
-      repeatingCustomer: {
-        title: 'Attenzione: cliente recidivo',
-        bodyWithLastNoShow: 'Questo cliente ha avuto {{count}} assenze. L\'ultima è stata il {{date}}.',
-        bodyGeneric: 'Questo cliente ha avuto {{count}} assenze precedenti.',
+      customerHistory: {
+        title: 'Storico del cliente',
+        bodyWithLastNoShow_one: 'Questo cliente ha 1 assenza precedente. L\'ultima è stata il {{date}}.',
+        bodyWithLastNoShow_other: 'Questo cliente ha {{count}} assenze precedenti. L\'ultima è stata il {{date}}.',
+        bodyGeneric_one: 'Questo cliente ha 1 assenza precedente.',
+        bodyGeneric_other: 'Questo cliente ha {{count}} assenze precedenti.',
       },
     },
     errors: {

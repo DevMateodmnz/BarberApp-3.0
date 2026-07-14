@@ -77,7 +77,14 @@ export const CancelAppointmentBodySchema = z.preprocess(
     .strict()
 );
 
-export const CustomerLookupQuerySchema = z
+/**
+ * Body for POST /api/v1/barbershops/:barbershopId/customers/lookup.
+ *
+ * Phone lookup is body-only, never a query string: customer phone
+ * numbers are PII and must not appear in access logs, proxies, or
+ * referer headers. E.164 is the only accepted format.
+ */
+export const CustomerLookupBodySchema = z
   .object({
     phone: z
       .string()
@@ -99,4 +106,4 @@ export type AppointmentAvailabilityQuery = z.infer<
 >;
 export type AppointmentListQuery = z.infer<typeof AppointmentListQuerySchema>;
 export type CancelAppointmentBody = z.infer<typeof CancelAppointmentBodySchema>;
-export type CustomerLookupQuery = z.infer<typeof CustomerLookupQuerySchema>;
+export type CustomerLookupBody = z.infer<typeof CustomerLookupBodySchema>;

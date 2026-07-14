@@ -349,10 +349,12 @@ export const zhHans = {
       staleSlot: '请重新选择可用的时间段。',
     },
     warnings: {
-      repeatingCustomer: {
-        title: '注意：回头客',
-        bodyWithLastNoShow: '该客户有 {{count}} 次未到场。最近一次是 {{date}}。',
-        bodyGeneric: '该客户此前有 {{count}} 次未到场。',
+      customerHistory: {
+        title: '客户历史',
+        bodyWithLastNoShow_one: '该客户此前有 1 次未到场。最近一次是 {{date}}。',
+        bodyWithLastNoShow_other: '该客户此前有 {{count}} 次未到场。最近一次是 {{date}}。',
+        bodyGeneric_one: '该客户此前有 1 次未到场。',
+        bodyGeneric_other: '该客户此前有 {{count}} 次未到场。',
       },
     },
     errors: {

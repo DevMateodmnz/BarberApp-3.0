@@ -2,18 +2,24 @@
  * Appointment lifecycle helper.
  *
  * Centralizes the translation of a status change into the matching
- * persistence payload (timestamp + actor). All callers MUST go through
- * this module so that no-show analytics and customer history queries
- * remain correct across the entire API surface.
+ * persistence payload (timestamp + actor + cancellation source). All
+ * callers MUST go through this module so that no-show analytics,
+ * customer history queries, and cancellation audits remain correct
+ * across the entire API surface.
  *
  * Why a single helper:
  * - Avoids drift between staff transitions, public cancel, and any
  *   future entrypoint (CLI, future mobile background sync).
  * - Keeps the public cancel path and the staff cancel path using the
- *   exact same rules for `cancelledByRole` and `cancelReason`.
+ *   exact same rules for `cancelledByRole`, `cancellationSource`, and
+ *   `cancelReason`.
  * - Makes the lifecycle explicit and testable without Prisma.
  */
-import type { AppointmentStatus, UserRole } from '@prisma/client';
+import type {
+  AppointmentCancellationSource,
+  AppointmentStatus,
+  UserRole,
+} from '@prisma/client';
 
 export const CANCEL_REASON_MAX_LENGTH = 500;
 
@@ -35,8 +41,8 @@ export function isTerminalStatus(status: AppointmentStatus): boolean {
  * Statuses that produce a recorded timestamp when transitioned into.
  * PENDING is excluded (re-open leaves the lifecycle history alone).
  * CANCELLED is excluded because cancel records more than a timestamp
- * (cancelledByRole + cancelReason) and goes through
- * {@link buildLifecycleUpdateForCancel}.
+ * (cancelledByRole + cancellationSource + cancelReason) and goes
+ * through {@link buildLifecycleUpdateForCancel}.
  */
 export function isRecordedTransition(status: AppointmentStatus): boolean {
   return (
@@ -82,29 +88,50 @@ export function buildLifecycleUpdateForStatus(
   }
 }
 
+export interface BuildLifecycleUpdateForCancelInput {
+  /**
+   * The authenticated actor's role. Must be null when source is
+   * `PUBLIC_BOOKING` or `SYSTEM` because those flows have no
+   * UserRole identity. Must be a real UserRole for staff and
+   * authenticated-client flows.
+   */
+  actorRole: UserRole | null;
+  /**
+   * Where the cancellation originated. Decoupled from actorRole so
+   * that anonymous public bookings and future automated jobs do
+   * not require a fake PUBLIC role in the UserRole enum.
+   */
+  source: AppointmentCancellationSource;
+  now?: Date;
+  reason?: string | null;
+}
+
 /**
  * Builds the partial Prisma update payload for a cancellation.
- * Always records the actor's role, the timestamp, and a normalized
- * reason. A missing or empty reason is stored as NULL to keep the
- * column meaningful for analytics.
+ * Always records the actor role (nullable for anonymous/system),
+ * the source, the timestamp, and a normalized reason. A missing or
+ * empty reason is stored as NULL to keep the column meaningful for
+ * analytics.
  *
- * `cancelledByRole = CLIENT` is intentionally accepted so the
- * public cancel-by-reference flow (anonymous guest) and the
- * authenticated client self-cancel can share a single code path.
+ * Row invariant (enforced by the callers, documented here):
+ *   - source === 'STAFF'             => actorRole must be OWNER or BARBER
+ *   - source === 'AUTHENTICATED_CLIENT' => actorRole === 'CLIENT'
+ *   - source === 'PUBLIC_BOOKING'    => actorRole must be null
+ *   - source === 'SYSTEM'            => actorRole must be null
  */
 export function buildLifecycleUpdateForCancel(
-  actorRole: UserRole,
-  now: Date = new Date(),
-  reason?: string | null
+  input: BuildLifecycleUpdateForCancelInput
 ): {
   cancelledAt: Date;
-  cancelledByRole: UserRole;
+  cancelledByRole: UserRole | null;
+  cancellationSource: AppointmentCancellationSource;
   cancelReason: string | null;
 } {
   return {
-    cancelledAt: now,
-    cancelledByRole: actorRole,
-    cancelReason: normalizeCancelReason(reason),
+    cancelledAt: input.now ?? new Date(),
+    cancelledByRole: input.actorRole,
+    cancellationSource: input.source,
+    cancelReason: normalizeCancelReason(input.reason),
   };
 }
 

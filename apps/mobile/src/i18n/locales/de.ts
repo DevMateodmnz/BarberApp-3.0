@@ -358,10 +358,12 @@ export const de = {
       staleSlot: 'Wähle erneut einen verfügbaren Termin.',
     },
     warnings: {
-      repeatingCustomer: {
-        title: 'Achtung: Wiederholungskunde',
-        bodyWithLastNoShow: 'Dieser Kunde hatte {{count}} Nichterscheinen. Das letzte war am {{date}}.',
-        bodyGeneric: 'Dieser Kunde hatte {{count}} vorherige Nichterscheinen.',
+      customerHistory: {
+        title: 'Kundenhistorie',
+        bodyWithLastNoShow_one: 'Dieser Kunde hat 1 vorheriges Nichterscheinen. Das letzte war am {{date}}.',
+        bodyWithLastNoShow_other: 'Dieser Kunde hat {{count}} vorherige Nichterscheinen. Das letzte war am {{date}}.',
+        bodyGeneric_one: 'Dieser Kunde hat 1 vorheriges Nichterscheinen.',
+        bodyGeneric_other: 'Dieser Kunde hat {{count}} vorherige Nichterscheinen.',
       },
     },
     errors: {

@@ -405,7 +405,7 @@ interface PublicCancelResult {
     publicReference: string;
     status: 'CANCELLED';
     cancelledAt: string;
-    cancelledByRole: 'CLIENT';
+    cancellationSource: 'PUBLIC_BOOKING';
     cancelReason: string | null;
   };
 }
@@ -414,84 +414,119 @@ interface PublicCancelResult {
  * Cancels a public booking by reference. Intended for the anonymous
  * customer cancel flow that runs on the public-web confirmation page.
  *
- * Tenant scoping: the public reference is unique across the system
- * (database unique index), so the slug only acts as a sanity check
- * that the booking is associated with a published barbershop. We
- * still verify the appointment's `barbershop.publicSlug` matches the
- * request slug to defend against probing.
+ * Security model: the public reference is a bearer credential. Possession
+ * of the reference authorizes cancellation of the matching booking.
+ * To prevent a customer from "cancelling" a missed appointment
+ * retroactively, the endpoint enforces a strict future-start cutoff:
+ * a row whose startAt is <= now is no longer eligible for public
+ * cancellation. The check, the existence/active-state/slug check, and
+ * the state mutation all run in a single transaction with a serializable
+ * read so a competing staff transition cannot interleave.
  *
- * Records the cancellation with `cancelledByRole = CLIENT` (the
- * public/guest customer is treated as the customer actor for the
- * purpose of the lifecycle history). Reason is optional.
+ * Decoupled actor model: anonymous guests are not represented as a
+ * fake "CLIENT" UserRole. Instead, the row is stamped with
+ * `cancellationSource = 'PUBLIC_BOOKING'` and `cancelledByRole = NULL`.
+ * This separation is also what enables future automated cancel jobs
+ * (no-show sweeps, slot-expiration) without inventing more roles.
  *
- * Returns 404-equivalent when:
+ * Returns 404 when:
  * - the slug does not resolve to a published barbershop
  * - the reference does not match an appointment
  * - the reference belongs to a different barbershop
  *
- * Returns 409 when the appointment is already in a terminal state.
+ * Returns 409 when:
+ * - the appointment is already in a terminal state
+ * - the appointment has already started
  */
 export async function cancelPublicBookingByReference(
   input: CancelPublicBookingInput
 ): Promise<PublicCancelResult> {
   const trimmedReference = input.publicReference.trim();
+  const now = input.now ?? new Date();
 
   if (!isPublicBookingReference(trimmedReference)) {
     throw createPublicNotFoundError();
   }
 
-  const appointment = await prisma.appointment.findUnique({
-    where: { publicReference: trimmedReference },
-    include: {
-      barbershop: {
-        select: {
-          publicSlug: true,
-          isActive: true,
+  // Atomic check + mutate: open a transaction, re-read with the same
+  // conditions the route would check, and only commit if the row is
+  // still eligible. Any competing transition (staff cancel, no-show
+  // sweep) will collide and this transaction will fail with a
+  // known/handled error, never silently overwriting the other side.
+  const cancelled = await prisma.$transaction(async (tx) => {
+    const appointment = await tx.appointment.findUnique({
+      where: { publicReference: trimmedReference },
+      include: {
+        barbershop: {
+          select: {
+            publicSlug: true,
+            isActive: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  if (!appointment) {
-    throw createPublicNotFoundError();
-  }
+    if (!appointment) {
+      throw createPublicNotFoundError();
+    }
 
-  if (
-    !appointment.barbershop.publicSlug ||
-    appointment.barbershop.publicSlug !== input.slug ||
-    !appointment.barbershop.isActive
-  ) {
-    throw createPublicNotFoundError();
-  }
+    if (
+      !appointment.barbershop.publicSlug ||
+      appointment.barbershop.publicSlug !== input.slug ||
+      !appointment.barbershop.isActive
+    ) {
+      throw createPublicNotFoundError();
+    }
 
-  if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(appointment.status)) {
-    throw new AppError(
-      409,
-      'PUBLIC_BOOKING_ALREADY_TERMINAL',
-      `This booking is already ${appointment.status.toLowerCase()} and cannot be cancelled`
-    );
-  }
+    if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(appointment.status)) {
+      throw new AppError(
+        409,
+        'PUBLIC_BOOKING_ALREADY_TERMINAL',
+        `This booking is already ${appointment.status.toLowerCase()} and cannot be cancelled`
+      );
+    }
 
-  const lifecycleUpdate = buildLifecycleUpdateForCancel(
-    'CLIENT',
-    input.now ?? new Date(),
-    input.reason
-  );
+    if (appointment.status !== 'CONFIRMED') {
+      // PENDING or IN_PROGRESS rows are still active but cannot be
+      // publicly cancelled. Reuse the same 409 with a different
+      // stable code so the client can render a precise message.
+      throw new AppError(
+        409,
+        'PUBLIC_BOOKING_CANCELLATION_CLOSED',
+        `This booking is ${appointment.status.toLowerCase()} and cannot be cancelled by the customer`
+      );
+    }
 
-  const cancelled = await prisma.appointment.update({
-    where: { id: appointment.id },
-    data: {
-      status: 'CANCELLED',
-      ...lifecycleUpdate,
-    },
-    select: {
-      id: true,
-      publicReference: true,
-      status: true,
-      cancelledAt: true,
-      cancelledByRole: true,
-      cancelReason: true,
-    },
+    if (appointment.startAt.getTime() <= now.getTime()) {
+      throw new AppError(
+        409,
+        'PUBLIC_BOOKING_CANCELLATION_CLOSED',
+        'This booking can no longer be cancelled because it has already started'
+      );
+    }
+
+    const lifecycleUpdate = buildLifecycleUpdateForCancel({
+      actorRole: null,
+      source: 'PUBLIC_BOOKING',
+      now,
+      reason: input.reason,
+    });
+
+    return tx.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: 'CANCELLED',
+        ...lifecycleUpdate,
+      },
+      select: {
+        id: true,
+        publicReference: true,
+        status: true,
+        cancelledAt: true,
+        cancellationSource: true,
+        cancelReason: true,
+      },
+    });
   });
 
   if (!cancelled.publicReference) {
@@ -508,7 +543,7 @@ export async function cancelPublicBookingByReference(
       publicReference: cancelled.publicReference,
       status: 'CANCELLED',
       cancelledAt: (cancelled.cancelledAt as Date).toISOString(),
-      cancelledByRole: 'CLIENT',
+      cancellationSource: 'PUBLIC_BOOKING',
       cancelReason: cancelled.cancelReason,
     },
   };

@@ -1,18 +1,21 @@
 /**
  * Integration tests for the customer lookup endpoint:
  *
- *   GET /api/v1/barbershops/:barbershopId/customers/lookup?phone=E164
+ *   POST /api/v1/barbershops/:barbershopId/customers/lookup
+ *   Content-Type: application/json
  *
- * Validates:
+ *   { "phone": "+549..." }
  *
- * - Unknown phone returns zeroed counts and empty recent list
- * - Counts add up: visits include COMPLETED + NO_SHOW + CANCELLED + active
- * - Last visit and last no-show timestamps are correct
- * - Cross-tenant queries return 404 (existence hidden)
- * - BARBER can query their own barbershop
- * - BARBER in another barbershop gets 404
- * - Non-E.164 phone is rejected at the schema layer
- * - Public booking rows are matched (their clientPhoneNormalized is set)
+ * Phase 1 hardening invariants:
+ *
+ * - Body-only by design. The legacy GET ...?phone=... route is gone;
+ *   this test asserts that GET returns 404 to prove the deprecation.
+ * - The response never includes the submitted phone (caller already
+ *   has it; repeating it would leak PII in API logs).
+ * - Tenant scoping hides cross-tenant existence: probes return 404,
+ *   not 403, matching the `getAppointment` convention.
+ * - Counts only `appointments.clientPhoneNormalized` matches; legacy
+ *   staff rows with NULL `clientPhoneNormalized` are excluded.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
@@ -192,16 +195,24 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('GET /api/v1/barbershops/:barbershopId/customers/lookup', () => {
-  it('returns zeroed counts and empty recent list when phone has no history', async () => {
+describe('POST /api/v1/barbershops/:barbershopId/customers/lookup', () => {
+  it('the legacy GET ...?phone=... route no longer exists (PII hardening)', async () => {
     const res = await request(app)
       .get(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
       .query({ phone: REPEAT_PHONE })
       .set(authHeader(fixtures.ownerA.clerkUserId));
 
+    expect(res.status).toBe(404);
+  });
+
+  it('valid POST returns zeroed counts and empty recent list when phone has no history', async () => {
+    const res = await request(app)
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ phone: REPEAT_PHONE });
+
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({
-      phone: REPEAT_PHONE,
       visitCount: 0,
       noShowCount: 0,
       cancelledCount: 0,
@@ -210,6 +221,9 @@ describe('GET /api/v1/barbershops/:barbershopId/customers/lookup', () => {
       lastNoShowAt: null,
       recentAppointments: [],
     });
+    // Phone must NOT be echoed back in the response.
+    expect(res.body.data.phone).toBeUndefined();
+    expect(JSON.stringify(res.body.data)).not.toContain(REPEAT_PHONE);
   });
 
   it('aggregates counts and recent appointments for a repeat customer', async () => {
@@ -251,29 +265,27 @@ describe('GET /api/v1/barbershops/:barbershopId/customers/lookup', () => {
     );
 
     const res = await request(app)
-      .get(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
-      .query({ phone: REPEAT_PHONE, limit: 10 })
-      .set(authHeader(fixtures.ownerA.clerkUserId));
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ phone: REPEAT_PHONE, limit: 10 });
 
     expect(res.status).toBe(200);
     expect(res.body.data.visitCount).toBe(4);
     expect(res.body.data.completedCount).toBe(1);
     expect(res.body.data.noShowCount).toBe(1);
     expect(res.body.data.cancelledCount).toBe(1);
-    // orderBy startAt desc → most recent (CANCELLED, +4d) is first
     expect(res.body.data.recentAppointments[0].id).toBe(cancelled.id);
     expect(res.body.data.recentAppointments[0].status).toBe('CANCELLED');
     expect(res.body.data.recentAppointments[3].id).toBe(completed.id);
     expect(res.body.data.recentAppointments[2].id).toBe(noShow.id);
     expect(res.body.data.recentAppointments[1].id).toBe(confirmed.id);
-    // lastVisitAt is the most recent startAt (the CANCELLED one)
     expect(res.body.data.lastVisitAt).toBe(cancelled.startAt.toISOString());
-    // lastNoShowAt is the NO_SHOW row
     expect(res.body.data.lastNoShowAt).toBe(noShow.startAt.toISOString());
+    // Phone must NOT be echoed back.
+    expect(res.body.data.phone).toBeUndefined();
   });
 
   it('does not leak data from another barbershop', async () => {
-    // Shop B has two COMPLETED appointments for the same phone
     await createAppointmentAt(
       fixtures.shopB.id,
       fixtures.barberBEmployee.id,
@@ -293,28 +305,26 @@ describe('GET /api/v1/barbershops/:barbershopId/customers/lookup', () => {
       REPEAT_PHONE
     );
 
-    // Owner A queries for the same phone in shop A — must see nothing
     const fromA = await request(app)
-      .get(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
-      .query({ phone: REPEAT_PHONE })
-      .set(authHeader(fixtures.ownerA.clerkUserId));
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ phone: REPEAT_PHONE });
     expect(fromA.status).toBe(200);
     expect(fromA.body.data.visitCount).toBe(0);
 
-    // Owner B queries in shop B — must see 2
     const fromB = await request(app)
-      .get(`/api/v1/barbershops/${fixtures.shopB.id}/customers/lookup`)
-      .query({ phone: REPEAT_PHONE })
-      .set(authHeader(fixtures.ownerB.clerkUserId));
+      .post(`/api/v1/barbershops/${fixtures.shopB.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerB.clerkUserId))
+      .send({ phone: REPEAT_PHONE });
     expect(fromB.status).toBe(200);
     expect(fromB.body.data.visitCount).toBe(2);
   });
 
   it('returns 404 when OWNER queries a barbershop they do not own', async () => {
     const res = await request(app)
-      .get(`/api/v1/barbershops/${fixtures.shopB.id}/customers/lookup`)
-      .query({ phone: REPEAT_PHONE })
-      .set(authHeader(fixtures.ownerA.clerkUserId));
+      .post(`/api/v1/barbershops/${fixtures.shopB.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ phone: REPEAT_PHONE });
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -332,19 +342,15 @@ describe('GET /api/v1/barbershops/:barbershopId/customers/lookup', () => {
     );
 
     const res = await request(app)
-      .get(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
-      .query({ phone: REPEAT_PHONE })
-      .set(authHeader(fixtures.barberA.clerkUserId));
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(fixtures.barberA.clerkUserId))
+      .send({ phone: REPEAT_PHONE });
 
     expect(res.status).toBe(200);
     expect(res.body.data.noShowCount).toBe(1);
   });
 
   it('BARBER from another barbershop gets 404', async () => {
-    // Create a separate barber scoped to shop A only; using barberA here
-    // makes him an employee of shop A. To test cross-tenant, we'd need
-    // a barber in B. For this milestone we use a second user as a
-    // non-employee of shop A.
     const otherUser = await prisma.user.create({
       data: {
         clerkUserId: 'lookup_otherUser',
@@ -354,47 +360,44 @@ describe('GET /api/v1/barbershops/:barbershopId/customers/lookup', () => {
     });
 
     const res = await request(app)
-      .get(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
-      .query({ phone: REPEAT_PHONE })
-      .set(authHeader(otherUser.clerkUserId));
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(otherUser.clerkUserId))
+      .send({ phone: REPEAT_PHONE });
 
     expect(res.status).toBe(404);
   });
 
-  it('rejects non-E.164 phone input with 400', async () => {
+  it('rejects non-E.164 phone input with 400 (body validation)', async () => {
     const res = await request(app)
-      .get(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
-      .query({ phone: 'abc-not-a-phone' })
-      .set(authHeader(fixtures.ownerA.clerkUserId));
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ phone: 'abc-not-a-phone' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('matches public booking rows (clientPhoneNormalized populated)', async () => {
-    // Simulate a public booking row that was created by the public
-    // booking service (which always populates clientPhoneNormalized).
-    await createAppointmentAt(
-      fixtures.shopA.id,
-      fixtures.barberA.employeeId,
-      fixtures.serviceA.id,
-      fixtures.serviceA.durationMinutes,
-      1,
-      'CONFIRMED',
-      REPEAT_PHONE
-    );
-
+  it('rejects empty body with 400', async () => {
     const res = await request(app)
-      .get(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
-      .query({ phone: REPEAT_PHONE })
-      .set(authHeader(fixtures.ownerA.clerkUserId));
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send();
 
-    expect(res.status).toBe(200);
-    expect(res.body.data.visitCount).toBe(1);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects phone field absent from body with 400', async () => {
+    const res = await request(app)
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ limit: 5 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('ignores rows with NULL clientPhoneNormalized (legacy staff data)', async () => {
-    // Legacy staff row without normalized phone (e.g. "+54 9 381 ..." entered by hand)
     await createAppointmentAt(
       fixtures.shopA.id,
       fixtures.barberA.employeeId,
@@ -406,11 +409,22 @@ describe('GET /api/v1/barbershops/:barbershopId/customers/lookup', () => {
     );
 
     const res = await request(app)
-      .get(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
-      .query({ phone: OTHER_PHONE })
-      .set(authHeader(fixtures.ownerA.clerkUserId));
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ phone: OTHER_PHONE });
 
     expect(res.status).toBe(200);
     expect(res.body.data.visitCount).toBe(0);
+  });
+
+  it('never includes the submitted phone in the response, even on error', async () => {
+    const res = await request(app)
+      .post(`/api/v1/barbershops/${fixtures.shopA.id}/customers/lookup`)
+      .set(authHeader(fixtures.ownerA.clerkUserId))
+      .send({ phone: REPEAT_PHONE });
+
+    expect(res.status).toBe(200);
+    const fullJson = JSON.stringify(res.body);
+    expect(fullJson.includes(REPEAT_PHONE)).toBe(false);
   });
 });

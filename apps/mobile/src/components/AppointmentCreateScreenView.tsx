@@ -576,21 +576,27 @@ export function AppointmentCreateScreenView({
                       style={styles.customerWarningBanner}
                     >
                       <Text style={styles.customerWarningTitle}>
-                        {t('appointmentCreation.warnings.repeatingCustomer.title')}
+                        {t('appointmentCreation.warnings.customerHistory.title')}
                       </Text>
                       <Text style={styles.customerWarningBody}>
                         {customerWarning.lastNoShowAt
-                          ? t('appointmentCreation.warnings.repeatingCustomer.bodyWithLastNoShow', {
-                              count: customerWarning.noShowCount,
-                              date:
-                                formatLocalizedDate(
-                                  customerWarning.lastNoShowAt.slice(0, 10),
-                                  { year: 'numeric', month: 'long', day: 'numeric' },
-                                ) ?? customerWarning.lastNoShowAt,
-                            })
-                          : t('appointmentCreation.warnings.repeatingCustomer.bodyGeneric', {
-                              count: customerWarning.noShowCount,
-                            })}
+                          ? t(
+                              'appointmentCreation.warnings.customerHistory.bodyWithLastNoShow',
+                              {
+                                count: customerWarning.noShowCount,
+                                date:
+                                  formatLocalizedDate(
+                                    customerWarning.lastNoShowAt.slice(0, 10),
+                                    { year: 'numeric', month: 'long', day: 'numeric' },
+                                  ) ?? customerWarning.lastNoShowAt,
+                              }
+                            )
+                          : t(
+                              'appointmentCreation.warnings.customerHistory.bodyGeneric',
+                              {
+                                count: customerWarning.noShowCount,
+                              }
+                            )}
                       </Text>
                     </View>
                   ) : null}

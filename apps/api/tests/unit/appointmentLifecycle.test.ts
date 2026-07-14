@@ -2,10 +2,9 @@
  * Unit tests for the appointment lifecycle helper.
  *
  * This module is the single source of truth for translating an appointment
- * status change into the matching timestamp + actor persistence payload.
- * If these tests are wrong, every transition and every customer insight
- * derived from `startedAt` / `confirmedAt` / `completedAt` / `cancelledAt` /
- * `noShowAt` will be wrong.
+ * status change into the matching timestamp + actor + cancellation source
+ * payload. If these tests are wrong, every transition, every customer
+ * insight, and every cancellation audit query will be wrong.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -68,31 +67,82 @@ describe('buildLifecycleUpdateForStatus', () => {
 });
 
 describe('buildLifecycleUpdateForCancel', () => {
-  it('stamps cancelledAt, cancelledByRole, and cancelReason for staff cancel', () => {
-    const update = buildLifecycleUpdateForCancel('OWNER', NOW, 'Cliente no respondió');
+  it('records STAFF source and the actor role for OWNER staff cancel', () => {
+    const update = buildLifecycleUpdateForCancel({
+      actorRole: 'OWNER',
+      source: 'STAFF',
+      now: NOW,
+      reason: 'Cliente no respondió',
+    });
     expect(update.cancelledAt).toEqual(NOW);
     expect(update.cancelledByRole).toBe('OWNER');
+    expect(update.cancellationSource).toBe('STAFF');
     expect(update.cancelReason).toBe('Cliente no respondió');
   });
 
-  it('records CLIENT as the actor for anonymous/public cancellations', () => {
-    const update = buildLifecycleUpdateForCancel('CLIENT', NOW, 'Cambio de planes');
+  it('records STAFF source for BARBER cancel too', () => {
+    const update = buildLifecycleUpdateForCancel({
+      actorRole: 'BARBER',
+      source: 'STAFF',
+      now: NOW,
+      reason: 'Walk-in conflict',
+    });
+    expect(update.cancelledByRole).toBe('BARBER');
+    expect(update.cancellationSource).toBe('STAFF');
+  });
+
+  it('records CLIENT role and AUTHENTICATED_CLIENT source for authenticated client self-cancel', () => {
+    const update = buildLifecycleUpdateForCancel({
+      actorRole: 'CLIENT',
+      source: 'AUTHENTICATED_CLIENT',
+      now: NOW,
+      reason: 'Cambio de planes',
+    });
     expect(update.cancelledByRole).toBe('CLIENT');
+    expect(update.cancellationSource).toBe('AUTHENTICATED_CLIENT');
     expect(update.cancelReason).toBe('Cambio de planes');
   });
 
+  it('records null actor role and PUBLIC_BOOKING source for anonymous public cancel', () => {
+    const update = buildLifecycleUpdateForCancel({
+      actorRole: null,
+      source: 'PUBLIC_BOOKING',
+      now: NOW,
+      reason: null,
+    });
+    expect(update.cancelledAt).toEqual(NOW);
+    expect(update.cancelledByRole).toBeNull();
+    expect(update.cancellationSource).toBe('PUBLIC_BOOKING');
+    expect(update.cancelReason).toBeNull();
+  });
+
+  it('records null actor role and SYSTEM source for automated cancellation', () => {
+    const update = buildLifecycleUpdateForCancel({
+      actorRole: null,
+      source: 'SYSTEM',
+      now: NOW,
+    });
+    expect(update.cancelledByRole).toBeNull();
+    expect(update.cancellationSource).toBe('SYSTEM');
+  });
+
   it('normalizes a missing reason to NULL rather than empty string', () => {
-    const update = buildLifecycleUpdateForCancel('OWNER', NOW);
+    const update = buildLifecycleUpdateForCancel({
+      actorRole: 'OWNER',
+      source: 'STAFF',
+      now: NOW,
+    });
     expect(update.cancelReason).toBeNull();
   });
 
   it('trims and clamps reason to 500 characters', () => {
     const longReason = `${'x'.repeat(550)}`;
-    const update = buildLifecycleUpdateForCancel(
-      'BARBER',
-      NOW,
-      `   ${longReason}   `
-    );
+    const update = buildLifecycleUpdateForCancel({
+      actorRole: 'OWNER',
+      source: 'STAFF',
+      now: NOW,
+      reason: `   ${longReason}   `,
+    });
     expect(update.cancelReason).toHaveLength(500);
     expect(update.cancelReason?.startsWith('x')).toBe(true);
   });

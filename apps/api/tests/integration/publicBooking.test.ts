@@ -311,7 +311,7 @@ describe('POST /api/v1/public/barbershops/:slug/appointments', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.bookingReference).toMatch(/^pb_[A-Z2-7]{16}$/u);
+    expect(res.body.data.bookingReference).toMatch(/^pb_[A-Z2-7]{20}$/u);
     expect(res.body.data.barbershopName).toBe('Booking Shop');
     expect(res.body.data.serviceName).toBe(fixtures.service30.name);
     expect(res.body.data.barberName).toBe(fixtures.barber.name);

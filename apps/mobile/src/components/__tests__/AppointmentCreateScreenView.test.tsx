@@ -133,6 +133,23 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
   });
 }
 
+// Mirror the production pluralization rule for the warning copy so the
+// assertion is robust to i18next upgrades. The test bootstrap sets the
+// preference to English, so the resolved strings come from `en.ts`.
+function expectedWarningBody(
+  count: number,
+  date: string | null,
+): string {
+  if (date) {
+    return count === 1
+      ? `This customer has 1 prior no-show. The last one was on ${date}.`
+      : `This customer has ${count} prior no-shows. The last one was on ${date}.`;
+  }
+  return count === 1
+    ? 'This customer has 1 prior no-show.'
+    : `This customer has ${count} prior no-shows.`;
+}
+
 describe('AppointmentCreateScreenView', () => {
   it('renders the OWNER workflow with employee, service, slot, and summary sections', () => {
     const tree = renderView();
@@ -226,5 +243,62 @@ describe('AppointmentCreateScreenView', () => {
     expect(findByTestId(tree, 'appointment-create-submit-error')).toBeDefined();
     press(findByTestId(tree, 'appointment-create-retry-availability'));
     expect(onRetryAvailability).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AppointmentCreateScreenView customer history warning', () => {
+  it('hides the warning when no history exists (null customerWarning)', () => {
+    const tree = renderView({ customerWarning: null });
+    expect(() => findByTestId(tree, 'appointment-create-customer-warning')).toThrow();
+  });
+
+  it('does NOT warn when the customer only has completed or cancelled visits (noShowCount === 0)', () => {
+    // Even if a non-zero visitCount were returned, the warning contract
+    // is noShowCount > 0 only. We pass noShowCount: 0 explicitly.
+    const tree = renderView({
+      customerWarning: { noShowCount: 0, lastNoShowAt: null },
+    });
+    expect(() => findByTestId(tree, 'appointment-create-customer-warning')).toThrow();
+  });
+
+  it('warns (singular) when the customer has exactly one prior no-show with a date', () => {
+    const tree = renderView({
+      customerWarning: {
+        noShowCount: 1,
+        lastNoShowAt: '2026-05-04T14:00:00.000Z',
+      },
+    });
+    const banner = findByTestId(tree, 'appointment-create-customer-warning');
+    expect(banner).toBeDefined();
+    expect(
+      (banner.props as { accessibilityRole?: string }).accessibilityRole
+    ).toBe('alert');
+    expect(findByText(tree, 'Customer history')).toBeDefined();
+    // Singular form ("1 prior no-show") is rendered.
+    expect(findByText(tree, expectedWarningBody(1, 'May 4, 2026'))).toBeDefined();
+  });
+
+  it('warns (plural) when the customer has multiple prior no-shows', () => {
+    const tree = renderView({
+      customerWarning: {
+        noShowCount: 3,
+        lastNoShowAt: '2026-05-04T14:00:00.000Z',
+      },
+    });
+    const banner = findByTestId(tree, 'appointment-create-customer-warning');
+    expect(banner).toBeDefined();
+    expect(findByText(tree, expectedWarningBody(3, 'May 4, 2026'))).toBeDefined();
+  });
+
+  it('falls back to a generic body when no lastNoShowAt timestamp is available', () => {
+    const tree = renderView({
+      customerWarning: {
+        noShowCount: 2,
+        lastNoShowAt: null,
+      },
+    });
+    const banner = findByTestId(tree, 'appointment-create-customer-warning');
+    expect(banner).toBeDefined();
+    expect(findByText(tree, expectedWarningBody(2, null))).toBeDefined();
   });
 });

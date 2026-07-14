@@ -954,9 +954,11 @@ export async function transitionAppointmentStatus(
 /**
  * Cancels an appointment (CLIENT self-cancel or OWNER/BARBER cancel).
  *
- * Records the cancellation actor (UserRole), timestamp, and optional
- * reason. The reason is trimmed and clamped to 500 chars by the
- * lifecycle helper; an empty/whitespace reason is stored as NULL.
+ * Records the cancellation actor (UserRole), source (STAFF for
+ * OWNER/BARBER, AUTHENTICATED_CLIENT for CLIENT), timestamp, and
+ * optional reason. The reason is trimmed and clamped to 500 chars
+ * by the lifecycle helper; an empty/whitespace reason is stored as
+ * NULL.
  */
 export async function cancelAppointment(
   appointmentId: string,
@@ -976,11 +978,17 @@ export async function cancelAppointment(
     );
   }
 
-  const lifecycleUpdate = buildLifecycleUpdateForCancel(
-    role,
-    options.now ?? new Date(),
-    options.reason
-  );
+  // Decoupled source: OWNER/BARBER writes STAFF, CLIENT writes
+  // AUTHENTICATED_CLIENT. Anonymous flows (public booking cancel,
+  // future automated jobs) call this helper with a different source.
+  const cancellationSource = role === 'CLIENT' ? 'AUTHENTICATED_CLIENT' : 'STAFF';
+
+  const lifecycleUpdate = buildLifecycleUpdateForCancel({
+    actorRole: role,
+    source: cancellationSource,
+    now: options.now ?? new Date(),
+    reason: options.reason,
+  });
 
   return prisma.appointment.update({
     where: { id: appointmentId },
@@ -996,8 +1004,15 @@ export async function cancelAppointment(
 // CUSTOMER INSIGHTS (REPEAT-CUSTOMER LOOKUP)
 // ============================================
 
+/**
+ * Customer insights payload returned by the lookup endpoint.
+ *
+ * Intentionally omits the submitted phone: the caller already has
+ * it, repeating it would expose PII in API logs that capture
+ * response bodies, and it provides no new information to the staff
+ * UI (the warning banner is the actionable part).
+ */
 export interface CustomerInsights {
-  phone: string;
   visitCount: number;
   noShowCount: number;
   cancelledCount: number;
@@ -1126,7 +1141,6 @@ export async function lookupCustomerByPhone(
   }));
 
   return {
-    phone,
     visitCount: matches.length,
     noShowCount,
     cancelledCount,

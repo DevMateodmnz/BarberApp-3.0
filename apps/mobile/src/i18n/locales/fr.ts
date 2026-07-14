@@ -349,10 +349,12 @@ export const fr = {
       staleSlot: 'Veuillez sélectionner un créneau disponible à nouveau.',
     },
     warnings: {
-      repeatingCustomer: {
-        title: 'Attention : client récurrent',
-        bodyWithLastNoShow: 'Ce client a eu {{count}} absences. La dernière était le {{date}}.',
-        bodyGeneric: 'Ce client a eu {{count}} absences précédentes.',
+      customerHistory: {
+        title: 'Historique du client',
+        bodyWithLastNoShow_one: 'Ce client a 1 absence antérieure. La dernière était le {{date}}.',
+        bodyWithLastNoShow_other: 'Ce client a eu {{count}} absences antérieures. La dernière était le {{date}}.',
+        bodyGeneric_one: 'Ce client a 1 absence antérieure.',
+        bodyGeneric_other: 'Ce client a eu {{count}} absences antérieures.',
       },
     },
     errors: {

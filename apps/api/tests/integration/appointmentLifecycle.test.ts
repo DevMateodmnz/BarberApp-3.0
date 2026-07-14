@@ -221,8 +221,8 @@ describe('status transitions stamp the right lifecycle timestamp', () => {
   });
 });
 
-describe('cancel records actor, timestamp, and reason', () => {
-  it('OWNER cancel with reason persists cancelledAt, cancelledByRole, cancelReason', async () => {
+describe('cancel records actor, source, timestamp, and reason', () => {
+  it('OWNER cancel with reason persists cancelledAt, cancelledByRole, cancellationSource, cancelReason', async () => {
     const appointment = await createFutureAppointment('CONFIRMED');
 
     const res = await request(app)
@@ -234,16 +234,18 @@ describe('cancel records actor, timestamp, and reason', () => {
     expect(res.body.data.status).toBe('CANCELLED');
     expect(res.body.data.cancelledAt).toBeTruthy();
     expect(res.body.data.cancelledByRole).toBe('OWNER');
+    expect(res.body.data.cancellationSource).toBe('STAFF');
     expect(res.body.data.cancelReason).toBe('Cliente no respondió llamadas');
 
     const persisted = await prisma.appointment.findUniqueOrThrow({
       where: { id: appointment.id },
     });
     expect(persisted.cancelledByRole).toBe('OWNER');
+    expect(persisted.cancellationSource).toBe('STAFF');
     expect(persisted.cancelReason).toBe('Cliente no respondió llamadas');
   });
 
-  it('CLIENT self-cancel without a body still records timestamps and a NULL reason', async () => {
+  it('CLIENT self-cancel without a body still records timestamps and a NULL reason, with AUTHENTICATED_CLIENT source', async () => {
     const appointment = await createFutureAppointment('CONFIRMED');
 
     const res = await request(app)
@@ -255,7 +257,13 @@ describe('cancel records actor, timestamp, and reason', () => {
     expect(res.body.data.status).toBe('CANCELLED');
     expect(res.body.data.cancelledAt).toBeTruthy();
     expect(res.body.data.cancelledByRole).toBe('CLIENT');
+    expect(res.body.data.cancellationSource).toBe('AUTHENTICATED_CLIENT');
     expect(res.body.data.cancelReason).toBeNull();
+
+    const persisted = await prisma.appointment.findUniqueOrThrow({
+      where: { id: appointment.id },
+    });
+    expect(persisted.cancellationSource).toBe('AUTHENTICATED_CLIENT');
   });
 
   it('rejects overly long reasons before they hit the service', async () => {

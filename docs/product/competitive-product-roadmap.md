@@ -147,15 +147,18 @@ This is the smallest coherent vertical slice that:
 > milestone should be re-evaluated after the previous one lands
 > in production.
 
-1. **Reminders + customer-facing email** — uses lifecycle
-   timestamps added in this milestone. Single mailer, no
-   credentials needed for development. WhatsApp / SMS require
-   external accounts and are out of scope.
+1. **Reminder pipeline (durable outbox + idempotent worker)** —
+   uses the lifecycle timestamps added in this milestone. See
+   [Notification architecture](#notification-architecture) for the
+   data model and execution model. A single mailer for the
+   development milestone; WhatsApp / SMS require external
+   accounts and are out of scope.
 2. **Repeat-customer aggregation surfaces in the mobile
    appointments list** — extend the same lookup used here to
    the day-view. Mark appointments where the customer has a
    recent no-show. Same data source, no new schema.
-3. **Public confirmation email** — once the mailer is wired.
+3. **Public confirmation email** — uses the same notification
+   outbox, with a `type = 'BOOKING_CONFIRMATION'` variant.
 4. **Deposit flow via Mercado Pago** — full production cutover
    with runbook. Payment creates a `pending` reservation that
    holds the slot until the webhook confirms the deposit; on
@@ -166,6 +169,58 @@ This is the smallest coherent vertical slice that:
    become a real product problem, not a theoretical one.
 7. **Marketplace, search, and reviews** — only after multiple
    real businesses exist.
+
+## Notification architecture
+
+Reminders and confirmations are the next natural feature on top
+of the lifecycle. They are deliberately **not** an in-process
+timer inside the API service. An in-process timer is fragile:
+
+- It dies when the API process restarts. A user-visible reminder
+  delivered "at 09:00 the day before" can be silently lost.
+- It does not scale horizontally. Two API replicas would each
+  schedule their own timers and double-deliver.
+- It couples delivery timing to the lifespan of the request
+  process. There is no place to record a delivery attempt, so
+  retries are ad hoc.
+
+The correct shape is a **durable outbox** scanned by an
+**idempotent worker** (cron-like, external to the API), not an
+in-process timer:
+
+```text
+appointment_notifications
+  id                PK
+  appointment_id    FK -> appointments.id
+  type              enum (BOOKING_CONFIRMATION, REMINDER_24H, REMINDER_2H, NO_SHOW_SWEEP, ...)
+  channel           enum (EMAIL, WHATSAPP, SMS, PUSH)
+  scheduled_for     timestamptz
+  status            enum (PENDING, IN_FLIGHT, SENT, FAILED, CANCELLED)
+  attempts          int default 0
+  last_error        text null
+  sent_at           timestamptz null
+  idempotency_key   text   -- unique per (appointment_id, type, scheduled_for)
+  created_at        timestamptz
+  updated_at        timestamptz
+```
+
+Invariant (enforced by the worker, not by the API):
+
+- The worker selects `PENDING` rows with `scheduled_for <= now`,
+  flips them to `IN_FLIGHT` in a single transaction (so a second
+  worker replica cannot pick the same row), and calls the
+  channel adapter. On success the row becomes `SENT`. On
+  failure the row returns to `PENDING` with `attempts++` and
+  exponential backoff.
+- The unique index on `idempotency_key` makes the worker safe
+  against re-runs.
+- The lifecycle service writes notification rows transactionally
+  with the lifecycle change (e.g. when an appointment moves to
+  `CONFIRMED`, a `BOOKING_CONFIRMATION` row is inserted in the
+  same transaction).
+
+The outbox + worker is part of the next milestone and is
+**explicitly out of scope** for the Phase 1 hardening batch.
 
 ## Warning against feature-by-feature copying
 

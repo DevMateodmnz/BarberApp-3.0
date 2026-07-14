@@ -34,7 +34,7 @@ import { AssignServiceSchema } from '../schemas/employeeService.js';
 import {
   AppointmentAvailabilityQuerySchema,
   AppointmentListQuerySchema,
-  CustomerLookupQuerySchema,
+  CustomerLookupBodySchema,
   StaffCreateAppointmentSchema,
 } from '../schemas/appointment.js';
 import { CreateServiceSchema, UpdateServiceSchema } from '../schemas/service.js';
@@ -476,31 +476,30 @@ router.get(
 );
 
 // ============================================
-// GET /api/v1/barbershops/:barbershopId/customers/lookup
+// POST /api/v1/barbershops/:barbershopId/customers/lookup
 // Repeat-customer insights (OWNER + BARBER scoped) used to surface
 // no-show history before a new appointment is committed.
+//
+// Body-only by design: customer phone numbers are PII and must not
+// appear in URLs, access logs, proxies, or referer headers. The
+// response never includes the submitted phone (the caller already
+// knows it; the server would be repeating PII for no reason).
 //
 // Tenant scoping is enforced inside the service so cross-tenant probes
 // return 404 (existence hidden) instead of 403, matching the
 // convention used by `getAppointment`.
 // ============================================
-router.get(
+router.post(
   '/:barbershopId/customers/lookup',
   requireRole('OWNER', 'BARBER'),
+  validateBody(CustomerLookupBodySchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const parsed = CustomerLookupQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        throw new ValidationError(
-          'Invalid customer lookup query parameters',
-          parsed.error.flatten()
-        );
-      }
-
+      const body = req.body as { phone: string; limit?: number };
       const insights = await appointmentService.lookupCustomerByPhone({
         barbershopId: paramBarbershopId(req),
-        phone: parsed.data.phone,
-        limit: parsed.data.limit,
+        phone: body.phone,
+        limit: body.limit ?? 10,
         userId: req.userId,
         userRole: req.userRole,
       });

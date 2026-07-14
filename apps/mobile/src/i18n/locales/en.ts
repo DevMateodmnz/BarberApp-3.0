@@ -354,10 +354,12 @@ export const en = {
       staleSlot: 'Select an available time again.',
     },
     warnings: {
-      repeatingCustomer: {
-        title: 'Heads up: repeat customer',
-        bodyWithLastNoShow: 'This customer had {{count}} no-shows. The last one was on {{date}}.',
-        bodyGeneric: 'This customer had {{count}} previous no-shows.',
+      customerHistory: {
+        title: 'Customer history',
+        bodyWithLastNoShow_one: 'This customer has 1 prior no-show. The last one was on {{date}}.',
+        bodyWithLastNoShow_other: 'This customer has {{count}} prior no-shows. The last one was on {{date}}.',
+        bodyGeneric_one: 'This customer has 1 prior no-show.',
+        bodyGeneric_other: 'This customer has {{count}} prior no-shows.',
       },
     },
     errors: {

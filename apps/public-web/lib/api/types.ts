@@ -88,6 +88,6 @@ export interface PublicCancelBookingResult {
   publicReference: string;
   status: 'CANCELLED';
   cancelledAt: string;
-  cancelledByRole: 'CLIENT';
+  cancellationSource: 'PUBLIC_BOOKING';
   cancelReason: string | null;
 }
