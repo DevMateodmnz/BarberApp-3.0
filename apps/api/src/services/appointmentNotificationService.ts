@@ -47,7 +47,17 @@ export const APPOINTMENT_NOTIFICATION_SUMMARY_SELECT = {
 
 export const APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE = {
   barbershop: true,
-  employee: true,
+  employee: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  },
   client: true,
   service: true,
   notifications: {
@@ -147,6 +157,13 @@ interface AppointmentNotificationContext {
   timezone: string;
   publicSlug: string | null;
   employeeName: string;
+}
+
+interface RescheduleNotificationPayloadInput {
+  previousStartAt: Date;
+  previousEndAt: Date;
+  previousServiceName: string;
+  previousEmployeeName: string;
 }
 
 interface NotificationListRow {
@@ -260,7 +277,8 @@ function clampBatchSize(value: number | undefined): number {
 }
 
 function buildNotificationPayload(
-  context: AppointmentNotificationContext
+  context: AppointmentNotificationContext,
+  reschedule?: RescheduleNotificationPayloadInput
 ): Prisma.InputJsonObject & AppointmentNotificationPayload {
   return {
     customerName: context.clientName,
@@ -271,6 +289,10 @@ function buildNotificationPayload(
     startAt: context.startAt.toISOString(),
     publicSlug: context.publicSlug,
     publicReference: context.publicReference,
+    previousStartAt: reschedule?.previousStartAt.toISOString(),
+    previousEndAt: reschedule?.previousEndAt.toISOString(),
+    previousServiceName: reschedule?.previousServiceName,
+    previousEmployeeName: reschedule?.previousEmployeeName,
   };
 }
 
@@ -283,6 +305,13 @@ function buildReminder24hIdempotencyKey(
   scheduledFor: Date
 ): string {
   return `appointment:${appointmentId}:REMINDER_24H:EMAIL:${scheduledFor.toISOString()}`;
+}
+
+function buildRescheduledIdempotencyKey(
+  appointmentId: string,
+  appointmentChangeId: string
+): string {
+  return `appointment:${appointmentId}:APPOINTMENT_RESCHEDULED:EMAIL:${appointmentChangeId}`;
 }
 
 function computeReminder24hScheduledFor(startAt: Date, now: Date): Date | null {
@@ -471,7 +500,10 @@ function notificationAllowsDelivery(input: {
     return false;
   }
 
-  if (input.type === 'BOOKING_CONFIRMATION') {
+  if (
+    input.type === 'BOOKING_CONFIRMATION'
+    || input.type === 'APPOINTMENT_RESCHEDULED'
+  ) {
     return true;
   }
 
@@ -573,6 +605,68 @@ export async function syncAppointmentReminderAfterReschedule(
       lockedAt: null,
     },
   });
+}
+
+export async function scheduleAppointmentRescheduledNotification(
+  db: NotificationDb,
+  input: {
+    appointmentId: string;
+    appointmentChangeId: string;
+    now?: Date;
+  }
+): Promise<number> {
+  const now = input.now ?? new Date();
+  const context = await loadAppointmentNotificationContext(db, input.appointmentId);
+  const recipientEmail = sanitizeEmail(context.clientEmail);
+
+  if (!recipientEmail) {
+    return 0;
+  }
+
+  const change = await db.appointmentChange.findUnique({
+    where: { id: input.appointmentChangeId },
+    select: {
+      previousStartAt: true,
+      previousEndAt: true,
+      previousServiceName: true,
+      previousEmployeeName: true,
+    },
+  });
+
+  if (!change) {
+    throw new NotFoundError('Appointment change');
+  }
+
+  const payload = buildNotificationPayload(context, {
+    previousStartAt: change.previousStartAt,
+    previousEndAt: change.previousEndAt,
+    previousServiceName: change.previousServiceName,
+    previousEmployeeName: change.previousEmployeeName,
+  });
+
+  const result = await db.appointmentNotification.createMany({
+    data: [
+      {
+        barbershopId: context.barbershopId,
+        appointmentId: context.appointmentId,
+        type: 'APPOINTMENT_RESCHEDULED',
+        channel: 'EMAIL',
+        status: 'PENDING',
+        recipientEmail,
+        scheduledFor: now,
+        nextAttemptAt: now,
+        attempts: 0,
+        idempotencyKey: buildRescheduledIdempotencyKey(
+          context.appointmentId,
+          input.appointmentChangeId
+        ),
+        payload: payload as Prisma.InputJsonObject,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  return result.count;
 }
 
 export async function cancelAppointmentNotifications(

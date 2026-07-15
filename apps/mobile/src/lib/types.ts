@@ -240,6 +240,7 @@ export interface ServiceRecord {
     user: {
       id: string;
       name: string | null;
+      email?: string;
     };
   };
 }
@@ -258,7 +259,8 @@ export type AppointmentStatus =
 
 export type AppointmentNotificationType =
   | 'BOOKING_CONFIRMATION'
-  | 'REMINDER_24H';
+  | 'REMINDER_24H'
+  | 'APPOINTMENT_RESCHEDULED';
 
 export type AppointmentNotificationChannel = 'EMAIL';
 
@@ -283,6 +285,23 @@ export interface AppointmentNotificationSummary {
   attempts: number;
   sentAt: string | null;
   cancelledAt: string | null;
+}
+
+export interface AppointmentChange {
+  id: string;
+  type: 'RESCHEDULED';
+  changedByDisplayName: string;
+  changedByRole: UserRole;
+  previousEmployeeName: string;
+  previousServiceName: string;
+  previousStartAt: string;
+  previousEndAt: string;
+  newEmployeeName: string;
+  newServiceName: string;
+  newStartAt: string;
+  newEndAt: string;
+  reason: string | null;
+  createdAt: string;
 }
 
 export type NotificationOperationsSort = 'newest' | 'scheduled' | 'failed';
@@ -374,6 +393,7 @@ export interface Appointment {
     };
   };
   notifications?: AppointmentNotificationSummary[];
+  changes?: AppointmentChange[];
   client: {
     id: string;
     name: string | null;
@@ -407,6 +427,7 @@ export interface FetchAppointmentAvailabilityInput {
   employeeId: string;
   serviceId: string;
   localDate: string;
+  excludeAppointmentId?: string;
 }
 
 export interface CreateStaffAppointmentInput {
@@ -418,6 +439,13 @@ export interface CreateStaffAppointmentInput {
   clientPhone?: string;
   clientEmail?: string;
   notes?: string;
+}
+
+export interface RescheduleAppointmentInput {
+  employeeId?: string;
+  serviceId?: string;
+  startAt: string;
+  reason?: string;
 }
 
 export type CustomerDirectorySort = 'recent' | 'name' | 'no_shows';

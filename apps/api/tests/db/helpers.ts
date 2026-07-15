@@ -255,6 +255,7 @@ export async function cleanupTestData(): Promise<void> {
   await prisma.publicBookingIdempotency.deleteMany();
   await prisma.appointmentNotificationAttempt.deleteMany();
   await prisma.appointmentNotification.deleteMany();
+  await prisma.appointmentChange.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();

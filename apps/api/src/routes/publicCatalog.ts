@@ -18,6 +18,7 @@ import {
 import {
   cancelPublicBookingByReference,
   createPublicBookingBySlug,
+  getPublicBookingConfirmationByReference,
 } from '../services/publicBookingService.js';
 import {
   getPublicBarbershopBySlug,
@@ -194,6 +195,22 @@ export function createPublicCatalogRouter(
         res
           .status(result.replayed ? 200 : 201)
           .json({ success: true, data: result.confirmation });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.get(
+    '/barbershops/:slug/appointments/:reference',
+    catalogReadRateLimit,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const confirmation = await getPublicBookingConfirmationByReference({
+          slug: paramSlug(req),
+          publicReference: req.params.reference ?? '',
+        });
+        res.json({ success: true, data: confirmation });
       } catch (error) {
         next(error);
       }

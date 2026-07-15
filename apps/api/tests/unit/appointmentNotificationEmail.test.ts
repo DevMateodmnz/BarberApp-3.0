@@ -54,4 +54,32 @@ describe('buildAppointmentNotificationEmail', () => {
     expect(email.html).not.toContain('clerk');
     expect(email.messageId).not.toContain('appt_1');
   });
+
+  it('renders a Spanish reschedule confirmation with previous and new schedule copy', () => {
+    const email = buildAppointmentNotificationEmail({
+      type: 'APPOINTMENT_RESCHEDULED',
+      channel: 'EMAIL',
+      idempotencyKey: 'appointment:appt_1:APPOINTMENT_RESCHEDULED:EMAIL:change_1',
+      recipientEmail: 'cliente@example.com',
+      payload: {
+        ...basePayload,
+        serviceName: 'Corte premium',
+        employeeName: 'María',
+        startAt: '2026-07-22T16:00:00.000Z',
+        previousStartAt: '2026-07-20T13:00:00.000Z',
+        previousEndAt: '2026-07-20T13:30:00.000Z',
+        previousServiceName: 'Corte clásico',
+        previousEmployeeName: 'Carlos',
+      },
+      publicWebBaseUrl: 'http://localhost:3001',
+    });
+
+    expect(email.subject).toBe('Tu turno fue reprogramado en Barbería Central');
+    expect(email.text).toContain('Horario anterior');
+    expect(email.text).toContain('Nuevo servicio: Corte premium');
+    expect(email.text).toContain('Nuevo barbero: María');
+    expect(email.html).toContain('Nuevo horario');
+    expect(email.html).toContain('Cancelar turno');
+    expect(email.messageId).not.toContain('change_1');
+  });
 });

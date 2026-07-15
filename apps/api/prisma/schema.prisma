@@ -58,6 +58,11 @@ enum AppointmentCancellationSource {
 enum AppointmentNotificationType {
   BOOKING_CONFIRMATION
   REMINDER_24H
+  APPOINTMENT_RESCHEDULED
+}
+
+enum AppointmentChangeType {
+  RESCHEDULED
 }
 
 enum AppointmentNotificationChannel {
@@ -98,6 +103,7 @@ model User {
   ownedBarbershops    Barbershop[]         @relation("BarbershopOwner")
   employees           Employee[]
   clientAppointments  Appointment[]        @relation("AppointmentClient")
+  appointmentChanges  AppointmentChange[]  @relation("AppointmentChangeActor")
   uploadedPhotos      Photo[]              @relation("PhotoUploader")
   clientPhotos        Photo[]              @relation("PhotoClient")
   sentInvitations     EmployeeInvitation[] @relation("EmployeeInvitationInvitedBy")
@@ -137,6 +143,7 @@ model Barbershop {
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
   appointmentNotifications        AppointmentNotification[]
   appointmentNotificationAttempts AppointmentNotificationAttempt[]
+  appointmentChanges              AppointmentChange[]
   serviceRecords                  ServiceRecord[]
   employeeInvitations             EmployeeInvitation[]
 
@@ -323,6 +330,7 @@ model Appointment {
   service                         Service                    @relation(fields: [serviceId], references: [id])
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
   notifications                   AppointmentNotification[]
+  changes                         AppointmentChange[]
   serviceRecords                  ServiceRecord[]
 
   // Indexes for common queries
@@ -374,6 +382,38 @@ model AppointmentNotification {
   @@index([barbershopId, createdAt])
   @@unique([id, barbershopId])
   @@map("appointment_notifications")
+}
+
+model AppointmentChange {
+  id                    String                @id @default(cuid())
+  barbershopId          String                @map("barbershop_id")
+  appointmentId         String                @map("appointment_id")
+  type                  AppointmentChangeType
+  changedByUserId       String                @map("changed_by_user_id")
+  changedByRole         UserRole              @map("changed_by_role")
+  previousEmployeeId    String                @map("previous_employee_id")
+  previousEmployeeName  String                @map("previous_employee_name")
+  previousServiceId     String                @map("previous_service_id")
+  previousServiceName   String                @map("previous_service_name")
+  previousStartAt       DateTime              @map("previous_start_at")
+  previousEndAt         DateTime              @map("previous_end_at")
+  newEmployeeId         String                @map("new_employee_id")
+  newEmployeeName       String                @map("new_employee_name")
+  newServiceId          String                @map("new_service_id")
+  newServiceName        String                @map("new_service_name")
+  newStartAt            DateTime              @map("new_start_at")
+  newEndAt              DateTime              @map("new_end_at")
+  reason                String?               @db.VarChar(500)
+  createdAt             DateTime              @default(now()) @map("created_at")
+
+  appointment Appointment @relation(fields: [appointmentId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  barbershop  Barbershop  @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  changedByUser User      @relation("AppointmentChangeActor", fields: [changedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([appointmentId, createdAt])
+  @@index([barbershopId, createdAt])
+  @@index([changedByUserId])
+  @@map("appointment_changes")
 }
 
 model AppointmentNotificationAttempt {

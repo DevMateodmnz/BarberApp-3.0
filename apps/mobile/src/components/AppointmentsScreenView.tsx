@@ -26,7 +26,8 @@ export interface EmployeeFilterOption {
 }
 
 export interface AppointmentActionViewModel {
-  status: AppointmentStatus;
+  id: string;
+  variant: 'secondary' | 'danger';
   label: string;
   testID: string;
   onPress: () => void;
@@ -294,10 +295,10 @@ export function AppointmentsScreenView({
                       >
                         {appointment.actions.map((action) => (
                           <AppButton
-                            key={action.status}
+                            key={action.id}
                             testID={action.testID}
                             title={action.label}
-                            variant={action.status === 'CANCELLED' ? 'danger' : 'secondary'}
+                            variant={action.variant}
                             size="sm"
                             onPress={action.onPress}
                           />

@@ -65,6 +65,8 @@ interface AppointmentsState {
    * stale list after navigating back.
    */
   recordCreatedAppointment: (appointment: Appointment) => void;
+  recordUpdatedAppointment: (appointment: Appointment) => void;
+  reloadLastAppointments: (getToken: () => Promise<string | null>) => Promise<void>;
 
   /** Resets appointments state to initial values. */
   clearAppointments: () => void;
@@ -150,6 +152,27 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
       appointments: upsertAppointmentById(state.appointments, appointment),
       appointmentsError: null,
     }));
+  },
+
+  recordUpdatedAppointment: (appointment) => {
+    if (
+      _lastContext &&
+      !appointmentMatchesContext(appointment, _lastContext)
+    ) {
+      return;
+    }
+
+    set((state) => ({
+      appointments: upsertAppointmentById(state.appointments, appointment),
+      appointmentsError: null,
+    }));
+  },
+
+  reloadLastAppointments: async (getToken) => {
+    if (_lastContext && _lastSelectedDate) {
+      const { loadAppointments } = get();
+      await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+    }
   },
 
   clearAppointments: () => {

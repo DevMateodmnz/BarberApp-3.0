@@ -5,10 +5,12 @@ import { localizeUnknownError } from '@/i18n/errors.js';
 import { ApiError, api, type ApiResponse, type GetToken } from './api.js';
 import type {
   Appointment,
+  AppointmentChange,
   AppointmentAvailability,
   AppointmentStatus,
   CreateStaffAppointmentInput,
   FetchAppointmentAvailabilityInput,
+  RescheduleAppointmentInput,
 } from './types.js';
 
 export interface AppointmentListQuery {
@@ -215,11 +217,49 @@ export async function fetchAppointmentAvailability(
       params: {
         serviceId: input.serviceId,
         localDate: input.localDate,
+        ...(input.excludeAppointmentId
+          ? { excludeAppointmentId: input.excludeAppointmentId }
+          : {}),
       },
     },
   );
 
   return ensureSuccess(response, 'Failed to fetch appointment availability');
+}
+
+export async function rescheduleAppointment(
+  getToken: GetToken,
+  appointmentId: string,
+  input: RescheduleAppointmentInput,
+): Promise<Appointment> {
+  const token = await getToken();
+  const payload: RescheduleAppointmentInput = {
+    startAt: input.startAt,
+    ...(input.employeeId ? { employeeId: input.employeeId } : {}),
+    ...(input.serviceId ? { serviceId: input.serviceId } : {}),
+    ...(trimOptionalText(input.reason) ? { reason: trimOptionalText(input.reason) } : {}),
+  };
+
+  const response = await api.patch<ApiResponse<Appointment>>(
+    `/appointments/${appointmentId}/reschedule`,
+    payload,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, 'Failed to reschedule appointment');
+}
+
+export async function fetchAppointmentChanges(
+  getToken: GetToken,
+  appointmentId: string,
+): Promise<AppointmentChange[]> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<AppointmentChange[]>>(
+    `/appointments/${appointmentId}/changes`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, 'Failed to fetch appointment changes');
 }
 
 export async function createStaffAppointment(

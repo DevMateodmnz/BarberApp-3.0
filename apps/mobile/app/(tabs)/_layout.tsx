@@ -164,6 +164,14 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="appointments-reschedule"
+          options={{
+            title: t('appointments.rescheduleAction'),
+            href: null,
+            tabBarAccessibilityLabel: t('appointments.rescheduleAction'),
+          }}
+        />
+        <Tabs.Screen
           name="customers"
           options={{
             title: t('customers.title'),

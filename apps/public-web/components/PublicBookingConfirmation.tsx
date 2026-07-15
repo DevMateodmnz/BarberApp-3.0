@@ -6,7 +6,10 @@ import type {
   PublicCancelBookingResult,
 } from '@/lib/api/types';
 import { BookingPageNotice } from '@/components/BookingPageNotice';
-import { readBookingConfirmation } from '@/lib/bookingConfirmationStorage';
+import {
+  readBookingConfirmation,
+  saveBookingConfirmation,
+} from '@/lib/bookingConfirmationStorage';
 
 type CancelState =
   | { kind: 'idle' }
@@ -23,7 +26,13 @@ function formatDate(confirmation: PublicBookingConfirmation) {
   }).format(middayUtc);
 }
 
-export function PublicBookingConfirmationView({ slug }: { slug: string }) {
+export function PublicBookingConfirmationView({
+  slug,
+  referenceFromQuery,
+}: {
+  slug: string;
+  referenceFromQuery?: string;
+}) {
   const [confirmation, setConfirmation] = useState<PublicBookingConfirmation | null>(
     null
   );
@@ -31,8 +40,41 @@ export function PublicBookingConfirmationView({ slug }: { slug: string }) {
   const [cancelReason, setCancelReason] = useState('');
 
   useEffect(() => {
-    setConfirmation(readBookingConfirmation(slug));
-  }, [slug]);
+    let cancelled = false;
+    const stored = readBookingConfirmation(slug);
+    setConfirmation(stored);
+
+    const reference = referenceFromQuery?.trim() || stored?.bookingReference;
+    if (!reference) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void fetch(
+      `/api/public-booking/shops/${encodeURIComponent(slug)}/appointments/${encodeURIComponent(reference)}`
+    )
+      .then(async (response) => {
+        const body = (await response.json()) as {
+          success: boolean;
+          data?: PublicBookingConfirmation;
+        };
+
+        if (!response.ok || !body.success || !body.data || cancelled) {
+          return;
+        }
+
+        saveBookingConfirmation(slug, body.data);
+        setConfirmation(body.data);
+      })
+      .catch(() => {
+        // Keep the stored browser copy when the latest confirmation cannot be fetched.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [referenceFromQuery, slug]);
 
   const submitCancel = useCallback(async () => {
     if (!confirmation) {

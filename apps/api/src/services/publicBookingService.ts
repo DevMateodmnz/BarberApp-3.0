@@ -50,7 +50,7 @@ interface PublicBookingConfirmationDto {
   startAt: string;
   endAt: string;
   clientPhoneDisplay: string;
-  status: 'CONFIRMED';
+  status: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW' | 'IN_PROGRESS' | 'PENDING';
 }
 
 interface CreatePublicBookingInput {
@@ -100,6 +100,52 @@ function normalizePublicBookingStartAt(value: string): Date {
   return parsed;
 }
 
+function mapPublicAppointmentConfirmation(appointment: {
+  publicReference: string | null;
+  clientPhone: string | null;
+  status: PublicBookingConfirmationDto['status'];
+  startAt: Date;
+  endAt: Date;
+  serviceName: string;
+  barbershop: {
+    name: string;
+    timezone: string;
+  };
+  employee: {
+    user: {
+      name: string | null;
+    };
+  };
+}): PublicBookingConfirmationDto {
+  if (!appointment.publicReference) {
+    throw new AppError(
+      409,
+      'PUBLIC_BOOKING_IDEMPOTENCY_CONFLICT',
+      'The stored public booking replay record is incomplete'
+    );
+  }
+
+  return {
+    bookingReference: appointment.publicReference,
+    barbershopName: appointment.barbershop.name,
+    serviceName: appointment.serviceName,
+    barberName: resolvePublicBarberDisplayName(appointment.employee.user.name),
+    timezone: appointment.barbershop.timezone,
+    localDate: getLocalDateStringInTimeZone(
+      appointment.barbershop.timezone,
+      appointment.startAt
+    ),
+    localStartTime: getLocalTimeStringInTimeZone(
+      appointment.barbershop.timezone,
+      appointment.startAt
+    ),
+    startAt: appointment.startAt.toISOString(),
+    endAt: appointment.endAt.toISOString(),
+    clientPhoneDisplay: appointment.clientPhone ?? '',
+    status: appointment.status,
+  };
+}
+
 async function loadPublicAppointmentConfirmation(
   appointmentId: string
 ): Promise<PublicBookingConfirmationDto> {
@@ -130,7 +176,7 @@ async function loadPublicAppointmentConfirmation(
     },
   });
 
-  if (!appointment?.publicReference || appointment.status !== 'CONFIRMED') {
+  if (!appointment || appointment.status !== 'CONFIRMED') {
     throw new AppError(
       409,
       'PUBLIC_BOOKING_IDEMPOTENCY_CONFLICT',
@@ -138,25 +184,58 @@ async function loadPublicAppointmentConfirmation(
     );
   }
 
-  return {
-    bookingReference: appointment.publicReference,
-    barbershopName: appointment.barbershop.name,
-    serviceName: appointment.serviceName,
-    barberName: resolvePublicBarberDisplayName(appointment.employee.user.name),
-    timezone: appointment.barbershop.timezone,
-    localDate: getLocalDateStringInTimeZone(
-      appointment.barbershop.timezone,
-      appointment.startAt
-    ),
-    localStartTime: getLocalTimeStringInTimeZone(
-      appointment.barbershop.timezone,
-      appointment.startAt
-    ),
-    startAt: appointment.startAt.toISOString(),
-    endAt: appointment.endAt.toISOString(),
-    clientPhoneDisplay: appointment.clientPhone ?? '',
-    status: 'CONFIRMED',
-  };
+  return mapPublicAppointmentConfirmation(appointment);
+}
+
+export async function getPublicBookingConfirmationByReference(input: {
+  slug: string;
+  publicReference: string;
+}): Promise<PublicBookingConfirmationDto> {
+  const trimmedReference = input.publicReference.trim();
+
+  if (!isPublicBookingReference(trimmedReference)) {
+    throw createPublicNotFoundError();
+  }
+
+  const appointment = await prisma.appointment.findUnique({
+    where: { publicReference: trimmedReference },
+    select: {
+      publicReference: true,
+      clientPhone: true,
+      status: true,
+      startAt: true,
+      endAt: true,
+      serviceName: true,
+      barbershop: {
+        select: {
+          publicSlug: true,
+          isActive: true,
+          name: true,
+          timezone: true,
+        },
+      },
+      employee: {
+        select: {
+          user: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (
+    !appointment ||
+    !appointment.barbershop.publicSlug ||
+    appointment.barbershop.publicSlug !== input.slug ||
+    !appointment.barbershop.isActive
+  ) {
+    throw createPublicNotFoundError();
+  }
+
+  return mapPublicAppointmentConfirmation(appointment);
 }
 
 export async function createPublicBookingBySlug(

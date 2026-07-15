@@ -65,7 +65,7 @@ export interface PublicBookingConfirmation {
   startAt: string;
   endAt: string;
   clientPhoneDisplay: string;
-  status: 'CONFIRMED';
+  status: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW' | 'IN_PROGRESS' | 'PENDING';
 }
 
 export interface PublicCreateAppointmentPayload {

@@ -79,6 +79,16 @@ function buildNotificationLabels(
         return t('appointments.notification.confirmationScheduled');
       }
 
+      if (notification.type === 'APPOINTMENT_RESCHEDULED') {
+        if (notification.status === 'SENT') {
+          return t('appointments.notification.rescheduleSent');
+        }
+        if (notification.status === 'FAILED') {
+          return t('appointments.notification.deliveryError');
+        }
+        return t('appointments.notification.rescheduleScheduled');
+      }
+
       if (notification.status === 'SENT') {
         return t('appointments.notification.reminderSent');
       }
@@ -93,6 +103,18 @@ function buildNotificationLabels(
     .filter((value, index, array) => array.indexOf(value) === index);
 
   return labels;
+}
+
+function canRescheduleAppointment(input: {
+  status: AppointmentStatus;
+  startAt: string;
+  deletedAt: string | null;
+}): boolean {
+  return (
+    input.status === 'CONFIRMED' &&
+    input.deletedAt === null &&
+    new Date(input.startAt).getTime() > Date.now()
+  );
 }
 
 export default function AppointmentsScreen() {
@@ -268,7 +290,8 @@ export default function AppointmentsScreen() {
   const appointmentRows = useMemo<AppointmentRowViewModel[]>(() => {
     return filtered.map((appointment) => {
       const actions: AppointmentActionViewModel[] = getTransitions(appointment.status).map((targetStatus) => ({
-        status: targetStatus,
+        id: targetStatus,
+        variant: targetStatus === 'CANCELLED' ? 'danger' : 'secondary',
         label: getAppointmentTransitionLabel(targetStatus),
         testID: `appointment-action-${appointment.id}-${targetStatus}`,
         onPress: () => {
@@ -280,6 +303,21 @@ export default function AppointmentsScreen() {
           void handleTransition(appointment.id, targetStatus);
         },
       }));
+
+      if (canRescheduleAppointment(appointment)) {
+        actions.unshift({
+          id: 'reschedule',
+          variant: 'secondary',
+          label: t('appointments.rescheduleAction'),
+          testID: `appointment-action-${appointment.id}-reschedule`,
+          onPress: () => {
+            router.push({
+              pathname: '/(tabs)/appointments-reschedule',
+              params: { appointmentId: appointment.id },
+            });
+          },
+        });
+      }
 
       return {
         id: appointment.id,
@@ -295,7 +333,7 @@ export default function AppointmentsScreen() {
         actions,
       };
     });
-  }, [context?.role, filtered, getTransitions, handleCancel, handleTransition, t]);
+  }, [context?.role, filtered, getTransitions, handleCancel, handleTransition, router, t]);
 
   const isRefreshing = isContextLoading || isAppointmentsLoading;
 

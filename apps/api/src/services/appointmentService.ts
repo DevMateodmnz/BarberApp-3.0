@@ -39,6 +39,7 @@ import {
   APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE,
   cancelAppointmentNotifications,
   listAppointmentNotificationSummaries,
+  scheduleAppointmentRescheduledNotification,
   scheduleAppointmentNotificationsForNewAppointment,
   syncAppointmentReminderAfterReschedule,
 } from './appointmentNotificationService.js';
@@ -47,8 +48,8 @@ import { validateEmployeeInBarbershop } from './employeeService.js';
 import { normalizeEmail } from '../lib/email.js';
 import type {
   AppointmentStatus,
-  Employee,
   PrismaClient,
+  Employee,
   Service,
   User,
   UserRole,
@@ -58,6 +59,7 @@ import type {
   AppointmentAvailabilityQuery,
   AppointmentListQuery,
   CreateAppointmentInput,
+  RescheduleAppointmentInput,
   StaffCreateAppointmentInput,
 } from '../schemas/appointment.js';
 
@@ -70,6 +72,28 @@ const BLOCKING_APPOINTMENT_STATUSES: AppointmentStatus[] = [
 const APPOINTMENT_INCLUDE = {
   ...APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE,
 } satisfies Prisma.AppointmentInclude;
+
+const APPOINTMENT_CHANGE_HISTORY_SELECT = {
+  id: true,
+  type: true,
+  changedByRole: true,
+  previousEmployeeName: true,
+  previousServiceName: true,
+  previousStartAt: true,
+  previousEndAt: true,
+  newEmployeeName: true,
+  newServiceName: true,
+  newStartAt: true,
+  newEndAt: true,
+  reason: true,
+  createdAt: true,
+  changedByUser: {
+    select: {
+      name: true,
+      email: true,
+    },
+  },
+} satisfies Prisma.AppointmentChangeSelect;
 
 interface AppointmentSnapshotInput {
   clientName: string;
@@ -116,6 +140,8 @@ interface OwnerAppointmentListContext {
   barbershopId: string;
   timezone: string;
 }
+
+type AppointmentDb = Prisma.TransactionClient | typeof prisma;
 
 // ============================================
 // STATUS TRANSITION RULES
@@ -201,8 +227,19 @@ function normalizeRequiredClientName(value: string): string {
 
 function isDbDoubleBookingError(err: unknown): boolean {
   return (
-    err instanceof Prisma.PrismaClientUnknownRequestError &&
-    err.message.includes('no_double_booking')
+    (
+      err instanceof Prisma.PrismaClientUnknownRequestError &&
+      (
+        err.message.includes('no_double_booking') ||
+        err.message.includes('violates exclusion constraint') ||
+        err.message.includes('23P01')
+      )
+    ) ||
+    (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2004' &&
+      err.message.includes('no_double_booking')
+    )
   );
 }
 
@@ -212,9 +249,10 @@ async function getClientSnapshotSource(clientId: string): Promise<User> {
 
 async function findActiveBarberEmployeeForBarbershop(
   userId: string,
-  barbershopId: string
+  barbershopId: string,
+  db: Pick<PrismaClient, 'employee'> = prisma
 ): Promise<Employee | null> {
-  return prisma.employee.findFirst({
+  return db.employee.findFirst({
     where: {
       userId,
       barbershopId,
@@ -222,6 +260,31 @@ async function findActiveBarberEmployeeForBarbershop(
       deletedAt: null,
     },
   });
+}
+
+function toDisplayName(input: { name: string | null; email: string }): string {
+  return input.name?.trim() || input.email.trim();
+}
+
+function mapAppointmentChangeHistoryRow(
+  row: Prisma.AppointmentChangeGetPayload<{ select: typeof APPOINTMENT_CHANGE_HISTORY_SELECT }>
+) {
+  return {
+    id: row.id,
+    type: row.type,
+    changedByDisplayName: toDisplayName(row.changedByUser),
+    changedByRole: row.changedByRole,
+    previousEmployeeName: row.previousEmployeeName,
+    previousServiceName: row.previousServiceName,
+    previousStartAt: row.previousStartAt.toISOString(),
+    previousEndAt: row.previousEndAt.toISOString(),
+    newEmployeeName: row.newEmployeeName,
+    newServiceName: row.newServiceName,
+    newStartAt: row.newStartAt.toISOString(),
+    newEndAt: row.newEndAt.toISOString(),
+    reason: row.reason,
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 function buildClientSnapshotFromUser(
@@ -333,9 +396,10 @@ function withLocalDateRange(
 
 async function validateServiceBelongsToBarbershop(
   serviceId: string,
-  barbershopId: string
+  barbershopId: string,
+  db: Pick<PrismaClient, 'service'> = prisma
 ): Promise<Service> {
-  const service = await prisma.service.findUnique({
+  const service = await db.service.findUnique({
     where: { id: serviceId },
   });
 
@@ -358,9 +422,10 @@ async function validateServiceBelongsToBarbershop(
 
 async function validateEmployeeBelongsToBarbershop(
   employeeId: string,
-  barbershopId: string
+  barbershopId: string,
+  db: Pick<PrismaClient, 'employee'> = prisma
 ): Promise<Employee> {
-  const employee = await prisma.employee.findUnique({
+  const employee = await db.employee.findUnique({
     where: { id: employeeId },
   });
 
@@ -387,9 +452,10 @@ async function validateEmployeeBelongsToBarbershop(
  */
 async function validateEmployeeOffersService(
   employeeId: string,
-  serviceId: string
+  serviceId: string,
+  db: Pick<PrismaClient, 'employeeService'> = prisma
 ): Promise<void> {
-  const link = await prisma.employeeService.findUnique({
+  const link = await db.employeeService.findUnique({
     where: {
       employeeId_serviceId: { employeeId, serviceId },
     },
@@ -403,14 +469,15 @@ async function validateEmployeeOffersService(
 async function resolveEligibleBookingContext(
   barbershopId: string,
   employeeId: string,
-  serviceId: string
+  serviceId: string,
+  db: Pick<PrismaClient, 'employee' | 'service' | 'employeeService'> = prisma
 ): Promise<EligibleBookingContext> {
   const [employee, service] = await Promise.all([
-    validateEmployeeBelongsToBarbershop(employeeId, barbershopId),
-    validateServiceBelongsToBarbershop(serviceId, barbershopId),
+    validateEmployeeBelongsToBarbershop(employeeId, barbershopId, db),
+    validateServiceBelongsToBarbershop(serviceId, barbershopId, db),
   ]);
 
-  await validateEmployeeOffersService(employee.id, service.id);
+  await validateEmployeeOffersService(employee.id, service.id, db);
 
   return { employee, service };
 }
@@ -790,7 +857,7 @@ export async function getAppointmentAvailability(input: AvailabilityInput) {
   }
 
   const now = input.now ?? new Date();
-  const { serviceId, localDate } = query;
+  const { serviceId, localDate, excludeAppointmentId } = query;
   const timezone = await getBarbershopTimezone(barbershopId);
   if (localDate < getLocalDateStringInTimeZone(timezone, now)) {
     throw new AppError(
@@ -805,6 +872,18 @@ export async function getAppointmentAvailability(input: AvailabilityInput) {
     employeeId,
     serviceId
   );
+
+  if (excludeAppointmentId) {
+    const excludedAppointment = await getAppointment(
+      excludeAppointmentId,
+      input.userId,
+      userRole
+    );
+    if (excludedAppointment.barbershopId !== barbershopId) {
+      throw new NotFoundError('Appointment');
+    }
+  }
+
   const slots = await buildAvailabilitySlots({
     barbershopId,
     employeeId,
@@ -814,6 +893,7 @@ export async function getAppointmentAvailability(input: AvailabilityInput) {
     slotIntervalMinutes: APPOINTMENT_SLOT_INTERVAL_MINUTES,
     blockingStatuses: BLOCKING_APPOINTMENT_STATUSES,
     now,
+    excludeAppointmentId,
   });
 
   return {
@@ -923,9 +1003,10 @@ export async function listEmployeeAppointments(
 export async function getAppointment(
   appointmentId: string,
   userId: string,
-  role: UserRole
+  role: UserRole,
+  db: AppointmentDb = prisma
 ) {
-  const appointment = await prisma.appointment.findUnique({
+  const appointment = await db.appointment.findUnique({
     where: { id: appointmentId },
     include: APPOINTMENT_INCLUDE,
   });
@@ -935,7 +1016,7 @@ export async function getAppointment(
   }
 
   if (role === 'OWNER') {
-    const barbershop = await prisma.barbershop.findUnique({
+    const barbershop = await db.barbershop.findUnique({
       where: { id: appointment.barbershopId },
     });
     if (!barbershop || barbershop.ownerId !== userId) {
@@ -944,7 +1025,8 @@ export async function getAppointment(
   } else if (role === 'BARBER') {
     const employee = await findActiveBarberEmployeeForBarbershop(
       userId,
-      appointment.barbershopId
+      appointment.barbershopId,
+      db
     );
     if (!employee || employee.id !== appointment.employeeId) {
       throw new NotFoundError('Appointment');
@@ -965,9 +1047,38 @@ export async function listAppointmentNotifications(
   return listAppointmentNotificationSummaries(appointmentId, barbershopId);
 }
 
+export async function listAppointmentChanges(
+  appointmentId: string,
+  userId: string,
+  role: UserRole
+) {
+  const appointment = await getAppointment(appointmentId, userId, role);
+  const changes = await prisma.appointmentChange.findMany({
+    where: {
+      appointmentId: appointment.id,
+      barbershopId: appointment.barbershopId,
+    },
+    select: APPOINTMENT_CHANGE_HISTORY_SELECT,
+    orderBy: [
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ],
+    take: 20,
+  });
+
+  return changes.map(mapAppointmentChangeHistoryRow);
+}
+
 /**
- * Updates an appointment (reschedule).
- * Enforces: tenant isolation, business hours, double-booking prevention.
+ * Legacy update flow used by existing clients.
+ *
+ * Preserves the pre-audit semantics:
+ * - allows pending/confirmed/in-progress updates except terminal states
+ * - supports notes-only edits
+ * - syncs reminder notifications when startAt changes
+ * - does not write appointmentChange audit rows or reschedule emails
+ *
+ * New audited staff reschedules should use PATCH /appointments/:id/reschedule.
  */
 export async function updateAppointment(
   appointmentId: string,
@@ -985,6 +1096,10 @@ export async function updateAppointment(
     throw new BadRequestError(
       `Cannot update a ${appointment.status.toLowerCase()} appointment`
     );
+  }
+
+  if (!data.startAt && data.notes === undefined) {
+    throw new BadRequestError('At least one field must be provided');
   }
 
   const updateData: Record<string, unknown> = {};
@@ -1048,6 +1163,226 @@ export async function updateAppointment(
     if (isDbDoubleBookingError(err)) {
       throw new ConflictError(
         'The new time slot conflicts with an existing appointment'
+      );
+    }
+    throw err;
+  }
+}
+
+function assertRescheduleEligibility(input: {
+  status: AppointmentStatus;
+  deletedAt: Date | null;
+  startAt: Date;
+  now: Date;
+}): void {
+  if (
+    input.status !== 'CONFIRMED' ||
+    input.deletedAt !== null ||
+    input.startAt.getTime() <= input.now.getTime()
+  ) {
+    throw new AppError(
+      409,
+      'APPOINTMENT_RESCHEDULE_NOT_ALLOWED',
+      'Only future confirmed appointments can be rescheduled'
+    );
+  }
+}
+
+function isNoopReschedule(input: {
+  appointment: {
+    employeeId: string;
+    serviceId: string;
+    startAt: Date;
+    endAt: Date;
+  };
+  nextEmployeeId: string;
+  nextServiceId: string;
+  nextStartAt: Date;
+  nextEndAt: Date;
+}): boolean {
+  return (
+    input.appointment.employeeId === input.nextEmployeeId &&
+    input.appointment.serviceId === input.nextServiceId &&
+    input.appointment.startAt.getTime() === input.nextStartAt.getTime() &&
+    input.appointment.endAt.getTime() === input.nextEndAt.getTime()
+  );
+}
+
+export async function rescheduleAppointment(
+  appointmentId: string,
+  input: RescheduleAppointmentInput,
+  userId: string,
+  role: UserRole,
+  now: Date = new Date()
+) {
+  if (role === 'CLIENT') {
+    throw new ForbiddenError('Clients cannot reschedule appointments');
+  }
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const appointment = await getAppointment(appointmentId, userId, role, tx);
+
+      assertRescheduleEligibility({
+        status: appointment.status,
+        deletedAt: appointment.deletedAt,
+        startAt: appointment.startAt,
+        now,
+      });
+
+      const targetEmployeeId = input.employeeId ?? appointment.employeeId;
+      const targetServiceId = input.serviceId ?? appointment.serviceId;
+
+      if (role === 'BARBER' && targetEmployeeId !== appointment.employeeId) {
+        throw new AppError(
+          403,
+          'FORBIDDEN_EMPLOYEE_SCOPE',
+          'Barbers can only reschedule appointments within their own employee profile'
+        );
+      }
+
+      const { employee: targetEmployee, service: targetService } =
+        await resolveEligibleBookingContext(
+          appointment.barbershopId,
+          targetEmployeeId,
+          targetServiceId,
+          tx
+        );
+
+      const targetEmployeeProfile = await tx.employee.findUniqueOrThrow({
+        where: { id: targetEmployee.id },
+        select: {
+          id: true,
+          user: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      const nextStartAt = new Date(input.startAt);
+      validateAppointmentStartAt(nextStartAt, appointment.barbershop.timezone, {
+        now,
+      });
+      const nextEndAt = calculateAppointmentEndAt(
+        nextStartAt,
+        targetService.durationMinutes
+      );
+
+      if (
+        isNoopReschedule({
+          appointment,
+          nextEmployeeId: targetEmployeeId,
+          nextServiceId: targetServiceId,
+          nextStartAt,
+          nextEndAt,
+        })
+      ) {
+        throw new AppError(
+          400,
+          'APPOINTMENT_RESCHEDULE_NOOP',
+          'The appointment already matches the requested employee, service, and time'
+        );
+      }
+
+      await validateBusinessHours({
+        barbershopId: appointment.barbershopId,
+        startAt: nextStartAt,
+        endAt: nextEndAt,
+      });
+
+      const conflict = await hasTimeConflict(
+        targetEmployeeId,
+        nextStartAt,
+        nextEndAt,
+        appointment.id,
+        tx
+      );
+      if (conflict) {
+        throw new AppError(
+          409,
+          'APPOINTMENT_SLOT_UNAVAILABLE',
+          'This time slot is already booked'
+        );
+      }
+
+      const updateResult = await tx.appointment.updateMany({
+        where: {
+          id: appointment.id,
+          status: 'CONFIRMED',
+          deletedAt: null,
+          employeeId: appointment.employeeId,
+          serviceId: appointment.serviceId,
+          startAt: appointment.startAt,
+          endAt: appointment.endAt,
+        },
+        data: {
+          employeeId: targetEmployeeId,
+          serviceId: targetServiceId,
+          serviceName: targetService.name,
+          servicePriceCents: targetService.priceCents,
+          serviceDurationMinutes: targetService.durationMinutes,
+          serviceCurrency: targetService.currency,
+          startAt: nextStartAt,
+          endAt: nextEndAt,
+        },
+      });
+
+      if (updateResult.count === 0) {
+        throw new AppError(
+          409,
+          'APPOINTMENT_RESCHEDULE_CONFLICT',
+          'The appointment was changed by another operation. Refresh and try again.'
+        );
+      }
+
+      const change = await tx.appointmentChange.create({
+        data: {
+          barbershopId: appointment.barbershopId,
+          appointmentId: appointment.id,
+          type: 'RESCHEDULED',
+          changedByUserId: userId,
+          changedByRole: role,
+          previousEmployeeId: appointment.employeeId,
+          previousEmployeeName: toDisplayName(appointment.employee.user),
+          previousServiceId: appointment.serviceId,
+          previousServiceName: appointment.serviceName,
+          previousStartAt: appointment.startAt,
+          previousEndAt: appointment.endAt,
+          newEmployeeId: targetEmployeeId,
+          newEmployeeName: toDisplayName(targetEmployeeProfile.user),
+          newServiceId: targetServiceId,
+          newServiceName: targetService.name,
+          newStartAt: nextStartAt,
+          newEndAt: nextEndAt,
+          reason: normalizeOptionalText(input.reason),
+        },
+      });
+
+      await syncAppointmentReminderAfterReschedule(tx, {
+        appointmentId: appointment.id,
+        now,
+      });
+
+      await scheduleAppointmentRescheduledNotification(tx, {
+        appointmentId: appointment.id,
+        appointmentChangeId: change.id,
+        now,
+      });
+
+      return tx.appointment.findUniqueOrThrow({
+        where: { id: appointment.id },
+        include: APPOINTMENT_INCLUDE,
+      });
+    });
+  } catch (err) {
+    if (isDbDoubleBookingError(err)) {
+      throw new AppError(
+        409,
+        'APPOINTMENT_SLOT_UNAVAILABLE',
+        'This time slot is already booked'
       );
     }
     throw err;

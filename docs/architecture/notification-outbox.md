@@ -140,3 +140,18 @@ The worker fails clearly if SMTP is not configured.
 ## Delivery ambiguity
 
 BarberApp keeps the worker as the only delivery path and records attempt history for every transport call, but SMTP success and database commit cannot be made globally atomic. A process crash after SMTP acceptance and before the state commit can still leave ambiguity. We mitigate this with deterministic Message-ID generation, hashed stored provider identifiers, and explicit operator visibility through the notification-operations surface.
+
+## Rescheduling integration
+
+The outbox now participates in staff rescheduling:
+
+- `REMINDER_24H` rows are cancelled when a reschedule makes the old
+  reminder obsolete;
+- a fresh `REMINDER_24H` row is inserted only when the new start stays
+  more than 24 hours away;
+- a new `APPOINTMENT_RESCHEDULED` email row is inserted immediately for
+  appointments with an email snapshot;
+- the reschedule notification idempotency key is based on the
+  append-only `appointment_change.id`, so a later legitimate
+  reschedule creates a new confirmation while the same change event
+  cannot duplicate it.

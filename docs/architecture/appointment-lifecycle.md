@@ -413,3 +413,20 @@ The Phase 1 hardening is delivered as two additive migrations:
 | Mobile API client cancel-with-reason and lookup | `apps/mobile/tests/unit/appointmentsStore.test.ts` |
 | Mobile warning copy with no-show pluralization | `apps/mobile/src/components/__tests__/AppointmentCreateScreenView.test.tsx` |
 | Public-web confirmation cancel flow | (covered by existing publicBookingConfirmation test) |
+
+## Rescheduling
+
+Appointment rescheduling is now a first-class staff workflow and is
+documented in detail in
+[`docs/architecture/appointment-rescheduling.md`](./appointment-rescheduling.md).
+
+Lifecycle-specific rules worth calling out here:
+
+- rescheduling is **not** a lifecycle status transition; the row stays
+  `CONFIRMED`;
+- only future confirmed appointments are eligible;
+- the reschedule write uses a compare-and-swap guard on the original
+  appointment shape so a competing lifecycle transition or competing
+  reschedule cannot silently overwrite the winner;
+- append-only `appointment_changes` rows preserve the operational audit
+  trail separately from lifecycle timestamps.

@@ -31,6 +31,7 @@ export interface BuildAvailabilitySlotsInput {
   now?: Date;
   minimumNoticeMinutes?: number;
   maximumBookingHorizonDays?: number;
+  excludeAppointmentId?: string;
 }
 
 function candidateSlotsOverlap(
@@ -117,6 +118,9 @@ export async function buildAvailabilitySlots(
 
   const blockingAppointments = await db.appointment.findMany({
     where: {
+      id: input.excludeAppointmentId
+        ? { not: input.excludeAppointmentId }
+        : undefined,
       employeeId,
       status: { in: blockingStatuses },
       startAt: { lt: nextDayStart },

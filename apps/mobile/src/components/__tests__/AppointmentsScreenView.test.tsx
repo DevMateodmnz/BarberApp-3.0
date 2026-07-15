@@ -85,13 +85,15 @@ function makeEmployeeFilters(overrides: Partial<EmployeeFilterOption>[] = []): E
 function makeActions(overrides: Partial<AppointmentActionViewModel>[] = []): AppointmentActionViewModel[] {
   const base: AppointmentActionViewModel[] = [
     {
-      status: 'CONFIRMED',
+      id: 'CONFIRMED',
+      variant: 'secondary',
       label: 'Confirm',
       testID: 'appointment-action-appt-1-CONFIRMED',
       onPress: vi.fn(),
     },
     {
-      status: 'CANCELLED',
+      id: 'CANCELLED',
+      variant: 'danger',
       label: 'Cancel',
       testID: 'appointment-action-appt-1-CANCELLED',
       onPress: vi.fn(),

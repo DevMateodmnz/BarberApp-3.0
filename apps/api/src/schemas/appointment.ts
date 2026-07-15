@@ -29,7 +29,16 @@ export const CreateAppointmentSchema = z
 export const UpdateAppointmentSchema = z
   .object({
     startAt: z.string().datetime().optional(),
-    notes: z.string().max(500).optional(),
+    notes: z.string().trim().max(500).optional(),
+  })
+  .strict();
+
+export const RescheduleAppointmentSchema = z
+  .object({
+    employeeId: z.string().min(1, 'Employee ID is required').optional(),
+    serviceId: z.string().min(1, 'Service ID is required').optional(),
+    startAt: z.string().datetime({ message: 'startAt must be ISO 8601 datetime' }),
+    reason: z.string().trim().max(500).optional(),
   })
   .strict();
 
@@ -50,6 +59,7 @@ export const AppointmentAvailabilityQuerySchema = z
   .object({
     serviceId: z.string().min(1, 'Service ID is required'),
     localDate: ServiceRecordDateSchema,
+    excludeAppointmentId: z.string().min(1).optional(),
   })
   .strict();
 
@@ -112,6 +122,7 @@ export const CustomerLookupBodySchema = z
 
 export type CreateAppointmentInput = z.infer<typeof CreateAppointmentSchema>;
 export type UpdateAppointmentInput = z.infer<typeof UpdateAppointmentSchema>;
+export type RescheduleAppointmentInput = z.infer<typeof RescheduleAppointmentSchema>;
 export type StaffCreateAppointmentInput = z.infer<
   typeof StaffCreateAppointmentSchema
 >;

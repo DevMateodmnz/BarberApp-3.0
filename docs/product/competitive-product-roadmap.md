@@ -188,19 +188,24 @@ operator workflow:
    implemented as an OWNER-only mobile operations surface plus
    summary/list/detail APIs, append-only worker attempt history,
    and safe compare-and-swap manual retry for terminal failures.
-3. **Repeat-customer aggregation surfaces in the mobile
+3. **Appointment rescheduling and change audit** — now
+   implemented as an atomic staff reschedule flow with
+   append-only appointment history, reminder resync, a
+   dedicated reschedule confirmation email, mobile UI, and
+   public-reference compatibility.
+4. **Repeat-customer aggregation surfaces in the mobile
    appointments list** — extend the same customer anchor to
    the day-view so staff can spot repeat no-shows without
    leaving the appointments screen.
-4. **Deposit flow via Mercado Pago** — full production cutover
+5. **Deposit flow via Mercado Pago** — full production cutover
    with runbook. Payment creates a `pending` reservation that
    holds the slot until the webhook confirms the deposit; on
    timeout the slot is released.
-5. **Promotions and loyalty** — only after the payment stack is
+6. **Promotions and loyalty** — only after the payment stack is
    real.
-6. **Platform administration** — when multi-tenant operations
+7. **Platform administration** — when multi-tenant operations
    become a real product problem, not a theoretical one.
-7. **Marketplace, search, and reviews** — only after multiple
+8. **Marketplace, search, and reviews** — only after multiple
    real businesses exist.
 
 ## Notification architecture

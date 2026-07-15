@@ -60,6 +60,11 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Intl time-format option value for localized appointment timestamps, not interface copy.',
   },
   {
+    file: 'src/components/AppointmentRescheduleScreenView.tsx',
+    literal: '2-digit',
+    reason: 'Intl time-format option value for localized reschedule history timestamps, not interface copy.',
+  },
+  {
     file: 'src/lib/notificationOperationsPresentation.ts',
     literal: '2-digit',
     reason: 'Intl time-format option value for localized notification timestamps, not interface copy.',
@@ -177,6 +182,16 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
   {
     file: 'src/lib/appointments.ts',
     literal: 'Failed to create appointment',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/appointments.ts',
+    literal: 'Failed to reschedule appointment',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/appointments.ts',
+    literal: 'Failed to fetch appointment changes',
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
   },
   {

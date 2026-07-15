@@ -12,6 +12,10 @@ export interface AppointmentNotificationPayload {
   startAt: string;
   publicSlug: string | null;
   publicReference: string | null;
+  previousStartAt?: string;
+  previousEndAt?: string;
+  previousServiceName?: string;
+  previousEmployeeName?: string;
 }
 
 export interface AppointmentNotificationEmailInput {
@@ -173,6 +177,62 @@ function buildReminderCopy(
   };
 }
 
+function buildRescheduledCopy(
+  payload: AppointmentNotificationPayload,
+  publicCancellationUrl: string | null
+): { subject: string; text: string; html: string } {
+  const localDate = formatLocalDate(payload.startAt, payload.timezone);
+  const localTime = formatLocalTime(payload.startAt, payload.timezone);
+  const previousDate = payload.previousStartAt
+    ? formatLocalDate(payload.previousStartAt, payload.timezone)
+    : null;
+  const previousTime = payload.previousStartAt
+    ? formatLocalTime(payload.previousStartAt, payload.timezone)
+    : null;
+  const footer = buildFooter(payload);
+
+  return {
+    subject: `Tu turno fue reprogramado en ${payload.barbershopName}`,
+    text: [
+      `Hola ${payload.customerName},`,
+      '',
+      `Tu turno en ${payload.barbershopName} cambió de horario.`,
+      previousDate && previousTime
+        ? `Horario anterior: ${previousDate} a las ${previousTime}`
+        : null,
+      `Nuevo servicio: ${payload.serviceName}`,
+      `Nuevo barbero: ${payload.employeeName}`,
+      `Nueva fecha: ${localDate}`,
+      `Nuevo horario: ${localTime}`,
+      publicCancellationUrl
+        ? `Si necesitás cancelar, usá este enlace: ${publicCancellationUrl}`
+        : 'Si necesitás cancelar, comunicate con la barbería cuanto antes.',
+      footer.text,
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    html: [
+      `<p>Hola ${escapeHtml(payload.customerName)},</p>`,
+      `<p>Tu turno en <strong>${escapeHtml(payload.barbershopName)}</strong> cambió de horario.</p>`,
+      '<ul>',
+      previousDate && previousTime
+        ? `<li><strong>Horario anterior:</strong> ${escapeHtml(previousDate)} a las ${escapeHtml(previousTime)}</li>`
+        : '',
+      `<li><strong>Nuevo servicio:</strong> ${escapeHtml(payload.serviceName)}</li>`,
+      `<li><strong>Nuevo barbero:</strong> ${escapeHtml(payload.employeeName)}</li>`,
+      `<li><strong>Nueva fecha:</strong> ${escapeHtml(localDate)}</li>`,
+      `<li><strong>Nuevo horario:</strong> ${escapeHtml(localTime)}</li>`,
+      '</ul>',
+      publicCancellationUrl
+        ? `<p>Si necesitás cancelar, podés hacerlo acá: <a href="${escapeHtml(publicCancellationUrl)}">Cancelar turno</a></p>`
+        : '<p>Si necesitás cancelar, comunicate con la barbería cuanto antes.</p>',
+      footer.html,
+    ]
+      .filter(Boolean)
+      .join(''),
+  };
+}
+
 export function buildAppointmentNotificationEmail(
   input: AppointmentNotificationEmailInput
 ): EmailMessage {
@@ -186,7 +246,9 @@ export function buildAppointmentNotificationEmail(
   );
   const copy = input.type === 'BOOKING_CONFIRMATION'
     ? buildConfirmationCopy(input.payload, publicCancellationUrl)
-    : buildReminderCopy(input.payload, publicCancellationUrl);
+    : input.type === 'REMINDER_24H'
+      ? buildReminderCopy(input.payload, publicCancellationUrl)
+      : buildRescheduledCopy(input.payload, publicCancellationUrl);
 
   return {
     to: input.recipientEmail,

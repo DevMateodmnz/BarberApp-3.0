@@ -123,7 +123,7 @@ function parseSummaryQuery(
 
 function parseAvailabilityQuery(
   req: Request,
-): { serviceId: string; localDate: string } {
+) {
   const parsed = AppointmentAvailabilityQuerySchema.safeParse(req.query);
 
   if (!parsed.success) {
