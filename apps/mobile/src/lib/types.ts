@@ -218,6 +218,73 @@ export interface WorkingHoursDay {
   isActive: boolean;
 }
 
+export type EmployeeScheduleMode = 'INHERIT_BARBERSHOP' | 'CUSTOM';
+
+export type EmployeeScheduleSource =
+  | 'weekly'
+  | 'weekly_closed'
+  | 'date_exception_closed'
+  | 'date_exception_custom'
+  | 'CUSTOM_WEEKLY'
+  | 'EMPLOYEE_CUSTOM_HOURS'
+  | 'EMPLOYEE_FULL_DAY_OFF'
+  | 'EMPLOYEE_CLOSED_DAY'
+  | 'INACTIVE_EMPLOYEE';
+
+export interface EmployeeScheduleWeeklyInterval {
+  dayOfWeek: number;
+  start: string;
+  end: string;
+}
+
+export interface EmployeeScheduleExceptionInterval {
+  start: string;
+  end: string;
+}
+
+export interface EmployeeScheduleExceptionSummary {
+  localDate: string;
+  type: 'FULL_DAY_OFF' | 'CUSTOM_HOURS';
+  reason: string | null;
+  intervals: EmployeeScheduleExceptionInterval[];
+}
+
+export interface EmployeeSchedulePreviewDay {
+  localDate: string;
+  source: EmployeeScheduleSource;
+  intervals: EmployeeScheduleExceptionInterval[];
+}
+
+export interface EmployeeScheduleConflictSummary {
+  appointmentId: string;
+  startAt: string;
+  endAt: string;
+  customerDisplayName: string;
+  serviceName: string;
+  reasonCode:
+    | 'BARBERSHOP_CLOSED'
+    | 'EMPLOYEE_NOT_WORKING'
+    | 'EMPLOYEE_TIME_OFF'
+    | 'OUTSIDE_CUSTOM_HOURS';
+}
+
+export interface EmployeeScheduleDetail {
+  employee: {
+    id: string;
+    displayName: string;
+    isActive: boolean;
+  };
+  timezone: string;
+  scheduleMode: EmployeeScheduleMode;
+  expectedUpdatedAt: string;
+  weeklyIntervals: EmployeeScheduleWeeklyInterval[];
+  barbershopWeeklyIntervals: EmployeeScheduleWeeklyInterval[];
+  upcomingExceptions: EmployeeScheduleExceptionSummary[];
+  effectivePreview: EmployeeSchedulePreviewDay[];
+  conflictingFutureAppointmentsCount: number;
+  conflictingFutureAppointments: EmployeeScheduleConflictSummary[];
+}
+
 export interface ServiceRecord {
   id: string;
   barbershopId: string;
@@ -468,6 +535,13 @@ export interface DailyScheduleBoardAppointment {
   noShowCount: number;
   hasPreviousNoShows: boolean;
   notificationSummary: DailyScheduleBoardAppointmentNotificationSummary | null;
+  isOutsideWorkingHours: boolean;
+  outsideWorkingHoursReasonCode:
+    | 'BARBERSHOP_CLOSED'
+    | 'EMPLOYEE_NOT_WORKING'
+    | 'EMPLOYEE_TIME_OFF'
+    | 'EMPLOYEE_SCHEDULE_CONFLICT'
+    | null;
   canReschedule: boolean;
   canStart: boolean;
   canComplete: boolean;
@@ -490,11 +564,9 @@ export interface DailyScheduleBoardEmployee {
   name: string;
   isCurrentUser: boolean;
   workingDay: {
-    source:
-      | 'weekly'
-      | 'weekly_closed'
-      | 'date_exception_closed'
-      | 'date_exception_custom';
+    source: EmployeeScheduleSource;
+    scheduleMode: EmployeeScheduleMode;
+    availabilityState: 'WORKING' | 'OFF' | 'CUSTOM_HOURS' | 'TIME_OFF';
     intervals: DailyScheduleBoardWorkingInterval[];
     closedIntervals: DailyScheduleBoardClosedInterval[];
   };

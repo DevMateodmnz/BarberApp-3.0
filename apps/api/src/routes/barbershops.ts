@@ -32,6 +32,10 @@ import { CreateEmployeeSchema } from '../schemas/employee.js';
 import { CreateEmployeeInvitationSchema } from '../schemas/employeeInvitation.js';
 import { AssignServiceSchema } from '../schemas/employeeService.js';
 import {
+  UpdateEmployeeScheduleSchema,
+  UpsertEmployeeScheduleExceptionSchema,
+} from '../schemas/employeeSchedule.js';
+import {
   AppointmentAvailabilityQuerySchema,
   DailyScheduleBoardQuerySchema,
   AppointmentListQuerySchema,
@@ -44,6 +48,7 @@ import {
 } from '../schemas/notification.js';
 import { CreateServiceSchema, UpdateServiceSchema } from '../schemas/service.js';
 import * as employeeService from '../services/employeeService.js';
+import * as employeeScheduleService from '../services/employeeScheduleService.js';
 import * as employeeInvitationService from '../services/employeeInvitationService.js';
 import * as serviceService from '../services/serviceService.js';
 import * as appointmentService from '../services/appointmentService.js';
@@ -88,6 +93,22 @@ function paramNotificationId(req: Request): string {
   const id = req.params.notificationId;
   if (!id) throw new BadRequestError('Notification ID is required');
   return id;
+}
+
+function paramLocalDate(req: Request): string {
+  const value = req.params.date;
+  if (!value) {
+    throw new BadRequestError('Date is required');
+  }
+
+  const parsed = ServiceRecordDateSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid date route parameter: Date must be in YYYY-MM-DD format (e.g. 2026-06-06)'
+    );
+  }
+
+  return parsed.data;
 }
 
 function parseSummaryQuery(
@@ -533,6 +554,102 @@ router.get(
         authenticatedEmployeeId: req.employeeId,
       });
       res.json({ success: true, data: availability });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees/:employeeId/schedule
+// Read one employee schedule (OWNER, BARBER self)
+// ============================================
+router.get(
+  '/:barbershopId/employees/:employeeId/schedule',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await employeeScheduleService.getEmployeeSchedule({
+        barbershopId: paramBarbershopId(req),
+        employeeId: paramEmployeeId(req),
+        userId: req.userId,
+        userRole: req.userRole,
+        authenticatedEmployeeId: req.employeeId,
+      });
+      res.json({ success: true, data: schedule });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// PUT /api/v1/barbershops/:barbershopId/employees/:employeeId/schedule
+// Update employee schedule mode + recurring custom hours (OWNER only)
+// ============================================
+router.put(
+  '/:barbershopId/employees/:employeeId/schedule',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(UpdateEmployeeScheduleSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await employeeScheduleService.updateEmployeeSchedule({
+        barbershopId: paramBarbershopId(req),
+        employeeId: paramEmployeeId(req),
+        body: req.body,
+        ownerUserId: req.userId,
+      });
+      res.json({ success: true, data: schedule });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// PUT /api/v1/barbershops/:barbershopId/employees/:employeeId/schedule/exceptions/:date
+// Upsert one employee date exception (OWNER only)
+// ============================================
+router.put(
+  '/:barbershopId/employees/:employeeId/schedule/exceptions/:date',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(UpsertEmployeeScheduleExceptionSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await employeeScheduleService.upsertEmployeeScheduleException({
+        barbershopId: paramBarbershopId(req),
+        employeeId: paramEmployeeId(req),
+        localDate: paramLocalDate(req),
+        body: req.body,
+        ownerUserId: req.userId,
+      });
+      res.json({ success: true, data: schedule });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/schedule/exceptions/:date
+// Delete one employee date exception (OWNER only)
+// ============================================
+router.delete(
+  '/:barbershopId/employees/:employeeId/schedule/exceptions/:date',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await employeeScheduleService.deleteEmployeeScheduleException({
+        barbershopId: paramBarbershopId(req),
+        employeeId: paramEmployeeId(req),
+        localDate: paramLocalDate(req),
+        ownerUserId: req.userId,
+      });
+      res.json({ success: true, data: schedule });
     } catch (error) {
       next(error);
     }

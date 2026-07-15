@@ -130,6 +130,9 @@ function makeEmployeeRows(
       manageServicesLabel: 'Manage Services',
       manageServicesTestID: 'employee-manage-services-emp-1',
       onManageServices: vi.fn(),
+      manageScheduleLabel: 'Manage Schedule',
+      manageScheduleTestID: 'employee-manage-schedule-emp-1',
+      onManageSchedule: vi.fn(),
       assignmentsExpanded: true,
       isAssignmentsLoading: false,
       assignedServices: [makeServiceActions()[0]!],
@@ -147,6 +150,9 @@ function makeEmployeeRows(
       manageServicesLabel: 'Manage Services',
       manageServicesTestID: 'employee-manage-services-emp-2',
       onManageServices: vi.fn(),
+      manageScheduleLabel: 'Manage Schedule',
+      manageScheduleTestID: 'employee-manage-schedule-emp-2',
+      onManageSchedule: vi.fn(),
       assignmentsExpanded: false,
       isAssignmentsLoading: false,
       assignedServices: [],
@@ -373,13 +379,18 @@ describe('EmployeesScreenView', () => {
     expect(findByText(emptyTree, 'No employees found.')).toBeDefined();
   });
 
-  it('calls activation, reactivation, and manage services callbacks', () => {
+  it('calls activation, reactivation, manage-services, and manage-schedule callbacks', () => {
     const onDeactivate = vi.fn();
     const onReactivate = vi.fn();
     const onManageServices = vi.fn();
+    const onManageSchedule = vi.fn();
     const tree = renderView({
       employeeRows: makeEmployeeRows([
-        { onPrimaryAction: onDeactivate, onManageServices: onManageServices },
+        {
+          onPrimaryAction: onDeactivate,
+          onManageServices,
+          onManageSchedule,
+        },
         { onPrimaryAction: onReactivate },
       ]),
     });
@@ -392,6 +403,9 @@ describe('EmployeesScreenView', () => {
 
     press(findByTestId(tree, 'employee-manage-services-emp-1'));
     expect(onManageServices).toHaveBeenCalledTimes(1);
+
+    press(findByTestId(tree, 'employee-manage-schedule-emp-1'));
+    expect(onManageSchedule).toHaveBeenCalledTimes(1);
   });
 
   it('renders expanded assignments and calls assign/unassign callbacks', () => {

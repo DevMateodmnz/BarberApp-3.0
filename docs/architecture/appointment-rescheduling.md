@@ -81,7 +81,7 @@ The service now:
 2. validates eligibility;
 3. validates the destination employee/service/assignment;
 4. derives `endAt` from the selected service duration;
-5. checks working hours and schedule exceptions;
+5. validates the destination against the employee-effective schedule;
 6. checks application-level overlap excluding the appointment itself;
 7. performs a compare-and-swap `updateMany(...)` using the original
    `(status, employeeId, serviceId, startAt, endAt, deletedAt)` as
@@ -90,6 +90,12 @@ The service now:
    the final authority;
 9. writes the audit row and notification mutations in the same
    transaction.
+
+The schedule validation now goes through the canonical
+`validateEmployeeAvailabilityWindow(...)` helper, which itself uses
+`resolveEmployeeEffectiveScheduleForDate(...)`. That means staff
+create, staff reschedule, public booking, and the daily schedule board
+all agree on employee-specific time off and custom hours.
 
 Outcomes:
 
@@ -155,3 +161,5 @@ Compatibility changes are narrow:
 - recurring appointments
 - additional reminder channels
 - broader cross-employee BARBER rescheduling policy
+- automatic bulk repair of appointments that fall outside a newly
+  narrowed employee schedule

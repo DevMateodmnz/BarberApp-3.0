@@ -50,6 +50,11 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Time-format mask placeholder shared across locales.',
   },
   {
+    file: 'src/components/EmployeeScheduleScreenView.tsx',
+    literal: 'HH:mm',
+    reason: 'Time-format mask placeholder shared across locales.',
+  },
+  {
     file: 'app/(tabs)/employees.tsx',
     literal: '2-digit',
     reason: 'Intl date-format option value for localized invitation timestamps, not interface copy.',
@@ -217,6 +222,26 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
   {
     file: 'src/lib/employeeInvitations.ts',
     literal: 'Failed to revoke employee invitation',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeSchedules.ts',
+    literal: 'Failed to fetch employee schedule',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeSchedules.ts',
+    literal: 'Failed to update employee schedule',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeSchedules.ts',
+    literal: 'Failed to update employee schedule exception',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeSchedules.ts',
+    literal: 'Failed to delete employee schedule exception',
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
   },
   {

@@ -76,6 +76,10 @@ function buildAgendaAttentionLabels(
     labels.push(t('appointments.notification.deliveryError'));
   }
 
+  if (appointment.isOutsideWorkingHours) {
+    labels.push(t('appointments.agenda.outsideWorkingHours'));
+  }
+
   return labels;
 }
 
@@ -501,7 +505,16 @@ export default function AppointmentsScreen() {
             .map((interval) => `${interval.startTime}–${interval.endTime}`)
             .join(' · ')
           : t('appointments.agenda.closedDayCard'),
-      badgeLabel: employee.isCurrentUser ? t('appointments.agenda.currentUserBadge') : null,
+      badgeLabel:
+        employee.workingDay.availabilityState === 'TIME_OFF'
+          ? t('appointments.agenda.timeOffLabel')
+          : employee.workingDay.availabilityState === 'CUSTOM_HOURS'
+            ? t('appointments.agenda.specialHoursLabel')
+            : employee.workingDay.availabilityState === 'OFF'
+              ? t('appointments.agenda.notWorkingLabel')
+              : employee.isCurrentUser
+                ? t('appointments.agenda.currentUserBadge')
+                : t('appointments.agenda.workingLabel'),
       testID: `appointments-agenda-summary-${employee.id}`,
       onPress: () => setSelectedEmployeeId(employee.id),
     }));
@@ -716,6 +729,13 @@ export default function AppointmentsScreen() {
       return {
         title: t('appointments.agenda.closedDayTitle'),
         message: t('appointments.agenda.closedDayMessage'),
+      };
+    }
+
+    if (selectedBoardEmployee.workingDay.source === 'EMPLOYEE_FULL_DAY_OFF') {
+      return {
+        title: t('appointments.agenda.timeOffLabel'),
+        message: t('appointments.agenda.timeOffMessage'),
       };
     }
 

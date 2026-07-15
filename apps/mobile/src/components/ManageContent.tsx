@@ -10,23 +10,27 @@ import {
 import { tokens } from '@/theme/index.js';
 
 export interface ManageContentProps {
-  isOwner: boolean;
+  role: 'OWNER' | 'BARBER' | 'CLIENT';
   onNotifications: () => void;
   onServices: () => void;
   onEmployees: () => void;
   onWorkingHours: () => void;
+  onOwnSchedule: () => void;
   onOpenLanguageSettings: () => void;
 }
 
 export function ManageContent({
-  isOwner,
+  role,
   onNotifications,
   onServices,
   onEmployees,
   onWorkingHours,
+  onOwnSchedule,
   onOpenLanguageSettings,
 }: ManageContentProps) {
   const { t } = useTranslation();
+  const isOwner = role === 'OWNER';
+  const isBarber = role === 'BARBER';
 
   return (
     <>
@@ -36,53 +40,74 @@ export function ManageContent({
       />
 
       <View style={styles.contentStack}>
-        {!isOwner ? (
+        {!isOwner && !isBarber ? (
           <AppCard testID="manage-blocked" variant="outlined">
             <Text style={styles.blockedTitle}>{t('manage.blockedTitle')}</Text>
             <Text style={styles.blockedMessage}>{t('manage.blockedMessage')}</Text>
           </AppCard>
         ) : (
           <>
+            {isBarber ? (
+              <View style={styles.sectionBlock}>
+                <SectionHeader title={t('manage.businessSectionTitle')} />
+                <View style={styles.tileList}>
+                  <NavigationTile
+                    testID="manage-own-schedule"
+                    title={t('employeeSchedules.manageTitle')}
+                    description={t('manage.items.ownSchedule.description')}
+                    iconName="calendar-outline"
+                    accessibilityLabel={t('employeeSchedules.manageTitle')}
+                    onPress={onOwnSchedule}
+                    showChevron
+                  />
+                </View>
+              </View>
+            ) : null}
+
             <View style={styles.sectionBlock}>
               <SectionHeader title={t('manage.businessSectionTitle')} />
               <Text style={styles.sectionHint}>{t('manage.businessSectionHint')}</Text>
               <View style={styles.tileList}>
-                <NavigationTile
-                  testID="manage-notifications"
-                  title={t('notificationsOperations.title')}
-                  description={t('manage.items.notifications.description')}
-                  iconName="mail-open-outline"
-                  accessibilityLabel={t('navigation.accessibility.notifications')}
-                  onPress={onNotifications}
-                  showChevron
-                />
-                <NavigationTile
-                  testID="manage-services"
-                  title={t('services.title')}
-                  description={t('manage.items.services.description')}
-                  iconName="construct-outline"
-                  accessibilityLabel={t('navigation.accessibility.services')}
-                  onPress={onServices}
-                  showChevron
-                />
-                <NavigationTile
-                  testID="manage-employees"
-                  title={t('employees.title')}
-                  description={t('manage.items.employees.description')}
-                  iconName="people-outline"
-                  accessibilityLabel={t('navigation.accessibility.employees')}
-                  onPress={onEmployees}
-                  showChevron
-                />
-                <NavigationTile
-                  testID="manage-working-hours"
-                  title={t('workingHours.title')}
-                  description={t('manage.items.workingHours.description')}
-                  iconName="time-outline"
-                  accessibilityLabel={t('navigation.accessibility.workingHours')}
-                  onPress={onWorkingHours}
-                  showChevron
-                />
+                {isOwner ? (
+                  <>
+                    <NavigationTile
+                      testID="manage-notifications"
+                      title={t('notificationsOperations.title')}
+                      description={t('manage.items.notifications.description')}
+                      iconName="mail-open-outline"
+                      accessibilityLabel={t('navigation.accessibility.notifications')}
+                      onPress={onNotifications}
+                      showChevron
+                    />
+                    <NavigationTile
+                      testID="manage-services"
+                      title={t('services.title')}
+                      description={t('manage.items.services.description')}
+                      iconName="construct-outline"
+                      accessibilityLabel={t('navigation.accessibility.services')}
+                      onPress={onServices}
+                      showChevron
+                    />
+                    <NavigationTile
+                      testID="manage-employees"
+                      title={t('employees.title')}
+                      description={t('manage.items.employees.description')}
+                      iconName="people-outline"
+                      accessibilityLabel={t('navigation.accessibility.employees')}
+                      onPress={onEmployees}
+                      showChevron
+                    />
+                    <NavigationTile
+                      testID="manage-working-hours"
+                      title={t('workingHours.title')}
+                      description={t('manage.items.workingHours.description')}
+                      iconName="time-outline"
+                      accessibilityLabel={t('navigation.accessibility.workingHours')}
+                      onPress={onWorkingHours}
+                      showChevron
+                    />
+                  </>
+                ) : null}
               </View>
             </View>
 

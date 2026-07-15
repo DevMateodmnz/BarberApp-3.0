@@ -9,7 +9,7 @@ import {
   tryLocalDateTimeToUtc,
 } from './dateUtils.js';
 import { timeToMinutes } from './businessHours.js';
-import { resolveEffectiveScheduleForDate } from './effectiveSchedule.js';
+import { resolveEmployeeEffectiveScheduleForDate } from './employeeEffectiveSchedule.js';
 
 type AvailabilityDatabase = Pick<PrismaClient, 'appointment'>;
 
@@ -96,8 +96,9 @@ export async function buildAvailabilitySlots(
   } = input;
 
   const now = input.now ?? new Date();
-  const effectiveSchedule = await resolveEffectiveScheduleForDate({
+  const effectiveSchedule = await resolveEmployeeEffectiveScheduleForDate({
     barbershopId,
+    employeeId,
     localDate,
   });
 

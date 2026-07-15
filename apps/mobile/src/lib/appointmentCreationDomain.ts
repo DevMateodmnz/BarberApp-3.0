@@ -674,6 +674,19 @@ export function mapAppointmentCreationError(
       };
     }
 
+    if (
+      error.code === 'EMPLOYEE_NOT_WORKING' ||
+      error.code === 'EMPLOYEE_TIME_OFF' ||
+      error.code === 'EMPLOYEE_SCHEDULE_CONFLICT' ||
+      error.code === 'BARBERSHOP_CLOSED'
+    ) {
+      return {
+        key: 'appointmentOutsideWorkingHours',
+        shouldClearSelectedSlot: true,
+        shouldRefreshAvailability: true,
+      };
+    }
+
     if (error.code === 'VALIDATION_ERROR') {
       return {
         key: 'invalidClientFields',

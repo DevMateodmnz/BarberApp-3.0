@@ -24,10 +24,11 @@ The Operational Daily Schedule Board adds a bounded day-view agenda to the exist
 Each employee payload includes:
 
 - employee identity (`id`, `name`, `isCurrentUser`)
+- schedule mode and working-day availability state
 - working-day intervals and derived closed intervals
 - status summary and `minimumBookableDuration`
 - operational `availableGaps`
-- appointment summaries with server-derived capability flags
+- appointment summaries with server-derived capability flags and outside-hours indicators
 
 Each appointment summary is intentionally compact:
 
@@ -52,16 +53,18 @@ All day math uses the barbershop timezone from the persisted barbershop record.
 
 ## Working-window derivation
 
-The board reuses the same schedule inputs as availability:
+The board now reuses the same **employee-effective** schedule inputs as the rest of availability:
 
-1. weekly working hours
+1. barbershop weekly working hours
 2. barbershop schedule exceptions
-3. closed-day semantics
-4. partial-day exception intervals
+3. employee schedule mode (`INHERIT_BARBERSHOP` or `CUSTOM`)
+4. employee weekly custom intervals
+5. employee date exceptions (`FULL_DAY_OFF`, `CUSTOM_HOURS`)
+6. employee active status
 
-`resolveEffectiveScheduleForDate(...)` remains the canonical schedule source. The board does not persist its own daily snapshot.
+`resolveEmployeeEffectiveScheduleForDate(...)` is now the canonical schedule source. The board does not persist its own daily snapshot.
 
-Closed intervals shown in the timeline are derived from gaps between effective schedule intervals for exception days, for example a lunch closure between `09:00–12:00` and `13:00–18:00`.
+Closed intervals shown in the timeline are derived from gaps between effective schedule intervals, including employee-specific time off and special-hours narrowing. Existing appointments that no longer fit the current schedule remain visible and are marked with an attention indicator instead of being hidden.
 
 ## Blocking statuses
 
@@ -106,11 +109,11 @@ Rules:
 
 | Role | Visibility |
 | --- | --- |
-| OWNER | May see all active employees or filter to one employee |
+| OWNER | May see all active employees or filter to one employee, including who is working / off / on time off |
 | BARBER | Restricted to their own employee schedule only |
 | CLIENT | Forbidden |
 
-The schedule-board route enforces BARBER scope in the service layer so the endpoint can hide cross-tenant access with `404` without relying on the broader tenant middleware.
+The schedule-board route enforces BARBER scope in the service layer so the endpoint can hide cross-tenant access with `404` without relying on the broader tenant middleware. Private employee-exception reasons are not exposed through the board.
 
 ## Query efficiency strategy
 
@@ -135,8 +138,10 @@ Agenda is phone-first:
 - shared date navigation
 - OWNER employee chips
 - OWNER "All" summary cards instead of compressed columns
+- employee chips/status badges for working, off, custom hours, and time off
 - BARBER default self agenda
 - chronological rows for current time, closures, gaps, and appointments
+- attention labels for appointments that sit outside the employee's current effective schedule
 
 The existing list mode remains intact.
 
@@ -168,6 +173,10 @@ Explicitly deferred from this milestone:
 - [x] OWNER/BARBER role scoping
 - [x] No extra migration required
 
+## Dependency update
+
+The board originally shipped on top of barbershop-wide hours only. It now depends on the employee-availability domain so Agenda, public booking, staff booking, and rescheduling all agree on who is actually working that day.
+
 ## Next step
 
-The next product milestone should build on the now-operational daily schedule flow rather than replacing it: deposits / Mercado Pago reservation hold is the next highest-value capability still deferred.
+With employee-specific availability now implemented, the next product milestone can safely be deposit policy and Mercado Pago reservation holds.

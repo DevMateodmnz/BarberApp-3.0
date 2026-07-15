@@ -16,7 +16,6 @@ import {
 } from '../lib/errors.js';
 import {
   getLocalDayAndTime,
-  validateBusinessHours,
 } from '../lib/businessHours.js';
 import {
   getLocalDateStringInTimeZone,
@@ -47,6 +46,7 @@ import {
 import { tryNormalizeClientPhoneE164 } from '../lib/phoneNormalization.js';
 import { validateEmployeeInBarbershop } from './employeeService.js';
 import { normalizeEmail } from '../lib/email.js';
+import { validateEmployeeAvailabilityWindow } from './employeeScheduleService.js';
 import type {
   AppointmentStatus,
   PrismaClient,
@@ -667,7 +667,13 @@ export async function createAppointment(
   validateAppointmentStartAt(startAt, timezone);
   const endAt = calculateAppointmentEndAt(startAt, service.durationMinutes);
 
-  await validateBusinessHours({ barbershopId, startAt, endAt });
+  await validateEmployeeAvailabilityWindow({
+    barbershopId,
+    employeeId,
+    startAt,
+    endAt,
+    timezone,
+  });
 
   const conflict = await hasTimeConflict(employeeId, startAt, endAt);
   if (conflict) {
@@ -753,10 +759,12 @@ export async function createStaffAppointment(
     bookingContext.service.durationMinutes
   );
 
-  await validateBusinessHours({
+  await validateEmployeeAvailabilityWindow({
     barbershopId,
+    employeeId,
     startAt,
     endAt,
+    timezone,
   });
 
   const conflict = await hasTimeConflict(employeeId, startAt, endAt);
@@ -1106,10 +1114,12 @@ export async function updateAppointment(
       appointment.serviceDurationMinutes
     );
 
-    await validateBusinessHours({
+    await validateEmployeeAvailabilityWindow({
       barbershopId: appointment.barbershopId,
+      employeeId: appointment.employeeId,
       startAt: newStartAt,
       endAt: newEndAt,
+      timezone: appointment.barbershop.timezone,
     });
 
     const conflict = await hasTimeConflict(
@@ -1282,10 +1292,13 @@ export async function rescheduleAppointment(
         );
       }
 
-      await validateBusinessHours({
+      await validateEmployeeAvailabilityWindow({
         barbershopId: appointment.barbershopId,
+        employeeId: targetEmployeeId,
         startAt: nextStartAt,
         endAt: nextEndAt,
+        timezone: appointment.barbershop.timezone,
+        db: tx,
       });
 
       const conflict = await hasTimeConflict(

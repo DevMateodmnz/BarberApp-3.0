@@ -5,11 +5,12 @@ import { findByTestId, findByText, press, queryByTestId } from '@/testing/elemen
 
 function renderManageContent(overrides: Partial<Parameters<typeof ManageContent>[0]> = {}) {
   return ManageContent({
-    isOwner: true,
+    role: 'OWNER',
     onNotifications: vi.fn(),
     onServices: vi.fn(),
     onEmployees: vi.fn(),
     onWorkingHours: vi.fn(),
+    onOwnSchedule: vi.fn(),
     onOpenLanguageSettings: vi.fn(),
     ...overrides,
   });
@@ -37,6 +38,7 @@ describe('ManageContent', () => {
     expect(findByTestId(tree, 'manage-employees')).toBeDefined();
     expect(findByTestId(tree, 'manage-working-hours')).toBeDefined();
     expect(findByTestId(tree, 'manage-language')).toBeDefined();
+    expect(queryByTestId(tree, 'manage-own-schedule')).toBeNull();
 
     press(findByTestId(tree, 'manage-notifications'));
     press(findByTestId(tree, 'manage-services'));
@@ -51,11 +53,26 @@ describe('ManageContent', () => {
     expect(onOpenLanguageSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('renders a blocked owner-only state for non-owner roles', () => {
-    const tree = renderManageContent({ isOwner: false });
+  it('renders the barber own-schedule tile and hides owner-only destinations', () => {
+    const onOwnSchedule = vi.fn();
+    const tree = renderManageContent({ role: 'BARBER', onOwnSchedule });
+
+    expect(findByTestId(tree, 'manage-own-schedule')).toBeDefined();
+    expect(queryByTestId(tree, 'manage-notifications')).toBeNull();
+    expect(queryByTestId(tree, 'manage-services')).toBeNull();
+    expect(queryByTestId(tree, 'manage-employees')).toBeNull();
+    expect(queryByTestId(tree, 'manage-working-hours')).toBeNull();
+    expect(findByTestId(tree, 'manage-language')).toBeDefined();
+
+    press(findByTestId(tree, 'manage-own-schedule'));
+    expect(onOwnSchedule).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a blocked state for client users', () => {
+    const tree = renderManageContent({ role: 'CLIENT' });
 
     expect(findByTestId(tree, 'manage-blocked')).toBeDefined();
-    expect(findByText(tree, 'Owner access only')).toBeDefined();
+    expect(findByText(tree, 'Owner and barber access only')).toBeDefined();
     expect(queryByTestId(tree, 'manage-notifications')).toBeNull();
     expect(queryByTestId(tree, 'manage-services')).toBeNull();
     expect(queryByTestId(tree, 'manage-language')).toBeNull();

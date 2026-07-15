@@ -71,11 +71,12 @@ export default function ManageScreen() {
   return (
     <Screen scrollable testID="manage-screen">
       <ManageContent
-        isOwner={context.role === 'OWNER'}
+        role={context.role}
         onNotifications={() => router.push('/(tabs)/notifications')}
         onServices={() => router.push('/(tabs)/services')}
         onEmployees={() => router.push('/(tabs)/employees')}
         onWorkingHours={() => router.push('/(tabs)/working-hours')}
+        onOwnSchedule={() => router.push('/(tabs)/employee-schedule')}
         onOpenLanguageSettings={() => router.push('/language')}
       />
     </Screen>

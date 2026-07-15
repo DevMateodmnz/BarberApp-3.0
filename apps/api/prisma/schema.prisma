@@ -44,6 +44,16 @@ enum EmployeeInvitationStatus {
   DELIVERY_FAILED
 }
 
+enum EmployeeScheduleMode {
+  INHERIT_BARBERSHOP
+  CUSTOM
+}
+
+enum EmployeeScheduleExceptionType {
+  FULL_DAY_OFF
+  CUSTOM_HOURS
+}
+
 // Where a cancellation originated. Decoupled from UserRole because
 // anonymous public bookings and automated (system) jobs have no
 // UserRole identity. A row that was cancelled has at least one of
@@ -140,6 +150,8 @@ model Barbershop {
   customers                       Customer[]
   workingHours                    WorkingHours[]
   scheduleExceptions              BarbershopScheduleException[]
+  employeeWorkingIntervals        EmployeeWorkingInterval[]
+  employeeScheduleExceptions      EmployeeScheduleException[]
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
   appointmentNotifications        AppointmentNotification[]
   appointmentNotificationAttempts AppointmentNotificationAttempt[]
@@ -160,13 +172,14 @@ model Barbershop {
 /// Employee model - represents a barber/employee working at a barbershop
 /// Links a User to a Barbershop
 model Employee {
-  id           String    @id @default(cuid())
-  barbershopId String    @map("barbershop_id")
-  userId       String    @map("user_id")
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  deletedAt    DateTime? @map("deleted_at")
+  id           String               @id @default(cuid())
+  barbershopId String               @map("barbershop_id")
+  userId       String               @map("user_id")
+  isActive     Boolean              @default(true)
+  scheduleMode EmployeeScheduleMode @default(INHERIT_BARBERSHOP) @map("schedule_mode")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  deletedAt    DateTime?            @map("deleted_at")
 
   // Relations
   barbershop          Barbershop           @relation(fields: [barbershopId], references: [id])
@@ -174,15 +187,81 @@ model Employee {
   employeeServices    EmployeeService[]
   appointments        Appointment[]
   serviceRecords      ServiceRecord[]
+  workingIntervals    EmployeeWorkingInterval[]
+  scheduleExceptions  EmployeeScheduleException[]
   acceptedInvitations EmployeeInvitation[] @relation("EmployeeInvitationEmployee")
 
   // Constraint: one employee record per user per barbershop
   @@unique([barbershopId, userId])
+  @@unique([id, barbershopId])
   // Indexes
   @@index([barbershopId])
   @@index([userId])
   @@index([barbershopId, isActive])
   @@map("employees")
+}
+
+// ============================================
+// EMPLOYEE SCHEDULE
+// ============================================
+
+/// EmployeeWorkingInterval model — one recurring custom interval per employee/day.
+/// Current product scope supports at most one interval per weekday for custom employee schedules.
+model EmployeeWorkingInterval {
+  id           String   @id @default(cuid())
+  barbershopId String   @map("barbershop_id")
+  employeeId   String   @map("employee_id")
+  dayOfWeek    Int      @map("day_of_week")
+  openTime     String   @map("open_time")
+  closeTime    String   @map("close_time")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  employee   Employee   @relation(fields: [employeeId, barbershopId], references: [id, barbershopId], onDelete: Cascade)
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, dayOfWeek])
+  @@index([employeeId])
+  @@index([barbershopId, dayOfWeek])
+  @@map("employee_working_intervals")
+}
+
+/// EmployeeScheduleException model — employee-specific local-date override.
+model EmployeeScheduleException {
+  id           String                        @id @default(cuid())
+  barbershopId String                        @map("barbershop_id")
+  employeeId   String                        @map("employee_id")
+  localDate    String                        @map("local_date")
+  type         EmployeeScheduleExceptionType
+  reason       String?                       @db.VarChar(500)
+  createdAt    DateTime                      @default(now()) @map("created_at")
+  updatedAt    DateTime                      @updatedAt @map("updated_at")
+
+  employee   Employee                         @relation(fields: [employeeId, barbershopId], references: [id, barbershopId], onDelete: Cascade)
+  barbershop Barbershop                       @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  intervals  EmployeeScheduleExceptionInterval[]
+
+  @@unique([employeeId, localDate])
+  @@index([employeeId, localDate])
+  @@index([barbershopId, localDate])
+  @@map("employee_schedule_exceptions")
+}
+
+/// EmployeeScheduleExceptionInterval model — ordered custom intervals for one employee exception date.
+model EmployeeScheduleExceptionInterval {
+  id                  String   @id @default(cuid())
+  scheduleExceptionId String   @map("schedule_exception_id")
+  openTime            String   @map("open_time")
+  closeTime           String   @map("close_time")
+  position            Int
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  scheduleException EmployeeScheduleException @relation(fields: [scheduleExceptionId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleExceptionId, position])
+  @@index([scheduleExceptionId])
+  @@map("employee_schedule_exception_intervals")
 }
 
 // ============================================

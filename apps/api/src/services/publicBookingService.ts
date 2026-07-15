@@ -1,6 +1,5 @@
 import { Prisma } from '@prisma/client';
 import { AppError, ValidationError } from '../lib/errors.js';
-import { validateBusinessHours } from '../lib/businessHours.js';
 import { validateAvailabilityDateRange } from '../lib/availabilitySlots.js';
 import { getPublicBookingConsent } from '../lib/publicBookingConsent.js';
 import {
@@ -38,6 +37,7 @@ import {
 } from './appointmentNotificationService.js';
 import { normalizeEmail } from '../lib/email.js';
 import { resolvePublishedPublicBarbershop } from './publicCatalogService.js';
+import { validateEmployeeAvailabilityWindow } from './employeeScheduleService.js';
 
 interface PublicBookingConfirmationDto {
   bookingReference: string;
@@ -69,6 +69,18 @@ function createPublicSlotUnavailableError(): AppError {
     409,
     'PUBLIC_BOOKING_SLOT_UNAVAILABLE',
     'This time slot is no longer available'
+  );
+}
+
+function isPrivateAvailabilityError(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    (
+      error.code === 'BARBERSHOP_CLOSED' ||
+      error.code === 'EMPLOYEE_TIME_OFF' ||
+      error.code === 'EMPLOYEE_NOT_WORKING' ||
+      error.code === 'EMPLOYEE_SCHEDULE_CONFLICT'
+    )
   );
 }
 
@@ -359,11 +371,22 @@ export async function createPublicBookingBySlug(
 
       const endAt = calculateAppointmentEndAt(startAt, service.durationMinutes);
 
-      await validateBusinessHours({
-        barbershopId: barbershop.id,
-        startAt,
-        endAt,
-      });
+      try {
+        await validateEmployeeAvailabilityWindow({
+          barbershopId: barbershop.id,
+          employeeId: employee.id,
+          startAt,
+          endAt,
+          timezone: barbershop.timezone,
+          db: tx,
+        });
+      } catch (error) {
+        if (isPrivateAvailabilityError(error)) {
+          throw createPublicSlotUnavailableError();
+        }
+
+        throw error;
+      }
 
       const conflict = await hasTimeConflict(employee.id, startAt, endAt, undefined, tx);
       if (conflict) {

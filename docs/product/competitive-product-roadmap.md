@@ -32,11 +32,12 @@ durable foundations, not because they are next on the list.
 1. **Customer retention and no-show prevention**
 2. **Public booking reliability and conversion**
 3. **Customer directory and visit history**
-4. **Appointment confirmations, reminders, and delivery operations**
-5. **Deposits and Mercado Pago**
-6. **Promotions and loyalty**
-7. **Platform administration and scalable tenant onboarding**
-8. **Marketplace, search, and reviews** — only after multiple real
+4. **Appointment confirmations, reminders, delivery operations, and audited rescheduling**
+5. **Employee-specific availability and time off**
+6. **Deposits and Mercado Pago**
+7. **Promotions and loyalty**
+8. **Platform administration and scalable tenant onboarding**
+9. **Marketplace, search, and reviews** — only after multiple real
    businesses exist
 
 We do **not** jump to payments, marketplace, or platform-admin
@@ -54,7 +55,7 @@ reliability story is real.
 | Business search | Out of scope until multiple real shops exist | Marketplace search | We will not build a marketplace or reviews layer until at least 3–5 real businesses are active |
 | Promotions | Out of scope until CRM is real | Promotions and discount codes | Defer until reminders + deposits + loyalty are real |
 | Premium subscription | Out of scope | Premium tier for shops | We will not add a paid tier for shops until the baseline product is operationally excellent |
-| Mercado Pago | Out of scope; no production credentials yet | Mercado Pago deposits and full payments | Plan to add after no-show prevention lands; never ship payments without a published runbook and rate-limit testing |
+| Mercado Pago | Still deferred, now intentionally gated behind accurate employee-specific availability | Mercado Pago deposits and full payments | Only start after booking, rescheduling, Agenda, and employee availability all agree on who is actually working |
 | Platform commissions | Out of scope; one-business-per-OWNER is the current unit | Commission and transfer model | We will not introduce a commission model until we have multi-tenant operations we can charge for |
 | Platform admin | Out of scope | Platform administrator dashboard | Defer |
 | Reliability and lifecycle tracking | Strong: DB-level double-booking constraint + transition state machine + idempotency | Less explicit lifecycle visibility per the reference's public surface | This is our differentiator. We record every transition, every cancel, every no-show, and we surface it to staff before they commit a new booking |
@@ -173,6 +174,34 @@ operator workflow:
 | CRM campaigns / loyalty | Needs reminders, payments, and clearer retention goals first |
 | Deposits / Mercado Pago | Still depends on the payment cutover and runbook |
 
+## Phase 5 milestone (this commit)
+
+> **feat(employees): add individual schedules and time off**
+
+This milestone closes the schedule-model gap left by the earlier Agenda and booking work. Before this change, every booking surface could treat an employee as available whenever the barbershop itself was open.
+
+### What ships
+
+- explicit employee schedule mode (`INHERIT_BARBERSHOP` / `CUSTOM`);
+- employee weekly working intervals;
+- employee date exceptions for full-day time off and special hours;
+- one canonical employee-effective schedule resolver shared by public booking, staff booking, rescheduling, and the Agenda;
+- owner mobile schedule management and barber read-only schedule visibility;
+- conflict reporting for existing appointments outside a newly saved employee schedule.
+
+### Why it had to happen before deposits
+
+Deposits are commercially useful only when the slot being held is actually valid for the selected barber. Shipping Mercado Pago before employee-specific availability would risk charging for a slot based on shop-wide hours alone.
+
+### What remains deferred
+
+| Deferred after Phase 5 | Why |
+| --- | --- |
+| Split shifts / multiple weekly intervals per day | Current product scope still matches one-interval weekly editing |
+| Leave approvals / HR flows | Not needed for operational booking correctness |
+| Automatic conflict repair | Requires a separate operator workflow and policy |
+| Deposits / Mercado Pago | Now the correct next milestone because the availability foundation is accurate |
+
 ## Ordered next milestones
 
 > These are the *current best* ordering, not a promise. Each
@@ -180,34 +209,23 @@ operator workflow:
 > in production.
 
 1. **Reminder pipeline (durable outbox + idempotent worker)** —
-   now implemented for email booking confirmations and 24-hour
-   reminders. The worker is standalone, claims due work with
-   `FOR UPDATE SKIP LOCKED`, and retries with bounded exponential
-   backoff. WhatsApp / SMS remain out of scope.
-2. **Notification operations and delivery audit** — now
-   implemented as an OWNER-only mobile operations surface plus
-   summary/list/detail APIs, append-only worker attempt history,
-   and safe compare-and-swap manual retry for terminal failures.
-3. **Appointment rescheduling and change audit** — now
-   implemented as an atomic staff reschedule flow with
-   append-only appointment history, reminder resync, a
-   dedicated reschedule confirmation email, mobile UI, and
-   public-reference compatibility.
-4. **Operational daily schedule board** — now implemented as
-   a phone-first Agenda/List appointment area with a bounded
-   daily schedule endpoint, role-safe employee visibility,
-   timezone-safe day calculation, available-gap cards, current-
-   time marker, customer-return / no-show signals, canonical
-   detail integration, and gap-to-create prefills.
-5. **Deposit flow via Mercado Pago** — full production cutover
-   with runbook. Payment creates a `pending` reservation that
-   holds the slot until the webhook confirms the deposit; on
-   timeout the slot is released.
-6. **Promotions and loyalty** — only after the payment stack is
+   implemented.
+2. **Notification operations and delivery audit** — implemented.
+3. **Appointment rescheduling and change audit** — implemented.
+4. **Operational daily schedule board** — implemented.
+5. **Employee-specific availability and time off** — implemented
+   so every booking surface now shares one accurate employee
+   schedule model instead of assuming all barbers follow only the
+   shop-wide hours.
+6. **Deposit policy and Mercado Pago reservation holds** — next.
+   Payment should create a bounded pending reservation only after
+   the slot has passed the canonical employee-availability
+   checks.
+7. **Promotions and loyalty** — only after the payment stack is
    real.
-7. **Platform administration** — when multi-tenant operations
+8. **Platform administration** — when multi-tenant operations
    become a real product problem, not a theoretical one.
-8. **Marketplace, search, and reviews** — only after multiple
+9. **Marketplace, search, and reviews** — only after multiple
    real businesses exist.
 
 ## Notification architecture

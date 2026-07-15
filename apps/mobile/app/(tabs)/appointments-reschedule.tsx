@@ -65,6 +65,11 @@ function mapRescheduleError(error: unknown, t: (key: string) => string): string 
         return t('appointmentReschedule.errors.noop');
       case 'FORBIDDEN_EMPLOYEE_SCOPE':
         return t('appointmentReschedule.errors.employeeScope');
+      case 'EMPLOYEE_NOT_WORKING':
+      case 'EMPLOYEE_TIME_OFF':
+      case 'EMPLOYEE_SCHEDULE_CONFLICT':
+      case 'BARBERSHOP_CLOSED':
+        return t('appointmentReschedule.errors.slotUnavailable');
       default:
         return error.message;
     }

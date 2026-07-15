@@ -11,10 +11,16 @@ import {
 } from '../lib/dateUtils.js';
 import { AppError, NotFoundError } from '../lib/errors.js';
 import {
-  type EffectiveScheduleInterval,
   resolveEffectiveScheduleForDate,
 } from '../lib/effectiveSchedule.js';
+import {
+  buildEmployeeEffectiveSchedule,
+  mapAppointmentOutsideScheduleReason,
+  type EmployeeEffectiveScheduleResult,
+} from '../lib/employeeEffectiveSchedule.js';
 import { prisma } from '../lib/prisma.js';
+import { normalizeScheduleExceptionIntervals } from '../lib/scheduleIntervals.js';
+import { stripIntervalInputPositions } from '../lib/scheduleIntervalMath.js';
 
 type ScheduleBoardDb = Pick<
   PrismaClient,
@@ -23,7 +29,9 @@ type ScheduleBoardDb = Pick<
   | 'barbershop'
   | 'barbershopScheduleException'
   | 'employee'
+  | 'employeeScheduleException'
   | 'employeeService'
+  | 'employeeWorkingInterval'
   | 'workingHours'
 >;
 
@@ -46,6 +54,7 @@ interface VisibleEmployee {
   userId: string;
   name: string;
   isCurrentUser: boolean;
+  scheduleMode: 'INHERIT_BARBERSHOP' | 'CUSTOM';
 }
 
 interface ClosedInterval {
@@ -144,7 +153,7 @@ function addAppointmentToSummary(
 function deriveClosedIntervals(
   localDate: string,
   timezone: string,
-  intervals: EffectiveScheduleInterval[]
+  intervals: Array<{ openTime: string; closeTime: string }>
 ): ClosedInterval[] {
   if (intervals.length <= 1) {
     return [];
@@ -230,7 +239,7 @@ function buildAvailableGaps(input: {
   date: string;
   timezone: string;
   now: Date;
-  intervals: EffectiveScheduleInterval[];
+  intervals: Array<{ openTime: string; closeTime: string }>;
   blockingAppointments: Array<{ startAt: Date; endAt: Date }>;
   minimumBookableDuration: number | null;
 }) {
@@ -399,6 +408,7 @@ async function resolveVisibleEmployees(input: {
         select: {
           id: true,
           userId: true,
+          scheduleMode: true,
           user: {
             select: {
               name: true,
@@ -417,6 +427,7 @@ async function resolveVisibleEmployees(input: {
         userId: employee.userId,
         name: toDisplayName(employee.user),
         isCurrentUser: employee.userId === input.userId,
+        scheduleMode: employee.scheduleMode,
       }];
     }
 
@@ -429,6 +440,7 @@ async function resolveVisibleEmployees(input: {
       select: {
         id: true,
         userId: true,
+        scheduleMode: true,
         createdAt: true,
         user: {
           select: {
@@ -445,6 +457,7 @@ async function resolveVisibleEmployees(input: {
       userId: employee.userId,
       name: toDisplayName(employee.user),
       isCurrentUser: employee.userId === input.userId,
+      scheduleMode: employee.scheduleMode,
     }));
   }
 
@@ -461,6 +474,7 @@ async function resolveVisibleEmployees(input: {
           select: {
             id: true,
             userId: true,
+            scheduleMode: true,
             user: {
               select: {
                 name: true,
@@ -479,6 +493,7 @@ async function resolveVisibleEmployees(input: {
           select: {
             id: true,
             userId: true,
+            scheduleMode: true,
             user: {
               select: {
                 name: true,
@@ -508,10 +523,109 @@ async function resolveVisibleEmployees(input: {
       userId: authenticatedEmployee.userId,
       name: toDisplayName(authenticatedEmployee.user),
       isCurrentUser: true,
+      scheduleMode: authenticatedEmployee.scheduleMode,
     }];
   }
 
   throw new NotFoundError('Barbershop');
+}
+
+async function resolveEmployeeSchedulesForBoard(input: {
+  barbershopId: string;
+  localDate: string;
+  visibleEmployees: VisibleEmployee[];
+  db: ScheduleBoardDb;
+}): Promise<Map<string, EmployeeEffectiveScheduleResult>> {
+  const employeeIds = input.visibleEmployees.map((employee) => employee.id);
+  const dayOfWeek = new Date(`${input.localDate}T00:00:00.000Z`).getUTCDay();
+
+  const [barbershopSchedule, weeklyIntervals, employeeExceptions] = await Promise.all([
+    resolveEffectiveScheduleForDate(
+      {
+        barbershopId: input.barbershopId,
+        localDate: input.localDate,
+      },
+      input.db,
+    ),
+    employeeIds.length > 0
+      ? input.db.employeeWorkingInterval.findMany({
+          where: {
+            barbershopId: input.barbershopId,
+            employeeId: { in: employeeIds },
+            dayOfWeek,
+          },
+          select: {
+            employeeId: true,
+            openTime: true,
+            closeTime: true,
+          },
+          orderBy: [
+            { employeeId: 'asc' },
+            { openTime: 'asc' },
+          ],
+        })
+      : Promise.resolve([]),
+    employeeIds.length > 0
+      ? input.db.employeeScheduleException.findMany({
+          where: {
+            barbershopId: input.barbershopId,
+            employeeId: { in: employeeIds },
+            localDate: input.localDate,
+          },
+          include: {
+            intervals: {
+              orderBy: {
+                position: 'asc',
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const weeklyIntervalsByEmployee = new Map<
+    string,
+    Array<{ openTime: string; closeTime: string }>
+  >();
+  for (const interval of weeklyIntervals) {
+    const bucket = weeklyIntervalsByEmployee.get(interval.employeeId) ?? [];
+    bucket.push({
+      openTime: interval.openTime,
+      closeTime: interval.closeTime,
+    });
+    weeklyIntervalsByEmployee.set(interval.employeeId, bucket);
+  }
+
+  const exceptionByEmployee = new Map(
+    employeeExceptions.map((exception) => [
+      exception.employeeId,
+      {
+        type: exception.type,
+        reason: null,
+        intervals: stripIntervalInputPositions(
+          normalizeScheduleExceptionIntervals(exception.intervals),
+        ),
+      },
+    ]),
+  );
+
+  return new Map(
+    input.visibleEmployees.map((employee) => [
+      employee.id,
+      buildEmployeeEffectiveSchedule({
+        barbershopSchedule,
+        employee: {
+          id: employee.id,
+          barbershopId: input.barbershopId,
+          isActive: true,
+          deletedAt: null,
+          scheduleMode: employee.scheduleMode,
+        },
+        weeklyIntervals: weeklyIntervalsByEmployee.get(employee.id) ?? [],
+        employeeException: exceptionByEmployee.get(employee.id) ?? null,
+      }),
+    ]),
+  );
 }
 
 export async function getDailyScheduleBoard(
@@ -545,10 +659,12 @@ export async function getDailyScheduleBoard(
     input.query.date,
     barbershop.timezone
   );
-  const effectiveSchedule = await resolveEffectiveScheduleForDate({
+  const employeeSchedules = await resolveEmployeeSchedulesForBoard({
     barbershopId: input.barbershopId,
     localDate: input.query.date,
-  }, db as Pick<PrismaClient, 'barbershop' | 'workingHours' | 'barbershopScheduleException'>);
+    visibleEmployees,
+    db,
+  });
 
   const employeeIds = visibleEmployees.map((employee) => employee.id);
   const [appointments, assignedServices] = await Promise.all([
@@ -678,12 +794,6 @@ export async function getDailyScheduleBoard(
     );
   }
 
-  const closedIntervals = deriveClosedIntervals(
-    input.query.date,
-    barbershop.timezone,
-    effectiveSchedule.intervals
-  );
-
   const appointmentsByEmployee = new Map<string, typeof appointments>();
   for (const employee of visibleEmployees) {
     appointmentsByEmployee.set(employee.id, []);
@@ -707,6 +817,7 @@ export async function getDailyScheduleBoard(
           }
         : null,
     employees: visibleEmployees.map((employee) => {
+      const employeeSchedule = employeeSchedules.get(employee.id)!;
       const employeeAppointments = appointmentsByEmployee.get(employee.id) ?? [];
       const blockingAppointments = employeeAppointments
         .filter((appointment) => isBlockingAppointmentStatus(appointment.status))
@@ -722,13 +833,28 @@ export async function getDailyScheduleBoard(
         addAppointmentToSummary(summary, appointment);
       }
 
+      const closedIntervals = deriveClosedIntervals(
+        input.query.date,
+        barbershop.timezone,
+        employeeSchedule.intervals,
+      );
+
       return {
         id: employee.id,
         name: employee.name,
         isCurrentUser: employee.isCurrentUser,
         workingDay: {
-          source: effectiveSchedule.source,
-          intervals: effectiveSchedule.intervals.map((interval) => ({
+          source: employeeSchedule.source,
+          scheduleMode: employee.scheduleMode,
+          availabilityState:
+            employeeSchedule.source === 'EMPLOYEE_FULL_DAY_OFF'
+              ? 'TIME_OFF'
+              : employeeSchedule.source === 'EMPLOYEE_CUSTOM_HOURS'
+                ? 'CUSTOM_HOURS'
+                : employeeSchedule.intervals.length > 0
+                  ? 'WORKING'
+                  : 'OFF',
+          intervals: employeeSchedule.intervals.map((interval) => ({
             startTime: interval.openTime,
             endTime: interval.closeTime,
             startAt: tryLocalDateTimeToUtc(
@@ -750,7 +876,7 @@ export async function getDailyScheduleBoard(
           date: input.query.date,
           timezone: barbershop.timezone,
           now,
-          intervals: effectiveSchedule.intervals,
+          intervals: employeeSchedule.intervals,
           blockingAppointments,
           minimumBookableDuration,
         }),
@@ -765,6 +891,11 @@ export async function getDailyScheduleBoard(
                 noShowCount: 0,
               };
           const failedCount = failedNotificationMap.get(appointment.id) ?? 0;
+          const outsideWorkingHoursReasonCode = mapAppointmentOutsideScheduleReason(
+            employeeSchedule,
+            getLocalTimeStringInTimeZone(barbershop.timezone, appointment.startAt),
+            getLocalTimeStringInTimeZone(barbershop.timezone, appointment.endAt),
+          );
 
           return {
             id: appointment.id,
@@ -797,6 +928,8 @@ export async function getDailyScheduleBoard(
               startAt: appointment.startAt,
               now,
             }),
+            isOutsideWorkingHours: outsideWorkingHoursReasonCode !== null,
+            outsideWorkingHoursReasonCode,
             canStart: canStartAppointment(input.userRole, appointment.status),
             canComplete: canCompleteAppointment(input.userRole, appointment.status),
             canMarkNoShow: canCompleteAppointment(input.userRole, appointment.status),
