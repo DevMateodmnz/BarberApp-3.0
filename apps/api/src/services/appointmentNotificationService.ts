@@ -16,6 +16,11 @@ import type {
   EmailTransportError,
 } from '../lib/emailTransport.js';
 import { normalizeEmail } from '../lib/email.js';
+import {
+  AppError,
+  BadRequestError,
+  NotFoundError,
+} from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
 
 export const REMINDER_24H_WINDOW_MS = 24 * 60 * 60_000;
@@ -23,8 +28,11 @@ export const APPOINTMENT_NOTIFICATION_RETRY_DELAYS_MS = [60_000, 5 * 60_000, 30 
 export const APPOINTMENT_NOTIFICATION_MAX_ATTEMPTS = 4;
 export const APPOINTMENT_NOTIFICATION_STALE_LOCK_MS = 10 * 60_000;
 export const APPOINTMENT_NOTIFICATION_DEFAULT_BATCH_SIZE = 10;
+const APPOINTMENT_NOTIFICATION_DETAIL_ATTEMPT_LIMIT = 50;
+const APPOINTMENT_NOTIFICATION_PROVIDER_HASH_LENGTH = 64;
 
 export type NotificationDb = Prisma.TransactionClient | typeof prisma;
+type NotificationWriteTx = Prisma.TransactionClient;
 
 export const APPOINTMENT_NOTIFICATION_SUMMARY_SELECT = {
   id: true,
@@ -60,6 +68,73 @@ export interface ProcessAppointmentNotificationBatchResult {
   staleLocksReleased: number;
 }
 
+export interface NotificationOperationsSummary {
+  pending: number;
+  processing: number;
+  sent: number;
+  failed: number;
+  cancelled: number;
+  dueNow: number;
+  retrying: number;
+}
+
+export interface NotificationOperationsListItem {
+  id: string;
+  appointmentId: string;
+  type: AppointmentNotificationType;
+  channel: AppointmentNotificationChannel;
+  status: AppointmentNotificationStatus;
+  scheduledFor: string;
+  nextAttemptAt: string;
+  attempts: number;
+  manualRetryCount: number;
+  sentAt: string | null;
+  cancelledAt: string | null;
+  customerDisplayName: string;
+  maskedRecipient: string;
+  serviceName: string;
+  employeeName: string;
+  appointmentStartAt: string;
+}
+
+export interface NotificationAttemptHistoryItem {
+  id: string;
+  attemptNumber: number;
+  outcome: 'SENT' | 'TEMPORARY_FAILURE' | 'PERMANENT_FAILURE';
+  attemptedAt: string;
+  completedAt: string | null;
+  errorCode: string | null;
+  sanitizedError: string | null;
+  durationMs: number | null;
+}
+
+export interface NotificationOperationsDetail extends NotificationOperationsListItem {
+  lastError: string | null;
+  lastManualRetryAt: string | null;
+  retryEligible: boolean;
+  attemptsHistory: NotificationAttemptHistoryItem[];
+}
+
+export interface ListNotificationOperationsInput {
+  barbershopId: string;
+  status?: AppointmentNotificationStatus;
+  type?: AppointmentNotificationType;
+  channel?: AppointmentNotificationChannel;
+  dateFrom?: Date;
+  dateTo?: Date;
+  page: number;
+  limit: number;
+  sort: 'newest' | 'scheduled' | 'failed';
+  ownerUserId: string;
+}
+
+export interface ListNotificationOperationsResult {
+  items: NotificationOperationsListItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 interface AppointmentNotificationContext {
   appointmentId: string;
   barbershopId: string;
@@ -72,6 +147,34 @@ interface AppointmentNotificationContext {
   timezone: string;
   publicSlug: string | null;
   employeeName: string;
+}
+
+interface NotificationListRow {
+  id: string;
+  appointmentId: string;
+  type: AppointmentNotificationType;
+  channel: AppointmentNotificationChannel;
+  status: AppointmentNotificationStatus;
+  recipientEmail: string;
+  scheduledFor: Date;
+  nextAttemptAt: Date;
+  attempts: number;
+  manualRetryCount: number;
+  lastManualRetryAt: Date | null;
+  lastError: string | null;
+  sentAt: Date | null;
+  cancelledAt: Date | null;
+  appointment: {
+    clientName: string;
+    serviceName: string;
+    startAt: Date;
+    employee: {
+      user: {
+        name: string | null;
+        email: string;
+      };
+    };
+  };
 }
 
 interface ClaimedNotificationRow {
@@ -100,6 +203,52 @@ interface ClaimedNotificationRow {
 function sanitizeEmail(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? normalizeEmail(trimmed) : null;
+}
+
+function hashOpaqueValue(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function sanitizeOptionalErrorCode(error: unknown): string | null {
+  if (error instanceof Error && error.name === 'EmailTransportError') {
+    const code = (error as EmailTransportError).code?.trim();
+    return code ? code.slice(0, 120) : null;
+  }
+
+  return null;
+}
+
+function maskRecipientEmail(value: string): string {
+  const normalized = sanitizeEmail(value);
+  if (!normalized) {
+    return '***';
+  }
+
+  const [localPart, domain] = normalized.split('@');
+  if (!localPart || !domain) {
+    return '***';
+  }
+
+  return `${localPart[0]}***@${domain}`;
+}
+
+function toIsoString(value: Date | null): string | null {
+  return value ? value.toISOString() : null;
+}
+
+function toEmployeeDisplayName(value: { name: string | null; email: string }): string {
+  return value.name?.trim() || value.email.trim();
+}
+
+async function runInNotificationWriteTx<T>(
+  db: NotificationDb,
+  callback: (tx: NotificationWriteTx) => Promise<T>
+): Promise<T> {
+  if ('$transaction' in db) {
+    return db.$transaction(callback);
+  }
+
+  return callback(db);
 }
 
 function clampBatchSize(value: number | undefined): number {
@@ -241,6 +390,44 @@ async function loadAppointmentNotificationContext(
     employeeName:
       appointment.employee.user.name?.trim()
       || appointment.employee.user.email.trim(),
+  };
+}
+
+async function assertOwnerCanAccessBarbershopNotifications(
+  barbershopId: string,
+  ownerUserId: string,
+  db: NotificationDb = prisma
+): Promise<void> {
+  const shop = await db.barbershop.findUnique({
+    where: { id: barbershopId },
+    select: { ownerId: true },
+  });
+
+  if (!shop || shop.ownerId !== ownerUserId) {
+    throw new NotFoundError('Barbershop');
+  }
+}
+
+function mapNotificationOperationsListItem(
+  row: NotificationListRow
+): NotificationOperationsListItem {
+  return {
+    id: row.id,
+    appointmentId: row.appointmentId,
+    type: row.type,
+    channel: row.channel,
+    status: row.status,
+    scheduledFor: row.scheduledFor.toISOString(),
+    nextAttemptAt: row.nextAttemptAt.toISOString(),
+    attempts: row.attempts,
+    manualRetryCount: row.manualRetryCount,
+    sentAt: toIsoString(row.sentAt),
+    cancelledAt: toIsoString(row.cancelledAt),
+    customerDisplayName: row.appointment.clientName,
+    maskedRecipient: maskRecipientEmail(row.recipientEmail),
+    serviceName: row.appointment.serviceName,
+    employeeName: toEmployeeDisplayName(row.appointment.employee.user),
+    appointmentStartAt: row.appointment.startAt.toISOString(),
   };
 }
 
@@ -535,6 +722,7 @@ async function loadClaimedNotification(
       recipientEmail: true,
       idempotencyKey: true,
       attempts: true,
+      barbershopId: true,
       payload: true,
       appointment: {
         select: {
@@ -546,29 +734,97 @@ async function loadClaimedNotification(
   });
 }
 
+async function createAttemptAuditRow(
+  db: NotificationDb,
+  input: {
+    notificationId: string;
+    barbershopId: string;
+    attemptedAt: Date;
+    completedAt: Date;
+    workerToken: string;
+    outcome: 'SENT' | 'TEMPORARY_FAILURE' | 'PERMANENT_FAILURE';
+    providerMessageId?: string | null;
+    errorCode?: string | null;
+    sanitizedError?: string | null;
+    durationMs: number;
+  }
+): Promise<void> {
+  const maxAttempt = await db.appointmentNotificationAttempt.aggregate({
+    where: {
+      appointmentNotificationId: input.notificationId,
+      barbershopId: input.barbershopId,
+    },
+    _max: {
+      attemptNumber: true,
+    },
+  });
+
+  await db.appointmentNotificationAttempt.create({
+    data: {
+      barbershopId: input.barbershopId,
+      appointmentNotificationId: input.notificationId,
+      attemptNumber: (maxAttempt._max.attemptNumber ?? 0) + 1,
+      outcome: input.outcome,
+      attemptedAt: input.attemptedAt,
+      completedAt: input.completedAt,
+      workerTokenHash: hashOpaqueValue(input.workerToken),
+      providerMessageIdHash: input.providerMessageId
+        ? hashOpaqueValue(input.providerMessageId).slice(
+          0,
+          APPOINTMENT_NOTIFICATION_PROVIDER_HASH_LENGTH
+        )
+        : null,
+      errorCode: input.errorCode ?? null,
+      sanitizedError: input.sanitizedError ?? null,
+      durationMs: input.durationMs,
+    },
+  });
+}
+
 async function markClaimedNotificationSent(
   db: NotificationDb,
   input: {
     id: string;
+    barbershopId: string;
     lockToken: string;
+    attemptedAt: Date;
     sentAt: Date;
     providerMessageId: string | null;
+    durationMs: number;
   }
 ): Promise<void> {
-  await db.appointmentNotification.updateMany({
-    where: {
-      id: input.id,
-      lockToken: input.lockToken,
-      status: 'PROCESSING',
-    },
-    data: {
-      status: 'SENT',
-      sentAt: input.sentAt,
+  await runInNotificationWriteTx(db, async (tx) => {
+    await createAttemptAuditRow(tx, {
+      notificationId: input.id,
+      barbershopId: input.barbershopId,
+      attemptedAt: input.attemptedAt,
+      completedAt: input.sentAt,
+      workerToken: input.lockToken,
+      outcome: 'SENT',
       providerMessageId: input.providerMessageId,
-      lastError: null,
-      lockToken: null,
-      lockedAt: null,
-    },
+      durationMs: input.durationMs,
+    });
+
+    await tx.appointmentNotification.updateMany({
+      where: {
+        id: input.id,
+        lockToken: input.lockToken,
+        status: 'PROCESSING',
+      },
+      data: {
+        status: 'SENT',
+        sentAt: input.sentAt,
+        providerMessageId: input.providerMessageId
+          ? hashOpaqueValue(input.providerMessageId).slice(
+            0,
+            APPOINTMENT_NOTIFICATION_PROVIDER_HASH_LENGTH
+          )
+          : null,
+        lastError: null,
+        lockToken: null,
+        lockedAt: null,
+      },
+    });
   });
 }
 
@@ -599,51 +855,83 @@ async function markClaimedNotificationFailure(
   db: NotificationDb,
   input: {
     id: string;
+    barbershopId: string;
     lockToken: string;
     currentAttempts: number;
+    attemptedAt: Date;
     now: Date;
     error: unknown;
+    durationMs: number;
   }
 ): Promise<'retried' | 'failed'> {
   const nextAttempts = input.currentAttempts + 1;
   const lastError = sanitizeNotificationErrorMessage(input.error);
+  const errorCode = sanitizeOptionalErrorCode(input.error);
   const retryable = isRetryableDeliveryError(input.error);
   const nextAttemptAt = retryable
     ? buildRetryAttemptAt(input.now, nextAttempts)
     : null;
 
   if (retryable && nextAttempts < APPOINTMENT_NOTIFICATION_MAX_ATTEMPTS && nextAttemptAt) {
-    await db.appointmentNotification.updateMany({
+    await runInNotificationWriteTx(db, async (tx) => {
+      await createAttemptAuditRow(tx, {
+        notificationId: input.id,
+        barbershopId: input.barbershopId,
+        attemptedAt: input.attemptedAt,
+        completedAt: input.now,
+        workerToken: input.lockToken,
+        outcome: 'TEMPORARY_FAILURE',
+        errorCode,
+        sanitizedError: lastError,
+        durationMs: input.durationMs,
+      });
+
+      await tx.appointmentNotification.updateMany({
+        where: {
+          id: input.id,
+          lockToken: input.lockToken,
+          status: 'PROCESSING',
+        },
+        data: {
+          status: 'PENDING',
+          attempts: nextAttempts,
+          nextAttemptAt,
+          lastError,
+          lockToken: null,
+          lockedAt: null,
+        },
+      });
+    });
+    return 'retried';
+  }
+
+  await runInNotificationWriteTx(db, async (tx) => {
+    await createAttemptAuditRow(tx, {
+      notificationId: input.id,
+      barbershopId: input.barbershopId,
+      attemptedAt: input.attemptedAt,
+      completedAt: input.now,
+      workerToken: input.lockToken,
+      outcome: 'PERMANENT_FAILURE',
+      errorCode,
+      sanitizedError: lastError,
+      durationMs: input.durationMs,
+    });
+
+    await tx.appointmentNotification.updateMany({
       where: {
         id: input.id,
         lockToken: input.lockToken,
         status: 'PROCESSING',
       },
       data: {
-        status: 'PENDING',
+        status: 'FAILED',
         attempts: nextAttempts,
-        nextAttemptAt,
         lastError,
         lockToken: null,
         lockedAt: null,
       },
     });
-    return 'retried';
-  }
-
-  await db.appointmentNotification.updateMany({
-    where: {
-      id: input.id,
-      lockToken: input.lockToken,
-      status: 'PROCESSING',
-    },
-    data: {
-      status: 'FAILED',
-      attempts: nextAttempts,
-      lastError,
-      lockToken: null,
-      lockedAt: null,
-    },
   });
   return 'failed';
 }
@@ -708,6 +996,8 @@ export async function processAppointmentNotificationBatch(
       continue;
     }
 
+    const attemptedAt = new Date(now);
+
     try {
       const message = buildAppointmentNotificationEmail({
         type: live.type,
@@ -718,20 +1008,28 @@ export async function processAppointmentNotificationBatch(
         publicWebBaseUrl: input.publicWebBaseUrl,
       });
       const sendResult = await input.transport.send(message);
+      const sentAt = new Date(now);
       await markClaimedNotificationSent(db, {
         id: live.id,
+        barbershopId: live.barbershopId,
         lockToken: row.lock_token,
-        sentAt: now,
+        attemptedAt,
+        sentAt,
         providerMessageId: sendResult.providerMessageId,
+        durationMs: Math.max(0, sentAt.getTime() - attemptedAt.getTime()),
       });
       result.sent += 1;
     } catch (error) {
+      const completedAt = new Date(now);
       const outcome = await markClaimedNotificationFailure(db, {
         id: live.id,
+        barbershopId: live.barbershopId,
         lockToken: row.lock_token,
         currentAttempts: live.attempts,
-        now,
+        attemptedAt,
+        now: completedAt,
         error,
+        durationMs: Math.max(0, completedAt.getTime() - attemptedAt.getTime()),
       });
       if (outcome === 'retried') {
         result.retried += 1;
@@ -742,4 +1040,374 @@ export async function processAppointmentNotificationBatch(
   }
 
   return result;
+}
+
+function buildNotificationOperationsWhere(input: {
+  barbershopId: string;
+  status?: AppointmentNotificationStatus;
+  type?: AppointmentNotificationType;
+  channel?: AppointmentNotificationChannel;
+  dateFrom?: Date;
+  dateTo?: Date;
+}): Prisma.AppointmentNotificationWhereInput {
+  return {
+    barbershopId: input.barbershopId,
+    ...(input.status ? { status: input.status } : {}),
+    ...(input.type ? { type: input.type } : {}),
+    ...(input.channel ? { channel: input.channel } : {}),
+    ...(
+      input.dateFrom || input.dateTo
+        ? {
+            scheduledFor: {
+              ...(input.dateFrom ? { gte: input.dateFrom } : {}),
+              ...(input.dateTo ? { lte: input.dateTo } : {}),
+            },
+          }
+        : {}
+    ),
+  };
+}
+
+function buildNotificationOperationsOrderBy(
+  sort: 'newest' | 'scheduled' | 'failed'
+): Prisma.AppointmentNotificationOrderByWithRelationInput[] {
+  if (sort === 'scheduled') {
+    return [
+      { scheduledFor: 'asc' },
+      { createdAt: 'asc' },
+    ];
+  }
+
+  if (sort === 'failed') {
+    return [
+      { updatedAt: 'desc' },
+      { createdAt: 'desc' },
+    ];
+  }
+
+  return [
+    { createdAt: 'desc' },
+    { id: 'desc' },
+  ];
+}
+
+export async function getBarbershopNotificationOperationsSummary(input: {
+  barbershopId: string;
+  ownerUserId: string;
+  now?: Date;
+  db?: NotificationDb;
+}): Promise<NotificationOperationsSummary> {
+  const db = input.db ?? prisma;
+  const now = input.now ?? new Date();
+  await assertOwnerCanAccessBarbershopNotifications(
+    input.barbershopId,
+    input.ownerUserId,
+    db
+  );
+
+  const grouped = await db.appointmentNotification.groupBy({
+    by: ['status'],
+    where: {
+      barbershopId: input.barbershopId,
+    },
+    _count: {
+      _all: true,
+    },
+  });
+
+  const base: NotificationOperationsSummary = {
+    pending: 0,
+    processing: 0,
+    sent: 0,
+    failed: 0,
+    cancelled: 0,
+    dueNow: 0,
+    retrying: 0,
+  };
+
+  for (const row of grouped) {
+    const count = row._count._all;
+    if (row.status === 'PENDING') base.pending = count;
+    if (row.status === 'PROCESSING') base.processing = count;
+    if (row.status === 'SENT') base.sent = count;
+    if (row.status === 'FAILED') base.failed = count;
+    if (row.status === 'CANCELLED') base.cancelled = count;
+  }
+
+  const [dueNow, retrying] = await Promise.all([
+    db.appointmentNotification.count({
+      where: {
+        barbershopId: input.barbershopId,
+        status: 'PENDING',
+        nextAttemptAt: { lte: now },
+      },
+    }),
+    db.appointmentNotification.count({
+      where: {
+        barbershopId: input.barbershopId,
+        status: 'PENDING',
+        attempts: { gt: 0 },
+      },
+    }),
+  ]);
+
+  base.dueNow = dueNow;
+  base.retrying = retrying;
+
+  return base;
+}
+
+export async function listBarbershopNotificationOperations(
+  input: ListNotificationOperationsInput,
+  db: NotificationDb = prisma
+): Promise<ListNotificationOperationsResult> {
+  await assertOwnerCanAccessBarbershopNotifications(
+    input.barbershopId,
+    input.ownerUserId,
+    db
+  );
+
+  const where = buildNotificationOperationsWhere({
+    barbershopId: input.barbershopId,
+    status: input.status,
+    type: input.type,
+    channel: input.channel,
+    dateFrom: input.dateFrom,
+    dateTo: input.dateTo,
+  });
+
+  const [total, rows] = await Promise.all([
+    db.appointmentNotification.count({ where }),
+    db.appointmentNotification.findMany({
+      where,
+      orderBy: buildNotificationOperationsOrderBy(input.sort),
+      skip: (input.page - 1) * input.limit,
+      take: input.limit,
+      select: {
+        id: true,
+        appointmentId: true,
+        type: true,
+        channel: true,
+        status: true,
+        recipientEmail: true,
+        scheduledFor: true,
+        nextAttemptAt: true,
+        attempts: true,
+        manualRetryCount: true,
+        lastManualRetryAt: true,
+        lastError: true,
+        sentAt: true,
+        cancelledAt: true,
+        appointment: {
+          select: {
+            clientName: true,
+            serviceName: true,
+            startAt: true,
+            employee: {
+              select: {
+                user: {
+                  select: {
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+  ]);
+
+  return {
+    items: rows.map(mapNotificationOperationsListItem),
+    total,
+    page: input.page,
+    limit: input.limit,
+  };
+}
+
+export async function getBarbershopNotificationOperationsDetail(input: {
+  barbershopId: string;
+  notificationId: string;
+  ownerUserId: string;
+  db?: NotificationDb;
+}): Promise<NotificationOperationsDetail> {
+  const db = input.db ?? prisma;
+  await assertOwnerCanAccessBarbershopNotifications(
+    input.barbershopId,
+    input.ownerUserId,
+    db
+  );
+
+  const row = await db.appointmentNotification.findFirst({
+    where: {
+      id: input.notificationId,
+      barbershopId: input.barbershopId,
+    },
+    select: {
+      id: true,
+      appointmentId: true,
+      type: true,
+      channel: true,
+      status: true,
+      recipientEmail: true,
+      scheduledFor: true,
+      nextAttemptAt: true,
+      attempts: true,
+      manualRetryCount: true,
+      lastManualRetryAt: true,
+      lastError: true,
+      sentAt: true,
+      cancelledAt: true,
+      appointment: {
+        select: {
+          clientName: true,
+          serviceName: true,
+          startAt: true,
+          employee: {
+            select: {
+              user: {
+                select: {
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      deliveryAttempts: {
+        orderBy: [
+          { attemptNumber: 'desc' },
+          { attemptedAt: 'desc' },
+        ],
+        take: APPOINTMENT_NOTIFICATION_DETAIL_ATTEMPT_LIMIT,
+        select: {
+          id: true,
+          attemptNumber: true,
+          outcome: true,
+          attemptedAt: true,
+          completedAt: true,
+          errorCode: true,
+          sanitizedError: true,
+          durationMs: true,
+        },
+      },
+    },
+  });
+
+  if (!row) {
+    throw new NotFoundError('Notification');
+  }
+
+  const summary = mapNotificationOperationsListItem(row as NotificationListRow);
+  return {
+    ...summary,
+    lastError: row.lastError,
+    lastManualRetryAt: toIsoString(row.lastManualRetryAt),
+    retryEligible: row.status === 'FAILED',
+    attemptsHistory: row.deliveryAttempts.map((attempt) => ({
+      id: attempt.id,
+      attemptNumber: attempt.attemptNumber,
+      outcome: attempt.outcome,
+      attemptedAt: attempt.attemptedAt.toISOString(),
+      completedAt: toIsoString(attempt.completedAt),
+      errorCode: attempt.errorCode,
+      sanitizedError: attempt.sanitizedError,
+      durationMs: attempt.durationMs,
+    })),
+  };
+}
+
+export async function retryFailedAppointmentNotification(input: {
+  barbershopId: string;
+  notificationId: string;
+  ownerUserId: string;
+  now?: Date;
+  db?: NotificationDb;
+}): Promise<NotificationOperationsListItem> {
+  const db = input.db ?? prisma;
+  const now = input.now ?? new Date();
+  await assertOwnerCanAccessBarbershopNotifications(
+    input.barbershopId,
+    input.ownerUserId,
+    db
+  );
+
+  const existing = await db.appointmentNotification.findFirst({
+    where: {
+      id: input.notificationId,
+      barbershopId: input.barbershopId,
+    },
+    select: {
+      id: true,
+      status: true,
+    },
+  });
+
+  if (!existing) {
+    throw new NotFoundError('Notification');
+  }
+
+  if (existing.status !== 'FAILED') {
+    throw new BadRequestError(
+      'Only failed notifications can be retried manually'
+    );
+  }
+
+  const result = await db.appointmentNotification.updateMany({
+    where: {
+      id: input.notificationId,
+      barbershopId: input.barbershopId,
+      status: 'FAILED',
+    },
+    data: {
+      status: 'PENDING',
+      attempts: 0,
+      nextAttemptAt: now,
+      lastError: null,
+      lockToken: null,
+      lockedAt: null,
+      manualRetryCount: {
+        increment: 1,
+      },
+      lastManualRetryAt: now,
+      lastManualRetryByUserId: input.ownerUserId,
+    },
+  });
+
+  if (result.count !== 1) {
+    throw new AppError(
+      409,
+      'NOTIFICATION_RETRY_CONFLICT',
+      'The notification retry request conflicted with another update'
+    );
+  }
+
+  const detail = await getBarbershopNotificationOperationsDetail({
+    barbershopId: input.barbershopId,
+    notificationId: input.notificationId,
+    ownerUserId: input.ownerUserId,
+    db,
+  });
+
+  return {
+    id: detail.id,
+    appointmentId: detail.appointmentId,
+    type: detail.type,
+    channel: detail.channel,
+    status: detail.status,
+    scheduledFor: detail.scheduledFor,
+    nextAttemptAt: detail.nextAttemptAt,
+    attempts: detail.attempts,
+    manualRetryCount: detail.manualRetryCount,
+    sentAt: detail.sentAt,
+    cancelledAt: detail.cancelledAt,
+    customerDisplayName: detail.customerDisplayName,
+    maskedRecipient: detail.maskedRecipient,
+    serviceName: detail.serviceName,
+    employeeName: detail.employeeName,
+    appointmentStartAt: detail.appointmentStartAt,
+  };
 }

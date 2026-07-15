@@ -11,6 +11,7 @@ import { tokens } from '@/theme/index.js';
 
 export interface ManageContentProps {
   isOwner: boolean;
+  onNotifications: () => void;
   onServices: () => void;
   onEmployees: () => void;
   onWorkingHours: () => void;
@@ -19,6 +20,7 @@ export interface ManageContentProps {
 
 export function ManageContent({
   isOwner,
+  onNotifications,
   onServices,
   onEmployees,
   onWorkingHours,
@@ -45,6 +47,15 @@ export function ManageContent({
               <SectionHeader title={t('manage.businessSectionTitle')} />
               <Text style={styles.sectionHint}>{t('manage.businessSectionHint')}</Text>
               <View style={styles.tileList}>
+                <NavigationTile
+                  testID="manage-notifications"
+                  title={t('notificationsOperations.title')}
+                  description={t('manage.items.notifications.description')}
+                  iconName="mail-open-outline"
+                  accessibilityLabel={t('navigation.accessibility.notifications')}
+                  onPress={onNotifications}
+                  showChevron
+                />
                 <NavigationTile
                   testID="manage-services"
                   title={t('services.title')}

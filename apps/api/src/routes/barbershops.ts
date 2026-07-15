@@ -37,11 +37,16 @@ import {
   CustomerLookupBodySchema,
   StaffCreateAppointmentSchema,
 } from '../schemas/appointment.js';
+import {
+  NotificationOperationsQuerySchema,
+  NotificationRetryBodySchema,
+} from '../schemas/notification.js';
 import { CreateServiceSchema, UpdateServiceSchema } from '../schemas/service.js';
 import * as employeeService from '../services/employeeService.js';
 import * as employeeInvitationService from '../services/employeeInvitationService.js';
 import * as serviceService from '../services/serviceService.js';
 import * as appointmentService from '../services/appointmentService.js';
+import * as appointmentNotificationService from '../services/appointmentNotificationService.js';
 import * as workingHoursService from '../services/workingHoursService.js';
 import * as serviceRecordService from '../services/serviceRecordService.js';
 import { CreateServiceRecordSchema, ServiceRecordDateSchema, SummaryPeriodSchema } from '../schemas/serviceRecord.js';
@@ -74,6 +79,12 @@ function paramEmployeeId(req: Request): string {
 function paramServiceId(req: Request): string {
   const id = req.params.serviceId;
   if (!id) throw new BadRequestError('Service ID is required');
+  return id;
+}
+
+function paramNotificationId(req: Request): string {
+  const id = req.params.notificationId;
+  if (!id) throw new BadRequestError('Notification ID is required');
   return id;
 }
 
@@ -128,6 +139,19 @@ function parseAppointmentListQuery(req: Request) {
   if (!parsed.success) {
     throw new ValidationError(
       'Invalid appointment list query parameters',
+      parsed.error.flatten()
+    );
+  }
+
+  return parsed.data;
+}
+
+function parseNotificationOperationsQuery(req: Request) {
+  const parsed = NotificationOperationsQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid notification operations query parameters',
       parsed.error.flatten()
     );
   }
@@ -475,6 +499,102 @@ router.get(
         authenticatedEmployeeId: req.employeeId,
       });
       res.json({ success: true, data: availability });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/notifications/summary
+// OWNER-only notification operations summary
+// ============================================
+router.get(
+  '/:barbershopId/notifications/summary',
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const summary =
+        await appointmentNotificationService.getBarbershopNotificationOperationsSummary({
+          barbershopId: paramBarbershopId(req),
+          ownerUserId: req.userId,
+        });
+      res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/notifications
+// OWNER-only paginated notification operations list
+// ============================================
+router.get(
+  '/:barbershopId/notifications',
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const query = parseNotificationOperationsQuery(req);
+      const notifications =
+        await appointmentNotificationService.listBarbershopNotificationOperations({
+          barbershopId: paramBarbershopId(req),
+          ownerUserId: req.userId,
+          status: query.status,
+          type: query.type,
+          channel: query.channel,
+          dateFrom: query.dateFrom ? new Date(query.dateFrom) : undefined,
+          dateTo: query.dateTo ? new Date(query.dateTo) : undefined,
+          page: query.page,
+          limit: query.limit,
+          sort: query.sort,
+        });
+      res.json({ success: true, data: notifications });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/notifications/:notificationId
+// OWNER-only notification detail + attempt history
+// ============================================
+router.get(
+  '/:barbershopId/notifications/:notificationId',
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const detail =
+        await appointmentNotificationService.getBarbershopNotificationOperationsDetail({
+          barbershopId: paramBarbershopId(req),
+          notificationId: paramNotificationId(req),
+          ownerUserId: req.userId,
+        });
+      res.json({ success: true, data: detail });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/notifications/:notificationId/retry
+// OWNER-only manual retry scheduling for FAILED notifications
+// ============================================
+router.post(
+  '/:barbershopId/notifications/:notificationId/retry',
+  requireRole('OWNER'),
+  validateBody(NotificationRetryBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const notification =
+        await appointmentNotificationService.retryFailedAppointmentNotification({
+          barbershopId: paramBarbershopId(req),
+          notificationId: paramNotificationId(req),
+          ownerUserId: req.userId,
+        });
+      res.json({ success: true, data: notification });
     } catch (error) {
       next(error);
     }

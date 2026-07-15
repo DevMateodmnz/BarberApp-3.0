@@ -32,7 +32,7 @@ durable foundations, not because they are next on the list.
 1. **Customer retention and no-show prevention**
 2. **Public booking reliability and conversion**
 3. **Customer directory and visit history**
-4. **Appointment confirmations and reminders**
+4. **Appointment confirmations, reminders, and delivery operations**
 5. **Deposits and Mercado Pago**
 6. **Promotions and loyalty**
 7. **Platform administration and scalable tenant onboarding**
@@ -184,12 +184,14 @@ operator workflow:
    reminders. The worker is standalone, claims due work with
    `FOR UPDATE SKIP LOCKED`, and retries with bounded exponential
    backoff. WhatsApp / SMS remain out of scope.
-2. **Repeat-customer aggregation surfaces in the mobile
+2. **Notification operations and delivery audit** — now
+   implemented as an OWNER-only mobile operations surface plus
+   summary/list/detail APIs, append-only worker attempt history,
+   and safe compare-and-swap manual retry for terminal failures.
+3. **Repeat-customer aggregation surfaces in the mobile
    appointments list** — extend the same customer anchor to
    the day-view so staff can spot repeat no-shows without
    leaving the appointments screen.
-3. **Public confirmation email** — now delivered by the same
-   notification outbox with a `BOOKING_CONFIRMATION` variant.
 4. **Deposit flow via Mercado Pago** — full production cutover
    with runbook. Payment creates a `pending` reservation that
    holds the slot until the webhook confirms the deposit; on

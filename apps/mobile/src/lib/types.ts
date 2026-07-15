@@ -269,6 +269,11 @@ export type AppointmentNotificationStatus =
   | 'FAILED'
   | 'CANCELLED';
 
+export type NotificationAttemptOutcome =
+  | 'SENT'
+  | 'TEMPORARY_FAILURE'
+  | 'PERMANENT_FAILURE';
+
 export interface AppointmentNotificationSummary {
   id: string;
   type: AppointmentNotificationType;
@@ -278,6 +283,62 @@ export interface AppointmentNotificationSummary {
   attempts: number;
   sentAt: string | null;
   cancelledAt: string | null;
+}
+
+export type NotificationOperationsSort = 'newest' | 'scheduled' | 'failed';
+
+export interface NotificationOperationsSummary {
+  pending: number;
+  processing: number;
+  sent: number;
+  failed: number;
+  cancelled: number;
+  dueNow: number;
+  retrying: number;
+}
+
+export interface NotificationOperationsListItem {
+  id: string;
+  appointmentId: string;
+  type: AppointmentNotificationType;
+  channel: AppointmentNotificationChannel;
+  status: AppointmentNotificationStatus;
+  scheduledFor: string;
+  nextAttemptAt: string;
+  attempts: number;
+  manualRetryCount: number;
+  sentAt: string | null;
+  cancelledAt: string | null;
+  customerDisplayName: string;
+  maskedRecipient: string;
+  serviceName: string;
+  employeeName: string;
+  appointmentStartAt: string;
+}
+
+export interface NotificationAttemptHistoryItem {
+  id: string;
+  attemptNumber: number;
+  outcome: NotificationAttemptOutcome;
+  attemptedAt: string;
+  completedAt: string | null;
+  errorCode: string | null;
+  sanitizedError: string | null;
+  durationMs: number | null;
+}
+
+export interface NotificationOperationsDetail extends NotificationOperationsListItem {
+  lastError: string | null;
+  lastManualRetryAt: string | null;
+  retryEligible: boolean;
+  attemptsHistory: NotificationAttemptHistoryItem[];
+}
+
+export interface NotificationOperationsPage {
+  items: NotificationOperationsListItem[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface Appointment {

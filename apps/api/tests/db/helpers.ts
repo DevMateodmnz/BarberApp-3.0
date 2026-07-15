@@ -253,6 +253,7 @@ export async function createTestEmployeeService(data: {
 export async function cleanupTestData(): Promise<void> {
   await prisma.photo.deleteMany();
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotificationAttempt.deleteMany();
   await prisma.appointmentNotification.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();

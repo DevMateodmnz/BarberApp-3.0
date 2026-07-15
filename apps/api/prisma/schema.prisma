@@ -72,6 +72,12 @@ enum AppointmentNotificationStatus {
   CANCELLED
 }
 
+enum NotificationAttemptOutcome {
+  SENT
+  TEMPORARY_FAILURE
+  PERMANENT_FAILURE
+}
+
 // ============================================
 // USER
 // ============================================
@@ -96,6 +102,7 @@ model User {
   clientPhotos        Photo[]              @relation("PhotoClient")
   sentInvitations     EmployeeInvitation[] @relation("EmployeeInvitationInvitedBy")
   acceptedInvitations EmployeeInvitation[] @relation("EmployeeInvitationUser")
+  manualRetriedAppointmentNotifications AppointmentNotification[] @relation("AppointmentNotificationLastManualRetryBy")
 
   @@map("users")
 }
@@ -129,6 +136,7 @@ model Barbershop {
   scheduleExceptions              BarbershopScheduleException[]
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
   appointmentNotifications        AppointmentNotification[]
+  appointmentNotificationAttempts AppointmentNotificationAttempt[]
   serviceRecords                  ServiceRecord[]
   employeeInvitations             EmployeeInvitation[]
 
@@ -342,6 +350,9 @@ model AppointmentNotification {
   scheduledFor      DateTime                      @map("scheduled_for")
   nextAttemptAt     DateTime                      @map("next_attempt_at")
   attempts          Int                           @default(0)
+  manualRetryCount  Int                           @default(0) @map("manual_retry_count")
+  lastManualRetryAt DateTime?                     @map("last_manual_retry_at")
+  lastManualRetryByUserId String?                 @map("last_manual_retry_by_user_id")
   lockToken         String?                       @map("lock_token")
   lockedAt          DateTime?                     @map("locked_at")
   lastError         String?                       @db.VarChar(1000) @map("last_error")
@@ -353,13 +364,40 @@ model AppointmentNotification {
   createdAt         DateTime                      @default(now()) @map("created_at")
   updatedAt         DateTime                      @updatedAt @map("updated_at")
 
-  appointment Appointment @relation(fields: [appointmentId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
-  barbershop  Barbershop  @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  appointment                Appointment                     @relation(fields: [appointmentId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  barbershop                 Barbershop                      @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  lastManualRetryByUser      User?                           @relation("AppointmentNotificationLastManualRetryBy", fields: [lastManualRetryByUserId], references: [id], onDelete: SetNull)
+  deliveryAttempts           AppointmentNotificationAttempt[]
 
   @@index([status, nextAttemptAt])
   @@index([appointmentId, status])
   @@index([barbershopId, createdAt])
+  @@unique([id, barbershopId])
   @@map("appointment_notifications")
+}
+
+model AppointmentNotificationAttempt {
+  id                        String                    @id @default(cuid())
+  barbershopId              String                    @map("barbershop_id")
+  appointmentNotificationId String                    @map("appointment_notification_id")
+  attemptNumber             Int                       @map("attempt_number")
+  outcome                   NotificationAttemptOutcome
+  attemptedAt               DateTime                  @default(now()) @map("attempted_at")
+  completedAt               DateTime?                 @map("completed_at")
+  workerTokenHash           String?                   @map("worker_token_hash")
+  providerMessageIdHash     String?                   @map("provider_message_id_hash")
+  errorCode                 String?                   @map("error_code")
+  sanitizedError            String?                   @db.VarChar(1000) @map("sanitized_error")
+  durationMs                Int?                      @map("duration_ms")
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+
+  notification AppointmentNotification @relation(fields: [appointmentNotificationId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  barbershop    Barbershop              @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+
+  @@unique([appointmentNotificationId, attemptNumber], map: "appt_notif_attempts_notif_attempt_num_key")
+  @@index([appointmentNotificationId, attemptedAt], map: "appt_notif_attempts_notif_attempted_idx")
+  @@index([barbershopId, attemptedAt], map: "appt_notif_attempts_shop_attempted_idx")
+  @@map("appointment_notification_attempts")
 }
 
 model PublicBookingIdempotency {

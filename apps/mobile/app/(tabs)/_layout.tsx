@@ -190,6 +190,14 @@ export default function TabLayout() {
           name="manage"
           options={buildPrimaryTabOptions('manage', t)}
         />
+        <Tabs.Screen
+          name="notification-detail"
+          options={{
+            title: t('notificationsOperations.detailTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t('notificationsOperations.accessibility.openDetail'),
+          }}
+        />
         {MOBILE_SECONDARY_ROUTES.map((route) => ({ route, title: t(route.titleKey), a11y: t(route.accessibilityLabelKey) })).map(({ route, title, a11y }) => (
           <Tabs.Screen
             key={route.tabRouteName}
