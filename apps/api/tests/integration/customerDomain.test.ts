@@ -120,6 +120,8 @@ async function createAppointmentAt(
 
 beforeAll(async () => {
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.employeeService.deleteMany();
@@ -183,12 +185,16 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.customer.deleteMany();
 });
 
 afterAll(async () => {
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.employeeService.deleteMany();

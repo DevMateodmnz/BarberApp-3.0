@@ -106,6 +106,8 @@ async function seedDefaultWorkingHours(barbershopId: string, saturdayClose = '14
 
 beforeAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -375,6 +377,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.barbershopScheduleException.deleteMany();
   await prisma.service.updateMany({
@@ -402,6 +406,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();

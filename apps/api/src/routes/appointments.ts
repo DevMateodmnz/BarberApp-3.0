@@ -106,6 +106,28 @@ router.get(
   }
 );
 
+router.get(
+  '/:id/notifications',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const appointment = await appointmentService.getAppointment(
+        paramId(req),
+        req.userId,
+        req.userRole
+      );
+      const notifications =
+        await appointmentService.listAppointmentNotifications(
+          appointment.id,
+          appointment.barbershopId
+        );
+      res.json({ success: true, data: notifications });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // ============================================
 // PUT /api/v1/appointments/:id - Update appointment (OWNER, BARBER)
 // ============================================

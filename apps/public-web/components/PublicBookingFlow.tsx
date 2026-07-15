@@ -82,6 +82,10 @@ function isValidE164Phone(value: string) {
   return /^\+[1-9]\d{7,15}$/.test(value.trim());
 }
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value.trim());
+}
+
 export function PublicBookingFlow({
   shop,
   services,
@@ -116,6 +120,7 @@ export function PublicBookingFlow({
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
   const [notes, setNotes] = useState('');
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
@@ -144,6 +149,7 @@ export function PublicBookingFlow({
         submitMessage ||
         clientName ||
         clientPhone ||
+        clientEmail ||
         notes ||
         consentAccepted)
   );
@@ -196,12 +202,19 @@ export function PublicBookingFlow({
       return null;
     }
 
+    const normalizedClientEmail = clientEmail.trim();
+    if (normalizedClientEmail && !isValidEmail(normalizedClientEmail)) {
+      setSubmitMessage('Ingresá un email válido o dejá el campo vacío.');
+      return null;
+    }
+
     return {
       serviceId: selectedService.serviceId,
       barberId: selectedBarber.barberId,
       startAt: selectedSlot.startAt,
       clientName: normalizedClientName,
       clientPhone: normalizedClientPhone,
+      ...(normalizedClientEmail ? { clientEmail: normalizedClientEmail } : {}),
       notes: notes.trim() ? notes.trim() : undefined,
       consentAccepted: true,
       consentVersion: bookingConfig.consent.version,
@@ -531,6 +544,22 @@ export function PublicBookingFlow({
                     inputMode="tel"
                     pattern="^\\+[1-9]\\d{7,15}$"
                     required
+                  />
+                </label>
+
+                <label className={styles.label}>
+                  Email (opcional)
+                  <input
+                    className={styles.input}
+                    type="email"
+                    value={clientEmail}
+                    onChange={(event) => {
+                      clearAttemptState();
+                      setClientEmail(event.currentTarget.value);
+                    }}
+                    autoComplete="email"
+                    inputMode="email"
+                    placeholder="email@ejemplo.com"
                   />
                 </label>
 

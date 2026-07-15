@@ -48,6 +48,8 @@ function getFutureEmployeeBookingTime(timeStr = '10:00') {
 
 beforeAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -737,6 +739,8 @@ describe('Appointment booking with assigned/unassigned services', () => {
 
   beforeEach(async () => {
     await prisma.photo.deleteMany();
+    await prisma.appointmentNotification.deleteMany();
+
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
     await prisma.employeeInvitation.deleteMany();
@@ -904,6 +908,8 @@ describe('DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId', () =>
 
   beforeEach(async () => {
     await prisma.photo.deleteMany();
+    await prisma.appointmentNotification.deleteMany();
+
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
     await prisma.employeeInvitation.deleteMany();
@@ -1163,6 +1169,8 @@ function reactivateEmployee(
 describe('PATCH /api/v1/barbershops/:barbershopId/employees/:employeeId/reactivate', () => {
   beforeEach(async () => {
     await prisma.photo.deleteMany();
+    await prisma.appointmentNotification.deleteMany();
+
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
     await prisma.employeeInvitation.deleteMany();

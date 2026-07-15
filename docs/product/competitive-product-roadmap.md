@@ -180,18 +180,16 @@ operator workflow:
 > in production.
 
 1. **Reminder pipeline (durable outbox + idempotent worker)** —
-   uses the lifecycle timestamps and customer-directory identity
-   added in the first two milestones. See
-   [Notification architecture](#notification-architecture) for the
-   data model and execution model. A single mailer for the
-   development milestone; WhatsApp / SMS require external
-   accounts and are out of scope.
+   now implemented for email booking confirmations and 24-hour
+   reminders. The worker is standalone, claims due work with
+   `FOR UPDATE SKIP LOCKED`, and retries with bounded exponential
+   backoff. WhatsApp / SMS remain out of scope.
 2. **Repeat-customer aggregation surfaces in the mobile
    appointments list** — extend the same customer anchor to
    the day-view so staff can spot repeat no-shows without
    leaving the appointments screen.
-3. **Public confirmation email** — uses the same notification
-   outbox, with a `type = 'BOOKING_CONFIRMATION'` variant.
+3. **Public confirmation email** — now delivered by the same
+   notification outbox with a `BOOKING_CONFIRMATION` variant.
 4. **Deposit flow via Mercado Pago** — full production cutover
    with runbook. Payment creates a `pending` reservation that
    holds the slot until the webhook confirms the deposit; on
@@ -252,8 +250,9 @@ Invariant (enforced by the worker, not by the API):
   `CONFIRMED`, a `BOOKING_CONFIRMATION` row is inserted in the
   same transaction).
 
-The outbox + worker is part of the next milestone and is
-**explicitly out of scope** for the customer-directory batch.
+The outbox + worker is now live for email. Next expansion should
+reuse the same outbox instead of introducing channel-specific
+timers or ad hoc background loops.
 
 ## Warning against feature-by-feature copying
 
@@ -289,6 +288,7 @@ barbershop running the new code on its own data:
 ## Success criteria for the *roadmap*, not the milestone
 
 The roadmap succeeds when the next milestone is not "we need
-to add customer accounts so we can show a no-show count" — when
-the next milestone is "we can remind customers by email because
-the lifecycle is reliable and the mailer is wired."
+to rebuild reminder plumbing" — the platform already has a
+durable notification foundation, so future work can focus on the
+next channel or business capability instead of redoing delivery
+reliability.

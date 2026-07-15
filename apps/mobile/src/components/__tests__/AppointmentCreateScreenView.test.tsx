@@ -112,6 +112,7 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
     ],
     clientName: 'Mateo',
     clientPhone: '+54 381 555 1234',
+    clientEmail: 'mateo@example.com',
     notes: 'Walk-in guest',
     customerWarning: null,
     fieldErrors: {},
@@ -127,6 +128,7 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
     onRetryAvailability: vi.fn(),
     onClientNameChange: vi.fn(),
     onClientPhoneChange: vi.fn(),
+    onClientEmailChange: vi.fn(),
     onNotesChange: vi.fn(),
     onSubmit: vi.fn(),
     ...overrides,
@@ -193,14 +195,17 @@ describe('AppointmentCreateScreenView', () => {
     expect(findByText(tree, 'No barber profile available')).toBeDefined();
   });
 
-  it('uses phone keyboard configuration and multiline notes input', () => {
+  it('uses phone/email keyboard configuration and multiline notes input', () => {
     const tree = renderView();
     const phoneField = findByTestId(tree, 'appointment-create-client-phone');
+    const emailField = findByTestId(tree, 'appointment-create-client-email');
     const notesField = findByTestId(tree, 'appointment-create-notes');
     const phoneInput = findAll(phoneField, (element) => getDisplayName(element) === 'TextInput')[0];
+    const emailInput = findAll(emailField, (element) => getDisplayName(element) === 'TextInput')[0];
     const notesInput = findAll(notesField, (element) => getDisplayName(element) === 'TextInput')[0];
 
     expect((phoneInput?.props as { keyboardType?: string } | undefined)?.keyboardType).toBe('phone-pad');
+    expect((emailInput?.props as { keyboardType?: string } | undefined)?.keyboardType).toBe('email-address');
     expect((notesInput?.props as { multiline?: boolean } | undefined)?.multiline).toBe(true);
   });
 

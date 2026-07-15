@@ -165,6 +165,14 @@ async function cleanupBarbershopsByIds(barbershopIds: string[]) {
     },
   });
 
+  await prisma.appointmentNotification.deleteMany({
+    where: {
+      barbershopId: {
+        in: barbershopIds,
+      },
+    },
+  });
+
   await prisma.appointment.deleteMany({
     where: {
       barbershopId: {

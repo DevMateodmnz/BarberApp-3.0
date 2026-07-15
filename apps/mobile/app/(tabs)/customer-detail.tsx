@@ -106,6 +106,7 @@ export default function CustomerDetailScreen() {
             prefillCustomerId: customerDetail.id,
             prefillCustomerName: nameInput.trim() || customerDetail.name,
             prefillCustomerPhone: customerDetail.phone,
+            prefillCustomerEmail: emailInput.trim() || customerDetail.email || '',
           },
         });
       }}

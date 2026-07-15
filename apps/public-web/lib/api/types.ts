@@ -74,6 +74,7 @@ export interface PublicCreateAppointmentPayload {
   startAt: string;
   clientName: string;
   clientPhone: string;
+  clientEmail?: string;
   notes?: string;
   consentAccepted: true;
   consentVersion: string;

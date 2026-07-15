@@ -139,6 +139,8 @@ async function getFirstPublicSlot(localDate: string) {
 beforeAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.barbershopScheduleExceptionInterval.deleteMany();
@@ -276,6 +278,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.barbershopScheduleExceptionInterval.deleteMany();
   await prisma.barbershopScheduleException.deleteMany();
@@ -286,6 +290,8 @@ beforeEach(async () => {
 afterAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.barbershopScheduleExceptionInterval.deleteMany();

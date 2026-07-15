@@ -4,6 +4,18 @@
 import { z } from 'zod';
 import { ServiceRecordDateSchema } from './serviceRecord.js';
 
+const OptionalAppointmentEmailSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  },
+  z.string().trim().email('clientEmail must be a valid email').max(200).optional()
+);
+
 export const CreateAppointmentSchema = z
   .object({
     barbershopId: z.string().min(1, 'Barbershop ID is required'),
@@ -29,6 +41,7 @@ export const StaffCreateAppointmentSchema = z
     startAt: z.string().datetime({ message: 'startAt must be ISO 8601 datetime' }),
     clientName: z.string().trim().min(1, 'Client name is required').max(200),
     clientPhone: z.string().trim().max(50).optional(),
+    clientEmail: OptionalAppointmentEmailSchema,
     notes: z.string().trim().max(500).optional(),
   })
   .strict();

@@ -35,8 +35,16 @@ import {
   AppointmentTransitionConflictError,
   compareAndSwapAppointmentStatus,
 } from '../lib/atomicTransition.js';
+import {
+  APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE,
+  cancelAppointmentNotifications,
+  listAppointmentNotificationSummaries,
+  scheduleAppointmentNotificationsForNewAppointment,
+  syncAppointmentReminderAfterReschedule,
+} from './appointmentNotificationService.js';
 import { tryNormalizeClientPhoneE164 } from '../lib/phoneNormalization.js';
 import { validateEmployeeInBarbershop } from './employeeService.js';
+import { normalizeEmail } from '../lib/email.js';
 import type {
   AppointmentStatus,
   Employee,
@@ -60,15 +68,13 @@ const BLOCKING_APPOINTMENT_STATUSES: AppointmentStatus[] = [
 ];
 
 const APPOINTMENT_INCLUDE = {
-  barbershop: true,
-  employee: true,
-  client: true,
-  service: true,
+  ...APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE,
 } satisfies Prisma.AppointmentInclude;
 
 interface AppointmentSnapshotInput {
   clientName: string;
   clientPhone: string | null;
+  clientEmail: string | null;
   serviceName: string;
   servicePriceCents: number;
   serviceDurationMinutes: number;
@@ -180,6 +186,11 @@ function normalizeOptionalText(value?: string | null): string | null {
   return trimmed ? trimmed : null;
 }
 
+function normalizeOptionalEmail(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? normalizeEmail(trimmed) : null;
+}
+
 function normalizeRequiredClientName(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -216,10 +227,14 @@ async function findActiveBarberEmployeeForBarbershop(
 function buildClientSnapshotFromUser(
   client: User,
   notes?: string | null
-): Pick<AppointmentSnapshotInput, 'clientName' | 'clientPhone' | 'notes'> {
+): Pick<
+  AppointmentSnapshotInput,
+  'clientName' | 'clientPhone' | 'clientEmail' | 'notes'
+> {
   return {
     clientName: client.name?.trim() || client.email,
     clientPhone: null,
+    clientEmail: normalizeOptionalEmail(client.email),
     notes: normalizeOptionalText(notes),
   };
 }
@@ -227,11 +242,16 @@ function buildClientSnapshotFromUser(
 function buildGuestClientSnapshot(input: {
   clientName: string;
   clientPhone?: string;
+  clientEmail?: string;
   notes?: string;
-}): Pick<AppointmentSnapshotInput, 'clientName' | 'clientPhone' | 'notes'> {
+}): Pick<
+  AppointmentSnapshotInput,
+  'clientName' | 'clientPhone' | 'clientEmail' | 'notes'
+> {
   return {
     clientName: normalizeRequiredClientName(input.clientName),
     clientPhone: normalizeOptionalText(input.clientPhone),
+    clientEmail: normalizeOptionalEmail(input.clientEmail),
     notes: normalizeOptionalText(input.notes),
   };
 }
@@ -505,6 +525,7 @@ async function createAppointmentRecord(input: {
         status: options?.status ?? 'PENDING',
         clientName: snapshot.clientName,
         clientPhone: snapshot.clientPhone,
+        clientEmail: snapshot.clientEmail,
         clientPhoneNormalized: tryNormalizeClientPhoneE164(snapshot.clientPhone),
         publicReference: options?.publicReference ?? null,
         publicConsentAcceptedAt: options?.publicConsentAcceptedAt ?? null,
@@ -662,6 +683,7 @@ export async function createStaffAppointment(
   ]);
 
   const startAt = new Date(input.startAt);
+  const notificationNow = new Date();
   validateAppointmentStartAt(startAt, timezone);
 
   const endAt = calculateAppointmentEndAt(
@@ -692,6 +714,7 @@ export async function createStaffAppointment(
         barbershopId,
         customerId: input.customerId,
         name: snapshot.clientName,
+        email: snapshot.clientEmail,
         appointmentAt: startAt,
         db: tx,
       });
@@ -702,6 +725,7 @@ export async function createStaffAppointment(
           barbershopId,
           phone: snapshot.clientPhone,
           name: snapshot.clientName,
+          email: snapshot.clientEmail,
           appointmentAt: startAt,
           db: tx,
         });
@@ -716,7 +740,7 @@ export async function createStaffAppointment(
       }
     }
 
-    return createAppointmentRecord({
+    const appointment = await createAppointmentRecord({
       barbershopId,
       employeeId,
       clientId: null,
@@ -726,6 +750,16 @@ export async function createStaffAppointment(
       endAt,
       snapshot,
       db: tx,
+    });
+
+    await scheduleAppointmentNotificationsForNewAppointment(tx, {
+      appointmentId: appointment.id,
+      now: notificationNow,
+    });
+
+    return tx.appointment.findUniqueOrThrow({
+      where: { id: appointment.id },
+      include: APPOINTMENT_INCLUDE,
     });
   });
 }
@@ -924,6 +958,13 @@ export async function getAppointment(
   return appointment;
 }
 
+export async function listAppointmentNotifications(
+  appointmentId: string,
+  barbershopId: string
+) {
+  return listAppointmentNotificationSummaries(appointmentId, barbershopId);
+}
+
 /**
  * Updates an appointment (reschedule).
  * Enforces: tenant isolation, business hours, double-booking prevention.
@@ -981,11 +1022,27 @@ export async function updateAppointment(
     updateData.notes = normalizeOptionalText(data.notes);
   }
 
+  const updateNow = new Date();
+
   try {
-    return await prisma.appointment.update({
-      where: { id: appointmentId },
-      data: updateData,
-      include: APPOINTMENT_INCLUDE,
+    return await prisma.$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id: appointmentId },
+        data: updateData,
+        include: APPOINTMENT_INCLUDE,
+      });
+
+      if (data.startAt) {
+        await syncAppointmentReminderAfterReschedule(tx, {
+          appointmentId,
+          now: updateNow,
+        });
+      }
+
+      return tx.appointment.findUniqueOrThrow({
+        where: { id: appointmentId },
+        include: APPOINTMENT_INCLUDE,
+      });
     });
   } catch (err) {
     if (isDbDoubleBookingError(err)) {
@@ -1032,23 +1089,42 @@ export async function transitionAppointmentStatus(
 
   const lifecycleUpdate = buildLifecycleUpdateForStatus(newStatus, role, now);
 
-  const result = await compareAndSwapAppointmentStatus({
-    id: appointmentId,
-    fromStatus: appointment.status,
-    toStatus: newStatus,
-    lifecycle: lifecycleUpdate,
-  });
+  return prisma.$transaction(async (tx) => {
+    const result = await compareAndSwapAppointmentStatus({
+      id: appointmentId,
+      fromStatus: appointment.status,
+      toStatus: newStatus,
+      lifecycle: lifecycleUpdate,
+      db: tx,
+    });
 
-  if (result.count === 0) {
-    throw new AppointmentTransitionConflictError(
-      appointment.status,
-      newStatus
-    );
-  }
+    if (result.count === 0) {
+      throw new AppointmentTransitionConflictError(
+        appointment.status,
+        newStatus
+      );
+    }
 
-  return prisma.appointment.findUniqueOrThrow({
-    where: { id: appointmentId },
-    include: APPOINTMENT_INCLUDE,
+    if (newStatus === 'CANCELLED') {
+      await cancelAppointmentNotifications(tx, {
+        appointmentId,
+        barbershopId: appointment.barbershopId,
+        types: ['BOOKING_CONFIRMATION', 'REMINDER_24H'],
+        now,
+      });
+    } else if (newStatus === 'COMPLETED' || newStatus === 'NO_SHOW') {
+      await cancelAppointmentNotifications(tx, {
+        appointmentId,
+        barbershopId: appointment.barbershopId,
+        types: ['REMINDER_24H'],
+        now,
+      });
+    }
+
+    return tx.appointment.findUniqueOrThrow({
+      where: { id: appointmentId },
+      include: APPOINTMENT_INCLUDE,
+    });
   });
 }
 
@@ -1096,23 +1172,33 @@ export async function cancelAppointment(
   // cancel or a public cancel that wins the race will leave the
   // row in a terminal state; this caller then observes count = 0
   // and gets a deterministic 409 conflict.
-  const result = await compareAndSwapAppointmentStatus({
-    id: appointmentId,
-    fromStatus: appointment.status,
-    toStatus: 'CANCELLED',
-    lifecycle: lifecycleUpdate,
-  });
+  return prisma.$transaction(async (tx) => {
+    const result = await compareAndSwapAppointmentStatus({
+      id: appointmentId,
+      fromStatus: appointment.status,
+      toStatus: 'CANCELLED',
+      lifecycle: lifecycleUpdate,
+      db: tx,
+    });
 
-  if (result.count === 0) {
-    throw new AppointmentTransitionConflictError(
-      appointment.status,
-      'CANCELLED'
-    );
-  }
+    if (result.count === 0) {
+      throw new AppointmentTransitionConflictError(
+        appointment.status,
+        'CANCELLED'
+      );
+    }
 
-  return prisma.appointment.findUniqueOrThrow({
-    where: { id: appointmentId },
-    include: APPOINTMENT_INCLUDE,
+    await cancelAppointmentNotifications(tx, {
+      appointmentId,
+      barbershopId: appointment.barbershopId,
+      types: ['BOOKING_CONFIRMATION', 'REMINDER_24H'],
+      now: options.now ?? new Date(),
+    });
+
+    return tx.appointment.findUniqueOrThrow({
+      where: { id: appointmentId },
+      include: APPOINTMENT_INCLUDE,
+    });
   });
 }
 

@@ -43,6 +43,8 @@ function getFutureServiceBookingTime(timeStr = '10:00') {
 
 beforeAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -110,6 +112,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.employeeInvitation.deleteMany();
@@ -119,6 +123,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -753,6 +759,8 @@ describe('DELETE /api/v1/barbershops/:barbershopId/services/:serviceId', () => {
   let svcA: Service;
 
   beforeEach(async () => {
+    await prisma.appointmentNotification.deleteMany();
+
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
     await prisma.employeeInvitation.deleteMany();

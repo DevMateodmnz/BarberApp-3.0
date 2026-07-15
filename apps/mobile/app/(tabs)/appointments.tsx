@@ -35,6 +35,7 @@ import {
 } from '@/lib/format.js';
 import { getAppointmentTransitionLabel } from '@/i18n/index.js';
 import type { AppointmentStatus } from '@/lib/types.js';
+import type { AppointmentNotificationSummary } from '@/lib/types.js';
 
 /** Allowed status transitions per role. */
 const OWNER_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
@@ -54,6 +55,45 @@ const BARBER_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
   CANCELLED: [],
   NO_SHOW: [],
 };
+
+function buildNotificationLabels(
+  notifications: AppointmentNotificationSummary[] | undefined,
+  t: (key: string) => string,
+): string[] {
+  if (!notifications || notifications.length === 0) {
+    return [];
+  }
+
+  const labels = notifications
+    .map((notification) => {
+      if (notification.type === 'BOOKING_CONFIRMATION') {
+        if (notification.status === 'SENT') {
+          return t('appointments.notification.confirmationSent');
+        }
+        if (notification.status === 'FAILED') {
+          return t('appointments.notification.deliveryError');
+        }
+        if (notification.status === 'CANCELLED') {
+          return t('appointments.notification.confirmationCancelled');
+        }
+        return t('appointments.notification.confirmationScheduled');
+      }
+
+      if (notification.status === 'SENT') {
+        return t('appointments.notification.reminderSent');
+      }
+      if (notification.status === 'FAILED') {
+        return t('appointments.notification.deliveryError');
+      }
+      if (notification.status === 'CANCELLED') {
+        return t('appointments.notification.reminderCancelled');
+      }
+      return t('appointments.notification.reminderScheduled');
+    })
+    .filter((value, index, array) => array.indexOf(value) === index);
+
+  return labels;
+}
 
 export default function AppointmentsScreen() {
   const router = useRouter();
@@ -250,6 +290,7 @@ export default function AppointmentsScreen() {
         employeeLabel: context?.role === 'OWNER' && appointment.employee?.user?.name
           ? t('appointments.employeeLabel', { name: appointment.employee.user.name })
           : null,
+        notificationLabels: buildNotificationLabels(appointment.notifications, t),
         notes: appointment.notes,
         actions,
       };

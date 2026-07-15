@@ -63,6 +63,7 @@ export default function AppointmentCreateScreen() {
     prefillCustomerId?: string;
     prefillCustomerName?: string;
     prefillCustomerPhone?: string;
+    prefillCustomerEmail?: string;
   }>();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { t } = useTranslation();
@@ -121,12 +122,15 @@ export default function AppointmentCreateScreen() {
     const clientPhone = typeof params.prefillCustomerPhone === 'string'
       ? params.prefillCustomerPhone
       : null;
+    const clientEmail = typeof params.prefillCustomerEmail === 'string'
+      ? params.prefillCustomerEmail
+      : null;
 
     if (!customerId || !clientName || !clientPhone) {
       return;
     }
 
-    const prefillKey = `${customerId}::${clientName}::${clientPhone}`;
+    const prefillKey = `${customerId}::${clientName}::${clientPhone}::${clientEmail ?? ''}`;
     if (appliedPrefillKeyRef.current === prefillKey) {
       return;
     }
@@ -138,6 +142,7 @@ export default function AppointmentCreateScreen() {
             customerId,
             clientName,
             clientPhone,
+            clientEmail,
           })
         : current
     ));
@@ -145,6 +150,7 @@ export default function AppointmentCreateScreen() {
     params.prefillCustomerId,
     params.prefillCustomerName,
     params.prefillCustomerPhone,
+    params.prefillCustomerEmail,
   ]);
 
   const loadOwnerEmployees = useCallback(async () => {
@@ -471,6 +477,22 @@ export default function AppointmentCreateScreen() {
     ));
   }, []);
 
+  const handleClientEmailChange = useCallback((value: string) => {
+    setCreationState((current) => (
+      current
+        ? {
+          ...current,
+          clientEmail: value,
+          submissionError: null,
+          fieldErrors: {
+            ...current.fieldErrors,
+            clientEmail: undefined,
+          },
+        }
+        : current
+    ));
+  }, []);
+
   const refreshAvailability = useCallback(async () => {
     setAvailabilityReloadNonce((current) => current + 1);
   }, []);
@@ -663,6 +685,7 @@ export default function AppointmentCreateScreen() {
       slotOptions={slotOptions}
       clientName={creationState?.clientName ?? ''}
       clientPhone={creationState?.clientPhone ?? ''}
+      clientEmail={creationState?.clientEmail ?? ''}
       notes={creationState?.notes ?? ''}
       customerWarning={customerWarning}
       fieldErrors={creationState?.fieldErrors ?? {}}
@@ -685,6 +708,7 @@ export default function AppointmentCreateScreen() {
       }}
       onClientNameChange={handleClientNameChange}
       onClientPhoneChange={handleClientPhoneChange}
+      onClientEmailChange={handleClientEmailChange}
       onNotesChange={handleNotesChange}
       onSubmit={() => {
         void handleSubmit();

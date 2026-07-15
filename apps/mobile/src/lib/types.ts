@@ -256,6 +256,30 @@ export type AppointmentStatus =
   | 'CANCELLED'
   | 'NO_SHOW';
 
+export type AppointmentNotificationType =
+  | 'BOOKING_CONFIRMATION'
+  | 'REMINDER_24H';
+
+export type AppointmentNotificationChannel = 'EMAIL';
+
+export type AppointmentNotificationStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'SENT'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export interface AppointmentNotificationSummary {
+  id: string;
+  type: AppointmentNotificationType;
+  channel: AppointmentNotificationChannel;
+  status: AppointmentNotificationStatus;
+  scheduledFor: string;
+  attempts: number;
+  sentAt: string | null;
+  cancelledAt: string | null;
+}
+
 export interface Appointment {
   id: string;
   barbershopId: string;
@@ -265,6 +289,7 @@ export interface Appointment {
   serviceId: string;
   clientName: string;
   clientPhone: string | null;
+  clientEmail?: string | null;
   serviceName: string;
   servicePriceCents: number;
   serviceDurationMinutes: number;
@@ -287,6 +312,7 @@ export interface Appointment {
       name: string | null;
     };
   };
+  notifications?: AppointmentNotificationSummary[];
   client: {
     id: string;
     name: string | null;
@@ -329,6 +355,7 @@ export interface CreateStaffAppointmentInput {
   startAt: string;
   clientName: string;
   clientPhone?: string;
+  clientEmail?: string;
   notes?: string;
 }
 

@@ -39,6 +39,7 @@ export interface AppointmentRowViewModel {
   clientLabel: string;
   serviceLabel: string;
   employeeLabel?: string | null;
+  notificationLabels?: string[];
   notes?: string | null;
   actions: AppointmentActionViewModel[];
 }
@@ -269,11 +270,16 @@ export function AppointmentsScreenView({
                       trailing={<StatusBadge status={appointment.status} />}
                     />
 
-                    {(appointment.employeeLabel || appointment.notes) && (
+                    {(appointment.employeeLabel || appointment.notificationLabels?.length || appointment.notes) && (
                       <View style={styles.metaBlock}>
                         {appointment.employeeLabel && (
                           <Text style={styles.metaText}>{appointment.employeeLabel}</Text>
                         )}
+                        {appointment.notificationLabels?.map((label) => (
+                          <Text key={label} style={styles.metaText}>
+                            {label}
+                          </Text>
+                        ))}
                         {appointment.notes && (
                           <Text style={styles.notesText}>{appointment.notes}</Text>
                         )}

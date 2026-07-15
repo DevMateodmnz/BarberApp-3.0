@@ -53,6 +53,8 @@ const fixtures: TestFixtures = {} as TestFixtures;
 beforeAll(async () => {
   // Clean existing data
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -232,6 +234,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   // Clean appointments between tests (keep users/shops/services/workingHours)
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employee.updateMany({
     where: {
@@ -249,6 +253,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();

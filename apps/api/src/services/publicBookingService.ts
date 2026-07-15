@@ -32,6 +32,11 @@ import {
   hasTimeConflict,
   validateAppointmentStartAt,
 } from './appointmentService.js';
+import {
+  cancelAppointmentNotifications,
+  scheduleAppointmentNotificationsForNewAppointment,
+} from './appointmentNotificationService.js';
+import { normalizeEmail } from '../lib/email.js';
 import { resolvePublishedPublicBarbershop } from './publicCatalogService.js';
 
 interface PublicBookingConfirmationDto {
@@ -188,6 +193,9 @@ export async function createPublicBookingBySlug(
 
   const clientName = normalizePublicBookingClientName(input.body.clientName);
   const clientPhone = normalizePublicBookingPhone(input.body.clientPhone);
+  const clientEmail = input.body.clientEmail?.trim()
+    ? normalizeEmail(input.body.clientEmail)
+    : null;
   const notes = normalizePublicBookingNotes(input.body.notes);
   const fingerprint = fingerprintPublicBookingRequest({
     barbershopId: barbershop.id,
@@ -196,6 +204,7 @@ export async function createPublicBookingBySlug(
     startAt: startAt.toISOString(),
     clientName,
     clientPhone,
+    clientEmail,
     notes,
     consentVersion: input.body.consentVersion,
   });
@@ -292,6 +301,7 @@ export async function createPublicBookingBySlug(
           barbershopId: barbershop.id,
           phone: clientPhone,
           name: clientName,
+          email: clientEmail,
           appointmentAt: startAt,
           db: tx,
         }
@@ -309,6 +319,7 @@ export async function createPublicBookingBySlug(
           status: 'CONFIRMED',
           clientName,
           clientPhone,
+          clientEmail,
           // Public booking input is already E.164 (validated upstream);
           // mirror it into the normalized column so the customer lookup
           // endpoint can aggregate public + staff history.
@@ -319,6 +330,11 @@ export async function createPublicBookingBySlug(
           notes,
           ...buildServiceSnapshot(service),
         },
+      });
+
+      await scheduleAppointmentNotificationsForNewAppointment(tx, {
+        appointmentId: appointment.id,
+        now,
       });
 
       await tx.publicBookingIdempotency.update({
@@ -489,6 +505,7 @@ export async function cancelPublicBookingByReference(
       where: { publicReference: trimmedReference },
       select: {
         id: true,
+        barbershopId: true,
         status: true,
         startAt: true,
         barbershop: { select: { publicSlug: true, isActive: true } },
@@ -555,6 +572,13 @@ export async function cancelPublicBookingByReference(
 
     // 3. CAS won. Read back the full row (still inside the
     //    transaction) so the response is consistent.
+    await cancelAppointmentNotifications(tx, {
+      appointmentId: diagnostic.id,
+      barbershopId: diagnostic.barbershopId,
+      types: ['BOOKING_CONFIRMATION', 'REMINDER_24H'],
+      now,
+    });
+
     return tx.appointment.findUniqueOrThrow({
       where: { id: diagnostic.id },
       select: {

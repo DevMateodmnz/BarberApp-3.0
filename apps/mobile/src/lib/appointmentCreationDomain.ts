@@ -18,6 +18,7 @@ export type AppointmentCreationField =
   | 'selectedSlot'
   | 'clientName'
   | 'clientPhone'
+  | 'clientEmail'
   | 'notes';
 
 export type AppointmentCreationValidationKey =
@@ -29,6 +30,7 @@ export type AppointmentCreationValidationKey =
   | 'clientNameRequired'
   | 'clientNameTooLong'
   | 'clientPhoneTooLong'
+  | 'clientEmailInvalid'
   | 'notesTooLong'
   | 'invalidDate'
   | 'staleSlot';
@@ -74,6 +76,7 @@ export interface AppointmentCreationState {
   selectedSlotStartAt: string | null;
   clientName: string;
   clientPhone: string;
+  clientEmail: string;
   notes: string;
   availableEmployees: EmployeeListItem[];
   availableServices: Service[];
@@ -102,6 +105,7 @@ export type BuildStaffAppointmentPayloadResult =
 
 const CLIENT_NAME_MAX_LENGTH = 200;
 const CLIENT_PHONE_MAX_LENGTH = 50;
+const CLIENT_EMAIL_MAX_LENGTH = 200;
 const NOTES_MAX_LENGTH = 500;
 
 function trimOptionalText(value?: string | null): string | undefined {
@@ -115,6 +119,10 @@ function trimOptionalText(value?: string | null): string | undefined {
 
 function normalizeClientName(value: string): string {
   return value.trim();
+}
+
+function isValidClientEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
 }
 
 function lowerMessage(error: unknown): string {
@@ -172,6 +180,7 @@ export function createInitialAppointmentCreationState(
     selectedSlotStartAt: null,
     clientName: '',
     clientPhone: '',
+    clientEmail: '',
     notes: '',
     availableEmployees: [],
     availableServices: [],
@@ -191,6 +200,7 @@ export function applyAppointmentCreationCustomerPrefill(
     customerId: string;
     clientName: string;
     clientPhone: string;
+    clientEmail?: string | null;
   }
 ): AppointmentCreationState {
   return {
@@ -198,11 +208,13 @@ export function applyAppointmentCreationCustomerPrefill(
     customerId: input.customerId,
     clientName: input.clientName,
     clientPhone: input.clientPhone,
+    clientEmail: input.clientEmail ?? '',
     submissionError: null,
     fieldErrors: {
       ...state.fieldErrors,
       clientName: undefined,
       clientPhone: undefined,
+      clientEmail: undefined,
     },
   };
 }
@@ -284,6 +296,7 @@ export function syncAppointmentCreationContext(
     customerId: state.customerId,
     clientName: state.clientName,
     clientPhone: state.clientPhone,
+    clientEmail: state.clientEmail,
     notes: state.notes,
     localDate: state.localDate,
   };
@@ -529,6 +542,17 @@ export function validateAppointmentCreationDraft(
     fieldErrors.clientPhone = 'clientPhoneTooLong';
   }
 
+  const trimmedClientEmail = trimOptionalText(state.clientEmail);
+  if (
+    trimmedClientEmail
+    && (
+      trimmedClientEmail.length > CLIENT_EMAIL_MAX_LENGTH
+      || !isValidClientEmail(trimmedClientEmail)
+    )
+  ) {
+    fieldErrors.clientEmail = 'clientEmailInvalid';
+  }
+
   const trimmedNotes = trimOptionalText(state.notes);
   if (trimmedNotes && trimmedNotes.length > NOTES_MAX_LENGTH) {
     fieldErrors.notes = 'notesTooLong';
@@ -589,6 +613,9 @@ export function buildCreateStaffAppointmentPayload(
     ...(state.customerId ? { customerId: state.customerId } : {}),
     ...(trimOptionalText(state.clientPhone)
       ? { clientPhone: trimOptionalText(state.clientPhone) }
+      : {}),
+    ...(trimOptionalText(state.clientEmail)
+      ? { clientEmail: trimOptionalText(state.clientEmail) }
       : {}),
     ...(trimOptionalText(state.notes) ? { notes: trimOptionalText(state.notes) } : {}),
   };

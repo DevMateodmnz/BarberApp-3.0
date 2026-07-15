@@ -33,6 +33,7 @@ describe('publicBookingIdempotency', () => {
       startAt: '2026-07-20T12:00:00.000Z',
       clientName: 'Mateo Domínguez',
       clientPhone: '+543811234567',
+      clientEmail: 'mateo@example.com',
       notes: null,
       consentVersion: 'public-booking-v1',
     };

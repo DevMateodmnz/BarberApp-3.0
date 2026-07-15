@@ -196,6 +196,7 @@ describe('PublicBookingFlow', () => {
 
     await user.type(screen.getByLabelText(/nombre y apellido/i), 'Mateo');
     await user.type(screen.getByLabelText(/teléfono/i), '+543811234567');
+    await user.type(screen.getByLabelText(/email \(opcional\)/i), 'mateo@example.com');
     const consentCheckbox = screen.getByRole('checkbox', {
       name: /acepto compartir mis datos/i,
     });
@@ -214,6 +215,7 @@ describe('PublicBookingFlow', () => {
           startAt: '2026-07-20T13:00:00.000Z',
           clientName: 'Mateo',
           clientPhone: '+543811234567',
+          clientEmail: 'mateo@example.com',
           notes: undefined,
           consentAccepted: true,
           consentVersion: bookingConfig.consent.version,
@@ -226,6 +228,50 @@ describe('PublicBookingFlow', () => {
         bookingReference: 'pb_TEST1234567890',
       })
     );
+  });
+
+  it('shows a validation error when the optional email is malformed', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PublicBookingFlow
+        shop={shop}
+        services={services}
+        bookingConfig={bookingConfig}
+        loadBarbers={vi.fn().mockResolvedValue([
+          { barberId: 'barber_1', displayName: 'Mateo' },
+        ])}
+        loadAvailability={vi.fn().mockResolvedValue({
+          slug: shop.slug,
+          serviceId: 'svc_1',
+          barberId: 'barber_1',
+          localDate: '2026-07-20',
+          timezone: shop.timezone,
+          slotIntervalMinutes: 30,
+          serviceDurationMinutes: 30,
+          slots: [
+            {
+              startAt: '2026-07-20T13:00:00.000Z',
+              endAt: '2026-07-20T13:30:00.000Z',
+            },
+          ],
+        })}
+        submitBooking={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('radio', { name: /corte clásico/i }));
+    await user.click(await screen.findByRole('radio', { name: /mateo/i }));
+    await user.type(screen.getByLabelText(/fecha de reserva/i), '2026-07-20');
+    await user.click(screen.getByRole('button', { name: /ver horarios disponibles/i }));
+    await user.click(await screen.findByRole('button', { name: /10:00/i }));
+    await user.type(screen.getByLabelText(/nombre y apellido/i), 'Mateo');
+    await user.type(screen.getByLabelText(/teléfono/i), '+543811234567');
+    await user.type(screen.getByLabelText(/email \(opcional\)/i), 'bad-email');
+    await user.click(screen.getByRole('checkbox', { name: /acepto compartir mis datos/i }));
+    await user.click(screen.getByRole('button', { name: /reservar turno/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/ingresá un email válido/i);
   });
 
   it('keeps the form visible after a stale-slot conflict so the customer can recover', async () => {

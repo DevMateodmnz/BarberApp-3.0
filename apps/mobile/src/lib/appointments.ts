@@ -236,6 +236,9 @@ export async function createStaffAppointment(
     ...(trimOptionalText(input.clientPhone)
       ? { clientPhone: trimOptionalText(input.clientPhone) }
       : {}),
+    ...(trimOptionalText(input.clientEmail)
+      ? { clientEmail: trimOptionalText(input.clientEmail) }
+      : {}),
     ...(trimOptionalText(input.notes) ? { notes: trimOptionalText(input.notes) } : {}),
     ...(input.employeeId ? { employeeId: input.employeeId } : {}),
   };

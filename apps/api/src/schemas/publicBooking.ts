@@ -4,6 +4,18 @@ import {
   PUBLIC_BOOKING_NOTES_MAX_LENGTH,
 } from '../lib/publicBookingInput.js';
 
+const OptionalPublicBookingEmailSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  },
+  z.string().trim().email('clientEmail must be a valid email').max(200).optional()
+);
+
 export const PublicCreateAppointmentSchema = z
   .object({
     serviceId: z.string().trim().min(1, 'serviceId is required'),
@@ -25,6 +37,7 @@ export const PublicCreateAppointmentSchema = z
       .min(1, 'clientName is required')
       .max(PUBLIC_BOOKING_CLIENT_NAME_MAX_LENGTH),
     clientPhone: z.string().trim().min(1, 'clientPhone is required').max(16),
+    clientEmail: OptionalPublicBookingEmailSchema,
     notes: z.string().trim().max(PUBLIC_BOOKING_NOTES_MAX_LENGTH).optional(),
     consentAccepted: z
       .boolean()

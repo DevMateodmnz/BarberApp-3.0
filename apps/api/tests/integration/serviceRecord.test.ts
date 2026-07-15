@@ -46,6 +46,8 @@ const FIXED_PERIOD_NOW = new Date('2026-06-23T00:32:00.000Z');
 
 beforeAll(async () => {
   await prisma.serviceRecord.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -207,6 +209,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.serviceRecord.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();

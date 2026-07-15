@@ -55,6 +55,23 @@ enum AppointmentCancellationSource {
   SYSTEM
 }
 
+enum AppointmentNotificationType {
+  BOOKING_CONFIRMATION
+  REMINDER_24H
+}
+
+enum AppointmentNotificationChannel {
+  EMAIL
+}
+
+enum AppointmentNotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
 // ============================================
 // USER
 // ============================================
@@ -111,6 +128,7 @@ model Barbershop {
   workingHours                    WorkingHours[]
   scheduleExceptions              BarbershopScheduleException[]
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
+  appointmentNotifications        AppointmentNotification[]
   serviceRecords                  ServiceRecord[]
   employeeInvitations             EmployeeInvitation[]
 
@@ -256,6 +274,7 @@ model Appointment {
   serviceId               String            @map("service_id")
   clientName              String            @map("client_name")
   clientPhone             String?           @map("client_phone")
+  clientEmail             String?           @map("client_email")
   customerId              String?           @map("customer_id")
   publicReference         String?           @unique @map("public_reference")
   publicConsentAcceptedAt DateTime?         @map("public_consent_accepted_at")
@@ -295,6 +314,7 @@ model Appointment {
   customer                        Customer?                  @relation("AppointmentCustomer", fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
   service                         Service                    @relation(fields: [serviceId], references: [id])
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
+  notifications                   AppointmentNotification[]
   serviceRecords                  ServiceRecord[]
 
   // Indexes for common queries
@@ -307,7 +327,39 @@ model Appointment {
   @@index([barbershopId, employeeId, startAt])
   @@index([employeeId, startAt, status])
   @@index([barbershopId, clientPhoneNormalized])
+  @@unique([id, barbershopId])
   @@map("appointments")
+}
+
+model AppointmentNotification {
+  id                String                        @id @default(cuid())
+  barbershopId      String                        @map("barbershop_id")
+  appointmentId     String                        @map("appointment_id")
+  type              AppointmentNotificationType
+  channel           AppointmentNotificationChannel
+  status            AppointmentNotificationStatus @default(PENDING)
+  recipientEmail    String                        @map("recipient_email")
+  scheduledFor      DateTime                      @map("scheduled_for")
+  nextAttemptAt     DateTime                      @map("next_attempt_at")
+  attempts          Int                           @default(0)
+  lockToken         String?                       @map("lock_token")
+  lockedAt          DateTime?                     @map("locked_at")
+  lastError         String?                       @db.VarChar(1000) @map("last_error")
+  sentAt            DateTime?                     @map("sent_at")
+  cancelledAt       DateTime?                     @map("cancelled_at")
+  providerMessageId String?                       @map("provider_message_id")
+  idempotencyKey    String                        @unique @map("idempotency_key")
+  payload           Json
+  createdAt         DateTime                      @default(now()) @map("created_at")
+  updatedAt         DateTime                      @updatedAt @map("updated_at")
+
+  appointment Appointment @relation(fields: [appointmentId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  barbershop  Barbershop  @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+
+  @@index([status, nextAttemptAt])
+  @@index([appointmentId, status])
+  @@index([barbershopId, createdAt])
+  @@map("appointment_notifications")
 }
 
 model PublicBookingIdempotency {

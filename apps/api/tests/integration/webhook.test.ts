@@ -96,6 +96,8 @@ describe('Clerk Webhook', () => {
 
   afterAll(async () => {
     await prisma.photo.deleteMany();
+    await prisma.appointmentNotification.deleteMany();
+
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
     await prisma.workingHours.deleteMany();

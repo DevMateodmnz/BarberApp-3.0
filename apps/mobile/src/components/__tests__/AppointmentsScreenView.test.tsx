@@ -257,6 +257,19 @@ describe('AppointmentsScreenView', () => {
     expect(findByText(card, 'Arrives after work.')).toBeDefined();
   });
 
+  it('renders notification summary labels when reminders exist', () => {
+    const tree = renderView({
+      appointmentRows: makeAppointments([
+        {
+          notificationLabels: ['Confirmation sent', 'Reminder scheduled'],
+        },
+      ]),
+    });
+
+    expect(findByText(tree, 'Confirmation sent')).toBeDefined();
+    expect(findByText(tree, 'Reminder scheduled')).toBeDefined();
+  });
+
   it('renders barber context without owner filter controls', () => {
     const tree = renderView({
       context: BARBER_CONTEXT,

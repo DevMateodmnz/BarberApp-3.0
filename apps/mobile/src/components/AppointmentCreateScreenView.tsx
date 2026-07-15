@@ -85,6 +85,7 @@ export interface AppointmentCreateScreenViewProps {
   slotOptions: AppointmentSlotOption[];
   clientName: string;
   clientPhone: string;
+  clientEmail: string;
   notes: string;
   customerWarning: CustomerWarning | null;
   fieldErrors: Partial<Record<AppointmentCreationField, AppointmentCreationValidationKey>>;
@@ -100,6 +101,7 @@ export interface AppointmentCreateScreenViewProps {
   onRetryAvailability: () => void;
   onClientNameChange: (value: string) => void;
   onClientPhoneChange: (value: string) => void;
+  onClientEmailChange: (value: string) => void;
   onNotesChange: (value: string) => void;
   onSubmit: () => void;
 }
@@ -190,6 +192,7 @@ export function AppointmentCreateScreenView({
   slotOptions,
   clientName,
   clientPhone,
+  clientEmail,
   notes,
   customerWarning,
   fieldErrors,
@@ -205,6 +208,7 @@ export function AppointmentCreateScreenView({
   onRetryAvailability,
   onClientNameChange,
   onClientPhoneChange,
+  onClientEmailChange,
   onNotesChange,
   onSubmit,
 }: AppointmentCreateScreenViewProps) {
@@ -217,6 +221,7 @@ export function AppointmentCreateScreenView({
   const fieldErrorSlot = getValidationMessage(fieldErrors.selectedSlot, t);
   const fieldErrorClientName = getValidationMessage(fieldErrors.clientName, t);
   const fieldErrorClientPhone = getValidationMessage(fieldErrors.clientPhone, t);
+  const fieldErrorClientEmail = getValidationMessage(fieldErrors.clientEmail, t);
   const fieldErrorNotes = getValidationMessage(fieldErrors.notes, t);
   const submissionError = getSemanticErrorMessage(submissionErrorKey, t);
   const availabilityError = getSemanticErrorMessage(availabilityErrorKey, t);
@@ -568,6 +573,21 @@ export function AppointmentCreateScreenView({
                     keyboardType="phone-pad"
                     error={fieldErrorClientPhone ?? undefined}
                   />
+
+                  <AppTextInput
+                    testID="appointment-create-client-email"
+                    label={t('appointmentCreation.labels.clientEmailOptional')}
+                    value={clientEmail}
+                    onChangeText={onClientEmailChange}
+                    placeholder={t('appointmentCreation.labels.clientEmailPlaceholder')}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    error={fieldErrorClientEmail ?? undefined}
+                  />
+                  <Text style={styles.helperText}>
+                    {t('appointmentCreation.helpers.clientEmail')}
+                  </Text>
 
                   {customerWarning && customerWarning.noShowCount > 0 ? (
                     <View
