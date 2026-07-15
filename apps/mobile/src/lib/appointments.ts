@@ -232,6 +232,7 @@ export async function createStaffAppointment(
     serviceId: input.serviceId,
     startAt: input.startAt,
     clientName: input.clientName.trim(),
+    ...(input.customerId ? { customerId: input.customerId } : {}),
     ...(trimOptionalText(input.clientPhone)
       ? { clientPhone: trimOptionalText(input.clientPhone) }
       : {}),

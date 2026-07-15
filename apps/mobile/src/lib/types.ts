@@ -261,6 +261,7 @@ export interface Appointment {
   barbershopId: string;
   employeeId: string;
   clientId: string | null;
+  customerId: string | null;
   serviceId: string;
   clientName: string;
   clientPhone: string | null;
@@ -323,9 +324,82 @@ export interface FetchAppointmentAvailabilityInput {
 
 export interface CreateStaffAppointmentInput {
   employeeId?: string;
+  customerId?: string;
   serviceId: string;
   startAt: string;
   clientName: string;
   clientPhone?: string;
   notes?: string;
+}
+
+export type CustomerDirectorySort = 'recent' | 'name' | 'no_shows';
+
+export interface CustomerSummary {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  completedCount: number;
+  cancelledCount: number;
+  noShowCount: number;
+  upcomingCount: number;
+  lastServiceName: string | null;
+  lastEmployeeName: string | null;
+}
+
+export interface CustomerDirectoryPage {
+  items: CustomerSummary[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface CustomerDetailAppointment {
+  id: string;
+  startAt: string;
+  endAt: string;
+  status: AppointmentStatus;
+  serviceName: string;
+  employeeName: string | null;
+  confirmedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  noShowAt: string | null;
+  cancellationSource: string | null;
+}
+
+export interface CustomerDetailUpcomingAppointment {
+  id: string;
+  startAt: string;
+  endAt: string;
+  status: AppointmentStatus;
+  serviceName: string;
+  employeeName: string | null;
+}
+
+export interface CustomerDetail {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  internalNotes: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  completedCount: number;
+  cancelledCount: number;
+  noShowCount: number;
+  upcomingCount: number;
+  lastServiceName: string | null;
+  lastEmployeeName: string | null;
+  recentAppointments: CustomerDetailAppointment[];
+  upcomingAppointments: CustomerDetailUpcomingAppointment[];
+}
+
+export interface UpdateCustomerInput {
+  name?: string | null;
+  email?: string | null;
+  internalNotes?: string | null;
 }

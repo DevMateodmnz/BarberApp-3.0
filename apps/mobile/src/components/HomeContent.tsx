@@ -59,6 +59,7 @@ export interface HomeContentProps {
   canRecordService: boolean;
   onRecordService: () => void;
   onAppointments: () => void;
+  onCustomers: () => void;
   onPrevDate: () => void;
   onNextDate: () => void;
   onToday: () => void;
@@ -88,6 +89,7 @@ export function HomeContent({
   canRecordService,
   onRecordService,
   onAppointments,
+  onCustomers,
   onPrevDate,
   onNextDate,
   onToday,
@@ -107,6 +109,7 @@ export function HomeContent({
   const showRevenueSection = canShowDashboard && !!context?.barbershopId;
   const showRecordsSection = canShowDashboard && !!context?.barbershopId;
   const showAppointmentsAction = canShowDashboard && !!context?.barbershopId;
+  const showCustomersAction = canShowDashboard && !!context?.barbershopId;
   const showOwnerEmployeeFilterCard = role === 'OWNER' && !!context?.barbershopId;
   const showOwnerEmployeeFilterEmptyState =
     showOwnerEmployeeFilterCard &&
@@ -207,6 +210,18 @@ export function HomeContent({
                       iconName="calendar-outline"
                       accessibilityLabel={t('home.dailyActionsAccessibility.appointments')}
                       onPress={onAppointments}
+                      style={styles.tileGridItem}
+                    />
+                  ) : null}
+
+                  {showCustomersAction ? (
+                    <NavigationTile
+                      testID="home-daily-action-customers"
+                      title={t('home.actionCards.customers.title')}
+                      description={t('home.actionCards.customers.description')}
+                      iconName="people-outline"
+                      accessibilityLabel={t('home.dailyActionsAccessibility.customers')}
+                      onPress={onCustomers}
                       style={styles.tileGridItem}
                     />
                   ) : null}

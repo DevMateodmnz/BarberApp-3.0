@@ -55,6 +55,11 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Intl date-format option value for localized invitation timestamps, not interface copy.',
   },
   {
+    file: 'src/components/CustomerDetailScreenView.tsx',
+    literal: '2-digit',
+    reason: 'Intl time-format option value for localized appointment timestamps, not interface copy.',
+  },
+  {
     file: 'src/i18n/errors.ts',
     literal: 'User not found',
     reason: 'Legacy backend message matcher used only for structured localization fallback.',

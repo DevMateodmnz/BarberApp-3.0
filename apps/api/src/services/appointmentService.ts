@@ -6,6 +6,7 @@
  * This is the single source of truth for business rules.
  */
 import { prisma } from '../lib/prisma.js';
+import * as customerService from './customerService.js';
 import {
   AppError,
   BadRequestError,
@@ -470,6 +471,7 @@ async function createAppointmentRecord(input: {
   barbershopId: string;
   employeeId: string;
   clientId: string | null;
+  customerId?: string | null;
   serviceId: string;
   startAt: Date;
   endAt: Date;
@@ -481,6 +483,7 @@ async function createAppointmentRecord(input: {
     barbershopId,
     employeeId,
     clientId,
+    customerId = null,
     serviceId,
     startAt,
     endAt,
@@ -495,6 +498,7 @@ async function createAppointmentRecord(input: {
         barbershopId,
         employeeId,
         clientId,
+        customerId,
         serviceId,
         startAt,
         endAt,
@@ -592,14 +596,48 @@ export async function createAppointment(
     ...buildServiceSnapshot(service),
   };
 
-  return createAppointmentRecord({
-    barbershopId,
-    employeeId,
-    clientId,
-    serviceId,
-    startAt,
-    endAt,
-    snapshot,
+  // Link the appointment to a first-class Customer record
+  // (barbershop + normalized phone) inside the same transaction.
+  // Two concurrent first appointments for the same phone produce
+  // one customer; the unique index on (barbershopId,
+  // phoneNormalized) enforces this at the database level.
+  // Malformed phones (e.g. free-form staff input) leave the
+  // appointment without a customer link; the appointment
+  // snapshots preserve the original input.
+  return prisma.$transaction(async (tx) => {
+    const phoneForCustomer = snapshot.clientPhone;
+    let customerId: string | null = null;
+    if (phoneForCustomer) {
+      try {
+        const result = await customerService.upsertCustomerByPhone({
+          barbershopId,
+          phone: phoneForCustomer,
+          name: snapshot.clientName,
+          appointmentAt: startAt,
+          db: tx,
+        });
+        customerId = result.customer.id;
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !/requires an E\.164 phone/.test(error.message)
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    return createAppointmentRecord({
+      barbershopId,
+      employeeId,
+      clientId,
+      customerId,
+      serviceId,
+      startAt,
+      endAt,
+      snapshot,
+      db: tx,
+    });
   });
 }
 
@@ -647,14 +685,48 @@ export async function createStaffAppointment(
     ...buildServiceSnapshot(bookingContext.service),
   };
 
-  return createAppointmentRecord({
-    barbershopId,
-    employeeId,
-    clientId: null,
-    serviceId: bookingContext.service.id,
-    startAt,
-    endAt,
-    snapshot,
+  return prisma.$transaction(async (tx) => {
+    let customerId: string | null = null;
+    if (input.customerId) {
+      const customer = await customerService.linkAppointmentToExistingCustomer({
+        barbershopId,
+        customerId: input.customerId,
+        name: snapshot.clientName,
+        appointmentAt: startAt,
+        db: tx,
+      });
+      customerId = customer.id;
+    } else if (snapshot.clientPhone) {
+      try {
+        const result = await customerService.upsertCustomerByPhone({
+          barbershopId,
+          phone: snapshot.clientPhone,
+          name: snapshot.clientName,
+          appointmentAt: startAt,
+          db: tx,
+        });
+        customerId = result.customer.id;
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !/requires an E\.164 phone/.test(error.message)
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    return createAppointmentRecord({
+      barbershopId,
+      employeeId,
+      clientId: null,
+      customerId,
+      serviceId: bookingContext.service.id,
+      startAt,
+      endAt,
+      snapshot,
+      db: tx,
+    });
   });
 }
 
@@ -1089,10 +1161,19 @@ const MAX_LOOKUP_RECENT_APPOINTMENTS = 50;
  * repeat-customer / no-show warnings before a new booking is
  * committed.
  *
- * Tenant scoping is enforced here (and again at the route via
- * `requireBarbershopAccess`):
+ * Tenant scoping is enforced here:
  * - OWNER: must own the barbershop.
  * - BARBER: must be an active employee of the barbershop.
+ * - CLIENT: forbidden (returns ForbiddenError).
+ *
+ * The lookup prefers the first-class `Customer` model:
+ *  1. Find a non-deleted Customer by (barbershopId, phoneNormalized).
+ *     The unique index makes this a single-row read.
+ *  2. Aggregate appointments linked via `customerId`.
+ *  3. Fall back to legacy `clientPhoneNormalized` matches for any
+ *     appointments that pre-date the customer link (defensive; the
+ *     backfill should have linked them, but a runtime fallback is
+ *     cheap and prevents regressions if the migration was skipped).
  *
  * Returns a zeroed-out `CustomerInsights` shape when the phone has no
  * history in this barbershop, so the mobile UI can render an empty
@@ -1130,10 +1211,30 @@ export async function lookupCustomerByPhone(
     throw new ForbiddenError('Customer history is not available for this role');
   }
 
+  // Try the first-class Customer model first.
+  const customer = await prisma.customer.findFirst({
+    where: {
+      barbershopId,
+      phoneNormalized: phone,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+
   const matches = await prisma.appointment.findMany({
     where: {
       barbershopId,
-      clientPhoneNormalized: phone,
+      deletedAt: null,
+      OR: customer
+        ? [
+            { customerId: customer.id },
+            // Defensive fallback: appointments that pre-date the
+            // customer link. The backfill should have linked them but
+            // this preserves correctness if the migration was
+            // skipped or the link was cleared.
+            { customerId: null, clientPhoneNormalized: phone },
+          ]
+        : [{ clientPhoneNormalized: phone }],
     },
     select: {
       id: true,

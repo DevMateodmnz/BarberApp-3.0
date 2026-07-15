@@ -164,6 +164,22 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="customers"
+          options={{
+            title: t('customers.title'),
+            href: null,
+            tabBarAccessibilityLabel: t('customers.accessibility.openDirectory'),
+          }}
+        />
+        <Tabs.Screen
+          name="customer-detail"
+          options={{
+            title: t('customers.detailTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t('customers.accessibility.openCustomerDetail'),
+          }}
+        />
+        <Tabs.Screen
           name="record-service"
           options={buildPrimaryTabOptions('record-service', t)}
         />

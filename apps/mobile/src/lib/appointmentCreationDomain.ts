@@ -67,6 +67,7 @@ export interface AppointmentCreationErrorDescriptor {
 
 export interface AppointmentCreationState {
   context: AppointmentCreationContext;
+  customerId: string | null;
   employeeId: string | null;
   serviceId: string | null;
   localDate: string;
@@ -164,6 +165,7 @@ export function createInitialAppointmentCreationState(
 ): AppointmentCreationState {
   return {
     context,
+    customerId: null,
     employeeId: context.role === 'BARBER' ? context.authenticatedEmployeeId : null,
     serviceId: null,
     localDate: '',
@@ -180,6 +182,28 @@ export function createInitialAppointmentCreationState(
     submissionError: null,
     fieldErrors: {},
     activeAvailabilityRequestKey: null,
+  };
+}
+
+export function applyAppointmentCreationCustomerPrefill(
+  state: AppointmentCreationState,
+  input: {
+    customerId: string;
+    clientName: string;
+    clientPhone: string;
+  }
+): AppointmentCreationState {
+  return {
+    ...state,
+    customerId: input.customerId,
+    clientName: input.clientName,
+    clientPhone: input.clientPhone,
+    submissionError: null,
+    fieldErrors: {
+      ...state.fieldErrors,
+      clientName: undefined,
+      clientPhone: undefined,
+    },
   };
 }
 
@@ -257,6 +281,7 @@ export function syncAppointmentCreationContext(
 
   return {
     ...createInitialAppointmentCreationState(nextContext),
+    customerId: state.customerId,
     clientName: state.clientName,
     clientPhone: state.clientPhone,
     notes: state.notes,
@@ -561,6 +586,7 @@ export function buildCreateStaffAppointmentPayload(
     startAt: selectedSlot.startAt,
     clientName: normalizeClientName(state.clientName),
     ...(state.context.role === 'OWNER' ? { employeeId: effectiveEmployeeId } : {}),
+    ...(state.customerId ? { customerId: state.customerId } : {}),
     ...(trimOptionalText(state.clientPhone)
       ? { clientPhone: trimOptionalText(state.clientPhone) }
       : {}),

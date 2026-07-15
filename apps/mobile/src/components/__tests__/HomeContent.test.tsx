@@ -102,6 +102,7 @@ function renderHomeContent(overrides: Partial<Parameters<typeof HomeContent>[0]>
     canRecordService: true,
     onRecordService: vi.fn(),
     onAppointments: vi.fn(),
+    onCustomers: vi.fn(),
     onPrevDate: vi.fn(),
     onNextDate: vi.fn(),
     onToday: vi.fn(),
@@ -148,14 +149,17 @@ describe('HomeContent', () => {
   it('renders compact daily actions and removes owner management cards from Home', () => {
     const onRecordService = vi.fn();
     const onAppointments = vi.fn();
-    const tree = renderHomeContent({ onRecordService, onAppointments });
+    const onCustomers = vi.fn();
+    const tree = renderHomeContent({ onRecordService, onAppointments, onCustomers });
 
     expect(findByTestId(tree, 'home-daily-actions-section')).toBeDefined();
     press(findByTestId(tree, 'home-daily-action-record'));
     press(findByTestId(tree, 'home-daily-action-appointments'));
+    press(findByTestId(tree, 'home-daily-action-customers'));
 
     expect(onRecordService).toHaveBeenCalledTimes(1);
     expect(onAppointments).toHaveBeenCalledTimes(1);
+    expect(onCustomers).toHaveBeenCalledTimes(1);
     expect(queryByTestId(tree, 'home-services-card')).toBeNull();
     expect(queryByTestId(tree, 'home-employees-card')).toBeNull();
     expect(queryByTestId(tree, 'home-working-hours-card')).toBeNull();
@@ -165,6 +169,7 @@ describe('HomeContent', () => {
     const tree = renderHomeContent({ context: BARBER_CONTEXT, summary: BARBER_SUMMARY });
     expect(findByTestId(tree, 'home-daily-action-record')).toBeDefined();
     expect(findByTestId(tree, 'home-daily-action-appointments')).toBeDefined();
+    expect(findByTestId(tree, 'home-daily-action-customers')).toBeDefined();
     expect(queryByTestId(tree, 'home-services-card')).toBeNull();
     expect(queryByTestId(tree, 'home-employees-card')).toBeNull();
     expect(queryByTestId(tree, 'home-working-hours-card')).toBeNull();
@@ -174,6 +179,7 @@ describe('HomeContent', () => {
     const tree = renderHomeContent({ canRecordService: false });
     expect(queryByTestId(tree, 'home-daily-action-record')).toBeNull();
     expect(findByTestId(tree, 'home-daily-action-appointments')).toBeDefined();
+    expect(findByTestId(tree, 'home-daily-action-customers')).toBeDefined();
   });
 
   it('renders the client message and no daily dashboard sections', () => {

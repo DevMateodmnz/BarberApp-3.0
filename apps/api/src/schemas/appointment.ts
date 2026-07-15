@@ -24,6 +24,7 @@ export const UpdateAppointmentSchema = z
 export const StaffCreateAppointmentSchema = z
   .object({
     employeeId: z.string().min(1, 'Employee ID is required').optional(),
+    customerId: z.string().trim().min(1, 'Customer ID is required').optional(),
     serviceId: z.string().min(1, 'Service ID is required'),
     startAt: z.string().datetime({ message: 'startAt must be ISO 8601 datetime' }),
     clientName: z.string().trim().min(1, 'Client name is required').max(200),

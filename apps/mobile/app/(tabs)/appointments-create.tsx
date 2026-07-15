@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/components/AppointmentCreateScreenView.js';
 import {
   applyAppointmentCreationDateChange,
+  applyAppointmentCreationCustomerPrefill,
   applyAppointmentCreationEmployeeChange,
   applyAppointmentCreationServiceChange,
   beginAppointmentCreationAvailabilityRequest,
@@ -58,6 +59,11 @@ function toAppointmentCreationContext(context: CurrentUserContext | null): Appoi
 
 export default function AppointmentCreateScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    prefillCustomerId?: string;
+    prefillCustomerName?: string;
+    prefillCustomerPhone?: string;
+  }>();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { t } = useTranslation();
   const getTokenRef = useRef(getToken);
@@ -82,6 +88,7 @@ export default function AppointmentCreateScreen() {
   const availabilityRequestRef = useRef<ReturnType<typeof getAppointmentCreationAvailabilityRequest> | null>(null);
   const [customerInsights, setCustomerInsights] = useState<CustomerInsights | null>(null);
   const customerLookupRequestIdRef = useRef(0);
+  const appliedPrefillKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isSignedIn || !getTokenRef.current || context) {
@@ -103,6 +110,42 @@ export default function AppointmentCreateScreen() {
         : createInitialAppointmentCreationState(creationContext)
     ));
   }, [creationContext]);
+
+  useEffect(() => {
+    const customerId = typeof params.prefillCustomerId === 'string'
+      ? params.prefillCustomerId
+      : null;
+    const clientName = typeof params.prefillCustomerName === 'string'
+      ? params.prefillCustomerName
+      : null;
+    const clientPhone = typeof params.prefillCustomerPhone === 'string'
+      ? params.prefillCustomerPhone
+      : null;
+
+    if (!customerId || !clientName || !clientPhone) {
+      return;
+    }
+
+    const prefillKey = `${customerId}::${clientName}::${clientPhone}`;
+    if (appliedPrefillKeyRef.current === prefillKey) {
+      return;
+    }
+
+    appliedPrefillKeyRef.current = prefillKey;
+    setCreationState((current) => (
+      current
+        ? applyAppointmentCreationCustomerPrefill(current, {
+            customerId,
+            clientName,
+            clientPhone,
+          })
+        : current
+    ));
+  }, [
+    params.prefillCustomerId,
+    params.prefillCustomerName,
+    params.prefillCustomerPhone,
+  ]);
 
   const loadOwnerEmployees = useCallback(async () => {
     if (!creationContext || creationContext.role !== 'OWNER' || !creationContext.barbershopId || !getTokenRef.current) {

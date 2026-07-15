@@ -24,6 +24,7 @@ import {
   getLocalTimeStringInTimeZone,
 } from '../lib/dateUtils.js';
 import { buildLifecycleUpdateForCancel } from '../lib/appointmentLifecycle.js';
+import * as customerService from './customerService.js';
 import type { PublicCreateAppointmentInput } from '../schemas/publicBooking.js';
 import {
   buildServiceSnapshot,
@@ -281,11 +282,27 @@ export async function createPublicBookingBySlug(
         throw createPublicSlotUnavailableError();
       }
 
+      // Link the appointment to a first-class Customer record.
+      // Public booking input is already E.164, so the phone is
+      // directly usable. The upsert is idempotent; two concurrent
+      // public bookings for the same phone in the same barbershop
+      // produce one customer.
+      const { customer: customerRow } = await customerService.upsertCustomerByPhone(
+        {
+          barbershopId: barbershop.id,
+          phone: clientPhone,
+          name: clientName,
+          appointmentAt: startAt,
+          db: tx,
+        }
+      );
+
       const appointment = await tx.appointment.create({
         data: {
           barbershopId: barbershop.id,
           employeeId: employee.id,
           clientId: null,
+          customerId: customerRow.id,
           serviceId: service.id,
           startAt,
           endAt,
@@ -561,6 +578,14 @@ export async function cancelPublicBookingByReference(
 
   // Rename the local so the rest of the function reads naturally.
   const cancelled = casResult;
+
+  if (!cancelled.publicReference) {
+    throw new AppError(
+      409,
+      'PUBLIC_BOOKING_IDEMPOTENCY_CONFLICT',
+      'The stored public booking replay record is incomplete'
+    );
+  }
 
   return {
     appointment: {

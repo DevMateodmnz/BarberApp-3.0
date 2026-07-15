@@ -107,6 +107,7 @@ model Barbershop {
   employees                       Employee[]
   services                        Service[]
   appointments                    Appointment[]
+  customers                       Customer[]
   workingHours                    WorkingHours[]
   scheduleExceptions              BarbershopScheduleException[]
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
@@ -255,6 +256,7 @@ model Appointment {
   serviceId               String            @map("service_id")
   clientName              String            @map("client_name")
   clientPhone             String?           @map("client_phone")
+  customerId              String?           @map("customer_id")
   publicReference         String?           @unique @map("public_reference")
   publicConsentAcceptedAt DateTime?         @map("public_consent_accepted_at")
   publicConsentVersion    String?           @map("public_consent_version")
@@ -290,6 +292,7 @@ model Appointment {
   barbershop                      Barbershop                 @relation(fields: [barbershopId], references: [id])
   employee                        Employee                   @relation(fields: [employeeId], references: [id])
   client                          User?                      @relation("AppointmentClient", fields: [clientId], references: [id])
+  customer                        Customer?                  @relation("AppointmentCustomer", fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
   service                         Service                    @relation(fields: [serviceId], references: [id])
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
   serviceRecords                  ServiceRecord[]
@@ -298,6 +301,8 @@ model Appointment {
   @@index([barbershopId])
   @@index([employeeId])
   @@index([clientId])
+  @@index([customerId])
+  @@index([customerId, barbershopId])
   @@index([startAt])
   @@index([barbershopId, employeeId, startAt])
   @@index([employeeId, startAt, status])
@@ -451,4 +456,42 @@ model Photo {
   @@index([clientId])
   @@index([uploadedById])
   @@map("photos")
+}
+
+// ============================================
+// CUSTOMER
+// ============================================
+
+/// Customer model - first-class barbershop customer identity.
+///
+/// Identity key is (barbershopId, phoneNormalized). Customers are NOT
+/// global: a phone number may be linked to different customers in
+/// different barbershops, but never to two different customers in the
+/// same barbershop. Existing appointments retain their snapshot
+/// fields (clientName, clientPhone, clientPhoneNormalized) for
+/// historical truth; the current directory identity is in this row.
+model Customer {
+  id              String    @id @default(cuid())
+  barbershopId    String    @map("barbershop_id")
+  name            String
+  phone           String
+  phoneNormalized String    @map("phone_normalized")
+  email           String?
+  internalNotes   String?   @map("internal_notes") @db.VarChar(2000)
+  firstSeenAt     DateTime  @map("first_seen_at")
+  lastSeenAt      DateTime  @map("last_seen_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  // Relations
+  barbershop   Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  appointments Appointment[] @relation("AppointmentCustomer")
+
+  // Indexes
+  @@unique([id, barbershopId])
+  @@unique([barbershopId, phoneNormalized])
+  @@index([barbershopId, name])
+  @@index([barbershopId, lastSeenAt])
+  @@map("customers")
 }

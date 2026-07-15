@@ -46,6 +46,12 @@ import * as workingHoursService from '../services/workingHoursService.js';
 import * as serviceRecordService from '../services/serviceRecordService.js';
 import { CreateServiceRecordSchema, ServiceRecordDateSchema, SummaryPeriodSchema } from '../schemas/serviceRecord.js';
 import { UpdateWorkingHoursSchema } from '../schemas/workingHours.js';
+import {
+  ListCustomersQuerySchema,
+  SearchCustomersBodySchema,
+  UpdateCustomerBodySchema,
+} from '../schemas/customer.js';
+import * as customerService from '../services/customerService.js';
 import { BadRequestError } from '../lib/errors.js';
 import { ValidationError } from '../lib/errors.js';
 import { normalizeEmail } from '../lib/email.js';
@@ -506,6 +512,175 @@ router.post(
 
       res.json({ success: true, data: insights });
     } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/customers
+// List customers in the barbershop with optional search.
+// Search is name-only here (no phone in URL). Phone search is
+// exposed via POST /customers/search to keep PII out of access logs.
+// ============================================
+router.get(
+  '/:barbershopId/customers',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = ListCustomersQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        throw new ValidationError(
+          'Invalid customer list query parameters',
+          parsed.error.flatten()
+        );
+      }
+      const { page, limit, sort } = parsed.data;
+      const result = await customerService.listCustomers({
+        barbershopId: paramBarbershopId(req),
+        sort,
+        limit,
+        offset: (page - 1) * limit,
+        user: { userId: req.userId, userRole: req.userRole },
+      });
+      res.json({
+        success: true,
+        data: {
+          items: result.items,
+          total: result.total,
+          page,
+          limit,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/customers/search
+// Body-only search. The query may contain a phone number, which is
+// PII and must not appear in URLs (proxies, referer headers, access
+// logs). Mirrors the no-show lookup endpoint's PII discipline.
+// ============================================
+router.post(
+  '/:barbershopId/customers/search',
+  requireRole('OWNER', 'BARBER'),
+  validateBody(SearchCustomersBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = req.body as {
+        query: string;
+        page: number;
+        limit: number;
+        sort: 'recent' | 'name' | 'no_shows';
+      };
+      const result = await customerService.listCustomers({
+        barbershopId: paramBarbershopId(req),
+        search: body.query,
+        sort: body.sort,
+        limit: body.limit,
+        offset: (body.page - 1) * body.limit,
+        user: { userId: req.userId, userRole: req.userRole },
+      });
+      res.json({
+        success: true,
+        data: {
+          items: result.items,
+          total: result.total,
+          page: body.page,
+          limit: body.limit,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/customers/:customerId
+// Full customer detail with counts, recent history, and upcoming
+// appointments. Cross-tenant probes return 404.
+// ============================================
+router.get(
+  '/:barbershopId/customers/:customerId',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const detail = await customerService.getCustomerDetail({
+        barbershopId: paramBarbershopId(req),
+        customerId: req.params.customerId ?? '',
+        user: { userId: req.userId, userRole: req.userRole },
+      });
+      if (!detail) {
+        // Hide existence on cross-tenant probes.
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Customer not found' },
+        });
+        return;
+      }
+      res.json({ success: true, data: detail });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// PATCH /api/v1/barbershops/:barbershopId/customers/:customerId
+// Update mutable customer fields. Phone replacement is not supported
+// (the phone is the identity key; changing it requires a merge
+// policy that is out of scope for this milestone).
+// ============================================
+router.patch(
+  '/:barbershopId/customers/:customerId',
+  requireRole('OWNER', 'BARBER'),
+  validateBody(UpdateCustomerBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = req.body as {
+        name?: string | null;
+        email?: string | null;
+        internalNotes?: string | null;
+      };
+      const updated = await customerService.updateCustomer({
+        barbershopId: paramBarbershopId(req),
+        customerId: req.params.customerId ?? '',
+        name: body.name,
+        email: body.email,
+        internalNotes: body.internalNotes,
+        user: { userId: req.userId, userRole: req.userRole },
+      });
+      if (!updated) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Customer not found' },
+        });
+        return;
+      }
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      // Surface the validation errors thrown by the service as 400
+      // with the standard error envelope.
+      if (error instanceof Error && /internalNotes exceeds/.test(error.message)) {
+        next(
+          new ValidationError(error.message, {
+            internalNotes: ['too long'],
+          })
+        );
+        return;
+      }
+      if (error instanceof Error && /name cannot be empty/.test(error.message)) {
+        next(
+          new ValidationError(error.message, {
+            name: ['cannot be empty'],
+          })
+        );
+        return;
+      }
       next(error);
     }
   }

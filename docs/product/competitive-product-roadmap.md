@@ -141,6 +141,38 @@ This is the smallest coherent vertical slice that:
 | Marketplace, search, reviews | Premature until multiple real businesses exist |
 | Customer accounts (CLIENT mobile) | Premature until a feature actually needs them |
 
+## Phase 2 milestone (this commit)
+
+> **feat(customers): add customer directory and visit history**
+
+This milestone turns the Phase 1 lifecycle foundation into a real
+operator workflow:
+
+- first-class `customers` directory rows per barbershop;
+- migration/backfill from historical appointments;
+- mobile customer list + customer detail screens;
+- customer search/sort/history surfaces for OWNER + BARBER;
+- staff appointment creation from an existing customer profile.
+
+### Why this milestone matters
+
+- It converts lifecycle data into a usable retention tool instead of
+  leaving it buried inside appointment rows.
+- It gives barbers the context they need before taking a booking.
+- It keeps the identity model intentionally simple: one normalized phone
+  per barbershop, no merge flow yet, no customer accounts yet.
+- It prepares the product for reminders and deposits by establishing a
+  stable customer anchor without rewriting historical snapshots.
+
+### What remains deliberately out of scope
+
+| Deferred after Phase 2 | Why |
+| --- | --- |
+| Customer merge / phone-reassignment tools | Needs separate data-governance and UX decisions |
+| Customer-facing accounts | Still not necessary for the operator workflow we are proving |
+| CRM campaigns / loyalty | Needs reminders, payments, and clearer retention goals first |
+| Deposits / Mercado Pago | Still depends on the payment cutover and runbook |
+
 ## Ordered next milestones
 
 > These are the *current best* ordering, not a promise. Each
@@ -148,15 +180,16 @@ This is the smallest coherent vertical slice that:
 > in production.
 
 1. **Reminder pipeline (durable outbox + idempotent worker)** —
-   uses the lifecycle timestamps added in this milestone. See
+   uses the lifecycle timestamps and customer-directory identity
+   added in the first two milestones. See
    [Notification architecture](#notification-architecture) for the
    data model and execution model. A single mailer for the
    development milestone; WhatsApp / SMS require external
    accounts and are out of scope.
 2. **Repeat-customer aggregation surfaces in the mobile
-   appointments list** — extend the same lookup used here to
-   the day-view. Mark appointments where the customer has a
-   recent no-show. Same data source, no new schema.
+   appointments list** — extend the same customer anchor to
+   the day-view so staff can spot repeat no-shows without
+   leaving the appointments screen.
 3. **Public confirmation email** — uses the same notification
    outbox, with a `type = 'BOOKING_CONFIRMATION'` variant.
 4. **Deposit flow via Mercado Pago** — full production cutover
@@ -220,7 +253,7 @@ Invariant (enforced by the worker, not by the API):
   same transaction).
 
 The outbox + worker is part of the next milestone and is
-**explicitly out of scope** for the Phase 1 hardening batch.
+**explicitly out of scope** for the customer-directory batch.
 
 ## Warning against feature-by-feature copying
 
