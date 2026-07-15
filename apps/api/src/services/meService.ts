@@ -13,6 +13,7 @@ interface UserContext {
   role: UserRole;
   barbershopId: string | null;
   barbershopName: string | null;
+  barbershopTimezone: string | null;
   employeeId: string | null;
   employeeName: string | null;
 }
@@ -38,6 +39,7 @@ export async function getUserContext(
     role: userRole,
     barbershopId: null as string | null,
     barbershopName: null as string | null,
+    barbershopTimezone: null as string | null,
     employeeId: null as string | null,
     employeeName: null as string | null,
   };
@@ -50,12 +52,13 @@ export async function getUserContext(
         deletedAt: null,
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true },
+      select: { id: true, name: true, timezone: true },
     });
 
     if (shop) {
       base.barbershopId = shop.id;
       base.barbershopName = shop.name;
+      base.barbershopTimezone = shop.timezone;
     }
     return base;
   }
@@ -70,7 +73,7 @@ export async function getUserContext(
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,
-        barbershop: { select: { id: true, name: true } },
+        barbershop: { select: { id: true, name: true, timezone: true } },
         user: { select: { name: true } },
       },
     });
@@ -78,6 +81,7 @@ export async function getUserContext(
     if (employee) {
       base.barbershopId = employee.barbershop.id;
       base.barbershopName = employee.barbershop.name;
+      base.barbershopTimezone = employee.barbershop.timezone;
       base.employeeId = employee.id;
       base.employeeName = employee.user.name;
     }

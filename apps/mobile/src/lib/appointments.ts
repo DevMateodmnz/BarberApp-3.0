@@ -7,8 +7,10 @@ import type {
   Appointment,
   AppointmentChange,
   AppointmentAvailability,
+  AppointmentNotificationSummary,
   AppointmentStatus,
   CreateStaffAppointmentInput,
+  DailyScheduleBoard,
   FetchAppointmentAvailabilityInput,
   RescheduleAppointmentInput,
 } from './types.js';
@@ -90,6 +92,24 @@ export async function fetchEmployeeAppointments(
   return ensureSuccess(
     response,
     localizeUnknownError('Failed to fetch employee appointments'),
+  );
+}
+
+export async function fetchAppointment(
+  getToken: GetToken,
+  appointmentId: string,
+): Promise<Appointment> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<Appointment>>(
+    `/appointments/${appointmentId}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    },
+  );
+
+  return ensureSuccess(
+    response,
+    localizeUnknownError('Failed to fetch appointment'),
   );
 }
 
@@ -260,6 +280,42 @@ export async function fetchAppointmentChanges(
   );
 
   return ensureSuccess(response, 'Failed to fetch appointment changes');
+}
+
+export async function fetchAppointmentNotifications(
+  getToken: GetToken,
+  appointmentId: string,
+): Promise<AppointmentNotificationSummary[]> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<AppointmentNotificationSummary[]>>(
+    `/appointments/${appointmentId}/notifications`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, 'Failed to fetch appointment notifications');
+}
+
+export async function fetchDailyScheduleBoard(
+  getToken: GetToken,
+  barbershopId: string,
+  query: { date: string; employeeId?: string | null },
+): Promise<DailyScheduleBoard> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<DailyScheduleBoard>>(
+    `/barbershops/${barbershopId}/schedule/day`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: {
+        date: query.date,
+        ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+      },
+    },
+  );
+
+  return ensureSuccess(
+    response,
+    localizeUnknownError('Failed to fetch daily schedule board'),
+  );
 }
 
 export async function createStaffAppointment(

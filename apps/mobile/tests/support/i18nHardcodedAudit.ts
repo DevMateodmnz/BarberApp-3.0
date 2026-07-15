@@ -195,6 +195,11 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
   },
   {
+    file: 'src/lib/appointments.ts',
+    literal: 'Failed to fetch appointment notifications',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
     file: 'src/lib/employeeInvitations.ts',
     literal: 'Failed to create employee invitation',
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',

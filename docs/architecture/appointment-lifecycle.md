@@ -45,6 +45,50 @@ CANCELLED          (terminal)
 NO_SHOW            (terminal)
 ```
 
+## Time-blocking statuses
+
+The appointment lifecycle and the schedule/availability domain now
+share one canonical slot-blocking rule in
+`apps/api/src/lib/appointmentBlocking.ts`.
+
+### Blocking statuses
+
+- `PENDING`
+- `CONFIRMED`
+- `IN_PROGRESS`
+
+### Non-blocking statuses
+
+- `COMPLETED`
+- `CANCELLED`
+- `NO_SHOW`
+
+Why `PENDING` blocks time: the current staff/public booking domain
+still treats a pending appointment as a held operational slot. The
+schedule board therefore shows it, counts it, and excludes it from
+available gaps. Do not fork a second “board-only” interpretation of
+blocking status.
+
+## Operational daily schedule board
+
+The mobile Agenda view and
+`GET /api/v1/barbershops/:barbershopId/schedule/day` expose the
+appointment lifecycle as an operator-facing day board.
+
+Important lifecycle-to-board rules:
+
+- The board shows all same-day non-deleted appointments, including
+  completed, cancelled, and no-show rows, because staff still need
+  historical operational context during the day.
+- Gap calculation ignores only the non-blocking statuses listed above.
+- Returning-customer context is defined by completed visits only.
+- Previous no-show context is grouped from historical `NO_SHOW`
+  appointments only.
+- Capability flags on the board (`canReschedule`, `canStart`,
+  `canComplete`, `canMarkNoShow`, `canCancel`) are convenience hints
+  for mobile rendering. They do **not** replace server authorization
+  or transition validation.
+
 ## Allowed transitions
 
 The `STATUS_TRANSITIONS` map in

@@ -58,18 +58,24 @@ function buildPublicCreatePayload(startAt: string, overrides: Record<string, unk
 }
 
 /**
- * Returns a future UTC instant that is aligned to a 30-minute
- * boundary on the wall clock, plus the given offset in days. The
- * appointment validation rejects non-aligned slots.
+ * Returns a future UTC instant that is aligned to a valid local
+ * working-hours slot. The customer-domain appointment creation tests
+ * care about customer-link behavior, not edge-of-day scheduling, so we
+ * intentionally pick stable weekday morning slots.
  */
 function futureAlignedStart(daysOffset: number): string {
-  const now = new Date();
-  now.setUTCDate(now.getUTCDate() + daysOffset);
-  // Round up to the next :00 or :30 wall-clock boundary.
-  const minutes = now.getUTCMinutes();
-  const add = minutes < 30 ? 30 - minutes : 60 - minutes;
-  now.setUTCMinutes(minutes + add, 0, 0);
-  return now.toISOString();
+  const weekday = ((daysOffset - 1) % 5) + 1;
+  const localDate = getNextLocalWeekdayDate(
+    weekday,
+    new Date(),
+    TEST_BARBERSHOP_TIMEZONE
+  );
+
+  return localDateTimeToUtc(
+    localDate,
+    '10:00',
+    TEST_BARBERSHOP_TIMEZONE
+  ).toISOString();
 }
 
 async function createAppointmentAt(

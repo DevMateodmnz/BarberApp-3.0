@@ -26,6 +26,7 @@ import {
   APPOINTMENT_SLOT_INTERVAL_MINUTES,
   isSlotBoundaryMinute,
 } from '../lib/appointmentScheduling.js';
+import { BLOCKING_APPOINTMENT_STATUSES } from '../lib/appointmentBlocking.js';
 import { buildAvailabilitySlots } from '../lib/availabilitySlots.js';
 import {
   buildLifecycleUpdateForCancel,
@@ -62,12 +63,6 @@ import type {
   RescheduleAppointmentInput,
   StaffCreateAppointmentInput,
 } from '../schemas/appointment.js';
-
-const BLOCKING_APPOINTMENT_STATUSES: AppointmentStatus[] = [
-  'PENDING',
-  'CONFIRMED',
-  'IN_PROGRESS',
-];
 
 const APPOINTMENT_INCLUDE = {
   ...APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE,

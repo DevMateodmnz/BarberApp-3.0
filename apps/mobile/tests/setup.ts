@@ -78,11 +78,53 @@ vi.mock('react-native', async () => {
   });
   MockPressable.displayName = 'Pressable';
 
+  const MockFlatList = React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
+    const {
+      data = [],
+      renderItem,
+      ListHeaderComponent,
+      ListEmptyComponent,
+      keyExtractor,
+      ...rest
+    } = props as {
+      data?: unknown[];
+      renderItem?: (info: { item: unknown; index: number }) => React.ReactNode;
+      ListHeaderComponent?: React.ReactNode;
+      ListEmptyComponent?: React.ReactNode;
+      keyExtractor?: (item: unknown, index: number) => string;
+    };
+
+    const children: React.ReactNode[] = [];
+    if (ListHeaderComponent) {
+      children.push(ListHeaderComponent);
+    }
+
+    if (data.length === 0) {
+      if (ListEmptyComponent) {
+        children.push(ListEmptyComponent);
+      }
+    } else if (renderItem) {
+      data.forEach((item, index) => {
+        children.push(
+          React.createElement(
+            React.Fragment,
+            { key: keyExtractor?.(item, index) ?? String(index) },
+            renderItem({ item, index }),
+          ),
+        );
+      });
+    }
+
+    return React.createElement('FlatList', { ref, ...rest }, children);
+  });
+  MockFlatList.displayName = 'FlatList';
+
   return {
     View: createMockComponent('View'),
     Text: createMockComponent('Text'),
     TextInput: createMockComponent('TextInput'),
     Pressable: MockPressable,
+    FlatList: MockFlatList,
     ScrollView: createMockComponent('ScrollView'),
     KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
     SafeAreaView: createMockComponent('SafeAreaView'),

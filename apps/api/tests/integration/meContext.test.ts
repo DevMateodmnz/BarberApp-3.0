@@ -261,6 +261,7 @@ describe('GET /api/v1/me/context', () => {
     expect(keys).toEqual([
       'barbershopId',
       'barbershopName',
+      'barbershopTimezone',
       'employeeId',
       'employeeName',
       'role',

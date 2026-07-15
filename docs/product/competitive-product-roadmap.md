@@ -193,10 +193,12 @@ operator workflow:
    append-only appointment history, reminder resync, a
    dedicated reschedule confirmation email, mobile UI, and
    public-reference compatibility.
-4. **Repeat-customer aggregation surfaces in the mobile
-   appointments list** — extend the same customer anchor to
-   the day-view so staff can spot repeat no-shows without
-   leaving the appointments screen.
+4. **Operational daily schedule board** — now implemented as
+   a phone-first Agenda/List appointment area with a bounded
+   daily schedule endpoint, role-safe employee visibility,
+   timezone-safe day calculation, available-gap cards, current-
+   time marker, customer-return / no-show signals, canonical
+   detail integration, and gap-to-create prefills.
 5. **Deposit flow via Mercado Pago** — full production cutover
    with runbook. Payment creates a `pending` reservation that
    holds the slot until the webhook confirms the deposit; on
@@ -260,6 +262,23 @@ Invariant (enforced by the worker, not by the API):
 The outbox + worker is now live for email. Next expansion should
 reuse the same outbox instead of introducing channel-specific
 timers or ad hoc background loops.
+
+## Why the schedule board came before deposits
+
+Deposits reduce the cost of no-shows, but the daily schedule board
+improves the operator's current working day immediately:
+
+- staff can see who is working today;
+- gaps are visible without rebuilding availability logic in the UI;
+- repeat customers and previous no-shows are surfaced at the point of
+  action;
+- appointment detail, rescheduling, and lifecycle actions stay in one
+  operational loop.
+
+That operational loop had to exist before we layered payment holds on
+top of it. The next milestone can now add deposits to an already
+usable day-to-day staff flow instead of bolting payments onto a weak
+operations surface.
 
 ## Warning against feature-by-feature copying
 

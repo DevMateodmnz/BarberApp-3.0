@@ -27,6 +27,7 @@ export interface CurrentUserContext {
   role: UserRole;
   barbershopId: string | null;
   barbershopName: string | null;
+  barbershopTimezone?: string | null;
   employeeId: string | null;
   employeeName: string | null;
 }
@@ -384,6 +385,7 @@ export interface Appointment {
   barbershop: {
     id: string;
     name: string;
+    timezone?: string;
   };
   employee: {
     id: string;
@@ -421,6 +423,101 @@ export interface AppointmentAvailability {
   slotIntervalMinutes: number;
   serviceDurationMinutes: number;
   slots: AppointmentAvailabilitySlot[];
+}
+
+export interface DailyScheduleBoardCurrentTime {
+  iso: string;
+  localTime: string;
+}
+
+export interface DailyScheduleBoardWorkingInterval {
+  startTime: string;
+  endTime: string;
+  startAt: string | null;
+  endAt: string | null;
+}
+
+export interface DailyScheduleBoardClosedInterval {
+  startAt: string;
+  endAt: string;
+  startTime: string;
+  endTime: string;
+  reason: 'SCHEDULE_EXCEPTION';
+}
+
+export interface DailyScheduleBoardAppointmentNotificationSummary {
+  hasFailures: boolean;
+  failedCount: number;
+}
+
+export interface DailyScheduleBoardAppointment {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  serviceId: string;
+  serviceName: string;
+  startAt: string;
+  endAt: string;
+  localStartTime: string;
+  localEndTime: string;
+  status: AppointmentStatus;
+  clientDisplayName: string;
+  customerId: string | null;
+  isReturningCustomer: boolean;
+  completedVisitCount: number;
+  noShowCount: number;
+  hasPreviousNoShows: boolean;
+  notificationSummary: DailyScheduleBoardAppointmentNotificationSummary | null;
+  canReschedule: boolean;
+  canStart: boolean;
+  canComplete: boolean;
+  canMarkNoShow: boolean;
+  canCancel: boolean;
+}
+
+export interface DailyScheduleBoardGap {
+  startAt: string;
+  endAt: string;
+  localStartTime: string;
+  localEndTime: string;
+  durationMinutes: number;
+  isPast: boolean;
+  minimumBookableDuration: number | null;
+}
+
+export interface DailyScheduleBoardEmployee {
+  id: string;
+  name: string;
+  isCurrentUser: boolean;
+  workingDay: {
+    source:
+      | 'weekly'
+      | 'weekly_closed'
+      | 'date_exception_closed'
+      | 'date_exception_custom';
+    intervals: DailyScheduleBoardWorkingInterval[];
+    closedIntervals: DailyScheduleBoardClosedInterval[];
+  };
+  summary: {
+    pending: number;
+    confirmed: number;
+    inProgress: number;
+    completed: number;
+    noShow: number;
+    cancelled: number;
+    occupiedMinutes: number;
+  };
+  minimumBookableDuration: number | null;
+  availableGaps: DailyScheduleBoardGap[];
+  appointments: DailyScheduleBoardAppointment[];
+}
+
+export interface DailyScheduleBoard {
+  date: string;
+  timezone: string;
+  generatedAt: string;
+  currentTime: DailyScheduleBoardCurrentTime | null;
+  employees: DailyScheduleBoardEmployee[];
 }
 
 export interface FetchAppointmentAvailabilityInput {

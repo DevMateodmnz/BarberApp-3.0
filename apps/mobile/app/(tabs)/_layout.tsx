@@ -172,6 +172,14 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="appointment-detail"
+          options={{
+            title: t('appointments.detailTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t('appointments.detailTitle'),
+          }}
+        />
+        <Tabs.Screen
           name="customers"
           options={{
             title: t('customers.title'),

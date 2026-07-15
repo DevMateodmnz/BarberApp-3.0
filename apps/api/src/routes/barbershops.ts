@@ -33,6 +33,7 @@ import { CreateEmployeeInvitationSchema } from '../schemas/employeeInvitation.js
 import { AssignServiceSchema } from '../schemas/employeeService.js';
 import {
   AppointmentAvailabilityQuerySchema,
+  DailyScheduleBoardQuerySchema,
   AppointmentListQuerySchema,
   CustomerLookupBodySchema,
   StaffCreateAppointmentSchema,
@@ -57,6 +58,7 @@ import {
   UpdateCustomerBodySchema,
 } from '../schemas/customer.js';
 import * as customerService from '../services/customerService.js';
+import * as scheduleBoardService from '../services/scheduleBoardService.js';
 import { BadRequestError } from '../lib/errors.js';
 import { ValidationError } from '../lib/errors.js';
 import { normalizeEmail } from '../lib/email.js';
@@ -139,6 +141,19 @@ function parseAppointmentListQuery(req: Request) {
   if (!parsed.success) {
     throw new ValidationError(
       'Invalid appointment list query parameters',
+      parsed.error.flatten()
+    );
+  }
+
+  return parsed.data;
+}
+
+function parseDailyScheduleBoardQuery(req: Request) {
+  const parsed = DailyScheduleBoardQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid daily schedule board query parameters',
       parsed.error.flatten()
     );
   }
@@ -460,6 +475,25 @@ router.post(
 // GET /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments
 // List appointments for an employee (OWNER, BARBER scoped)
 // ============================================
+router.get(
+  '/:barbershopId/schedule/day',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await scheduleBoardService.getDailyScheduleBoard({
+        barbershopId: paramBarbershopId(req),
+        query: parseDailyScheduleBoardQuery(req),
+        userId: req.userId,
+        userRole: req.userRole,
+        authenticatedEmployeeId: req.employeeId,
+      });
+      res.json({ success: true, data: schedule });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 router.get(
   '/:barbershopId/employees/:employeeId/appointments',
   requireBarbershopAccess,

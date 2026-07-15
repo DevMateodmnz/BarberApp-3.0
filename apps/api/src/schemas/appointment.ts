@@ -71,6 +71,13 @@ export const AppointmentListQuerySchema = z
   })
   .strict();
 
+export const DailyScheduleBoardQuerySchema = z
+  .object({
+    date: ServiceRecordDateSchema,
+    employeeId: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
 export const AppointmentStatusSchema = z.object({
   status: z.enum([
     'PENDING',
@@ -130,5 +137,6 @@ export type AppointmentAvailabilityQuery = z.infer<
   typeof AppointmentAvailabilityQuerySchema
 >;
 export type AppointmentListQuery = z.infer<typeof AppointmentListQuerySchema>;
+export type DailyScheduleBoardQuery = z.infer<typeof DailyScheduleBoardQuerySchema>;
 export type CancelAppointmentBody = z.infer<typeof CancelAppointmentBodySchema>;
 export type CustomerLookupBody = z.infer<typeof CustomerLookupBodySchema>;

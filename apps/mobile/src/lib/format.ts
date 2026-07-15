@@ -201,11 +201,31 @@ export function formatBusinessDateLabel(date: string): string {
   return formatBusinessDateString(date) ?? date;
 }
 
+export const DEFAULT_BARBERSHOP_TIMEZONE = 'America/Argentina/Tucuman';
+
 export function getTodayDateString(date?: Date): string {
   const d = date ?? new Date();
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function getTodayDateStringInTimeZone(
+  timezone: string,
+  date: Date = new Date(),
+): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === 'year')?.value ?? '0000';
+  const month = parts.find((part) => part.type === 'month')?.value ?? '01';
+  const day = parts.find((part) => part.type === 'day')?.value ?? '01';
+
   return `${year}-${month}-${day}`;
 }
 
@@ -224,4 +244,12 @@ export function addDaysToDateString(date: string, amount: number): string {
 
 export function isTodayDateString(date: string): boolean {
   return date === getTodayDateString();
+}
+
+export function isTodayDateStringInTimeZone(
+  date: string,
+  timezone: string,
+  now: Date = new Date(),
+): boolean {
+  return date === getTodayDateStringInTimeZone(timezone, now);
 }

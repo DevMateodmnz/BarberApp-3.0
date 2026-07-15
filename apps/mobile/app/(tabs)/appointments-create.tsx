@@ -64,6 +64,9 @@ export default function AppointmentCreateScreen() {
     prefillCustomerName?: string;
     prefillCustomerPhone?: string;
     prefillCustomerEmail?: string;
+    prefillEmployeeId?: string;
+    prefillDate?: string;
+    prefillStartAt?: string;
   }>();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { t } = useTranslation();
@@ -90,6 +93,7 @@ export default function AppointmentCreateScreen() {
   const [customerInsights, setCustomerInsights] = useState<CustomerInsights | null>(null);
   const customerLookupRequestIdRef = useRef(0);
   const appliedPrefillKeyRef = useRef<string | null>(null);
+  const appliedSchedulePrefillKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isSignedIn || !getTokenRef.current || context) {
@@ -230,6 +234,50 @@ export default function AppointmentCreateScreen() {
     }
   }, [creationContext, t]);
 
+  useEffect(() => {
+    const prefillDate = typeof params.prefillDate === 'string' ? params.prefillDate : null;
+    const prefillEmployeeId = typeof params.prefillEmployeeId === 'string'
+      ? params.prefillEmployeeId
+      : null;
+    const prefillStartAt = typeof params.prefillStartAt === 'string'
+      ? params.prefillStartAt
+      : null;
+
+    if (!creationState || !prefillDate) {
+      return;
+    }
+
+    const schedulePrefillKey = `${prefillEmployeeId ?? 'self'}::${prefillDate}::${prefillStartAt ?? ''}`;
+    if (appliedSchedulePrefillKeyRef.current === schedulePrefillKey) {
+      return;
+    }
+
+    appliedSchedulePrefillKeyRef.current = schedulePrefillKey;
+    setCreationState((current) => {
+      if (!current) {
+        return current;
+      }
+
+      let nextState = current;
+      if (current.context.role === 'OWNER' && prefillEmployeeId) {
+        nextState = applyAppointmentCreationEmployeeChange(nextState, prefillEmployeeId);
+      }
+
+      nextState = applyAppointmentCreationDateChange(nextState, prefillDate);
+      return nextState;
+    });
+
+    if (prefillEmployeeId) {
+      void loadServicesForEmployee(prefillEmployeeId);
+    }
+  }, [
+    creationState,
+    loadServicesForEmployee,
+    params.prefillDate,
+    params.prefillEmployeeId,
+    params.prefillStartAt,
+  ]);
+
   const availabilityRequest = useMemo(
     () => (creationState ? getAppointmentCreationAvailabilityRequest(creationState) : null),
     [creationState],
@@ -313,6 +361,27 @@ export default function AppointmentCreateScreen() {
       cancelled = true;
     };
   }, [availabilityRequestKey, availabilityReloadNonce, creationContext?.barbershopId]);
+
+  useEffect(() => {
+    const preferredStartAt = typeof params.prefillStartAt === 'string'
+      ? params.prefillStartAt
+      : null;
+    if (!preferredStartAt || !creationState?.availability) {
+      return;
+    }
+
+    const matchingSlot = creationState.availability.slots.find(
+      (slot) => slot.startAt === preferredStartAt,
+    );
+
+    if (!matchingSlot || creationState.selectedSlotStartAt === preferredStartAt) {
+      return;
+    }
+
+    setCreationState((current) => (
+      current ? selectAppointmentCreationSlot(current, preferredStartAt) : current
+    ));
+  }, [creationState?.availability, creationState?.selectedSlotStartAt, params.prefillStartAt]);
 
   const handleEmployeeSelect = useCallback((employeeId: string) => {
     setCreationState((current) => (
