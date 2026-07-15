@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { Prisma } from '@prisma/client';
 import type { UserRole } from '@prisma/client';
 
@@ -267,6 +269,109 @@ async function updateCustomerDirectoryState(
   return updated;
 }
 
+async function atomicUpsertCustomerByPhone(
+  db: CustomerDb,
+  input: {
+    barbershopId: string;
+    phone: string;
+    phoneNormalized: string;
+    name?: string | null;
+    email?: string | null;
+    appointmentAt: Date;
+  }
+): Promise<UpsertCustomerResult> {
+  const incomingName = normalizeOptionalText(input.name);
+  const incomingPhone = normalizeOptionalText(input.phone);
+  const incomingEmailRaw = normalizeOptionalText(input.email);
+  const incomingEmail = incomingEmailRaw ? normalizeEmail(incomingEmailRaw) : null;
+
+  const rows = await db.$queryRaw<
+    Array<{
+      id: string;
+      name: string;
+      phone: string;
+      phone_normalized: string;
+      email: string | null;
+      inserted: boolean;
+    }>
+  >(Prisma.sql`
+    INSERT INTO customers (
+      id,
+      barbershop_id,
+      name,
+      phone,
+      phone_normalized,
+      email,
+      internal_notes,
+      first_seen_at,
+      last_seen_at,
+      created_at,
+      updated_at,
+      deleted_at
+    ) VALUES (
+      ${`cust_${crypto.randomUUID().replace(/-/g, '').slice(0, 28)}`},
+      ${input.barbershopId},
+      ${incomingName ?? input.phoneNormalized},
+      ${input.phone.trim()},
+      ${input.phoneNormalized},
+      ${incomingEmail},
+      NULL,
+      ${input.appointmentAt},
+      ${input.appointmentAt},
+      NOW(),
+      NOW(),
+      NULL
+    )
+    ON CONFLICT (barbershop_id, phone_normalized)
+    DO UPDATE SET
+      first_seen_at = LEAST(customers.first_seen_at, EXCLUDED.first_seen_at),
+      last_seen_at = GREATEST(customers.last_seen_at, EXCLUDED.last_seen_at),
+      name = CASE
+        WHEN CAST(${incomingName} AS TEXT) IS NOT NULL
+          AND CAST(${incomingName} AS TEXT) <> customers.name
+          THEN CAST(${incomingName} AS TEXT)
+        ELSE customers.name
+      END,
+      email = CASE
+        WHEN CAST(${incomingEmail} AS TEXT) IS NOT NULL
+          AND CAST(${incomingEmail} AS TEXT) <> customers.email
+          THEN CAST(${incomingEmail} AS TEXT)
+        ELSE customers.email
+      END,
+      phone = CASE
+        WHEN CAST(${incomingPhone} AS TEXT) IS NOT NULL
+          AND CAST(${incomingPhone} AS TEXT) <> customers.phone
+          THEN CAST(${incomingPhone} AS TEXT)
+        ELSE customers.phone
+      END,
+      deleted_at = NULL,
+      updated_at = NOW()
+    RETURNING
+      id,
+      name,
+      phone,
+      phone_normalized,
+      email,
+      (xmax = 0) AS inserted
+  `);
+
+  const row = rows[0];
+  if (!row) {
+    throw new Error('Customer upsert did not return a row');
+  }
+
+  return {
+    customer: {
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      phoneNormalized: row.phone_normalized,
+      email: row.email,
+    },
+    created: row.inserted,
+  };
+}
+
 export async function upsertCustomerByPhone(
   input: UpsertCustomerInput
 ): Promise<UpsertCustomerResult> {
@@ -305,68 +410,14 @@ export async function upsertCustomerByPhone(
     };
   }
 
-  try {
-    const created = await input.db.customer.create({
-      data: {
-        barbershopId: input.barbershopId,
-        name: normalizeOptionalText(input.name) ?? phoneNormalized,
-        phone: input.phone.trim(),
-        phoneNormalized,
-        email: normalizeOptionalText(input.email)
-          ? normalizeEmail(input.email!)
-          : null,
-        internalNotes: null,
-        firstSeenAt: input.appointmentAt,
-        lastSeenAt: input.appointmentAt,
-      },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        phoneNormalized: true,
-        email: true,
-      },
-    });
-
-    return { customer: created, created: true };
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError
-      && error.code === 'P2002'
-    ) {
-      const winner = await input.db.customer.findFirst({
-        where: {
-          barbershopId: input.barbershopId,
-          phoneNormalized,
-        },
-        select: {
-          id: true,
-          name: true,
-          phone: true,
-          phoneNormalized: true,
-          email: true,
-          firstSeenAt: true,
-          lastSeenAt: true,
-          deletedAt: true,
-        },
-      });
-
-      if (winner) {
-        return {
-          customer: await updateCustomerDirectoryState(input.db, winner, {
-            name: input.name,
-            email: input.email,
-            phone: input.phone,
-            appointmentAt: input.appointmentAt,
-            allowPhoneOverwrite: true,
-          }),
-          created: false,
-        };
-      }
-    }
-
-    throw error;
-  }
+  return atomicUpsertCustomerByPhone(input.db, {
+    barbershopId: input.barbershopId,
+    phone: input.phone,
+    phoneNormalized,
+    name: input.name,
+    email: input.email,
+    appointmentAt: input.appointmentAt,
+  });
 }
 
 export async function linkAppointmentToExistingCustomer(
