@@ -30,6 +30,7 @@
     "notifications:worker": "tsx --env-file=.env src/scripts/notificationWorker.ts",
     "payments:webhooks": "tsx --env-file=.env src/scripts/paymentWebhookWorker.ts",
     "payments:expire-holds": "tsx --env-file=.env src/scripts/paymentExpirationWorker.ts",
+    "payments:sandbox-readiness": "tsx --env-file=.env src/scripts/paymentSandboxReadiness.ts",
     "schedule-exception": "tsx --env-file=.env src/scripts/scheduleException.ts",
     "fixture:public-booking:e2e": "tsx tests/support/publicBookingE2eFixture.cli.ts",
     "qa:bootstrap": "tsx --env-file=.env src/scripts/qaBootstrap.ts",

@@ -150,4 +150,32 @@ describe('PublicBookingConfirmationView', () => {
     expect(screen.getByText(/motivo registrado/i)).toBeInTheDocument();
     expect(screen.getByText('No puedo asistir')).toBeInTheDocument();
   });
+
+  it('shows generic payment-review copy without leaking the internal reason', () => {
+    saveBookingConfirmation('mateo-barber', {
+      bookingReference: 'pb_TEST1234567890',
+      barbershopName: 'Mateo Barber',
+      serviceName: 'Corte clásico',
+      barberName: 'Mateo',
+      timezone: 'America/Argentina/Tucuman',
+      localDate: '2026-07-20',
+      localStartTime: '10:00',
+      startAt: '2026-07-20T13:00:00.000Z',
+      endAt: '2026-07-20T13:30:00.000Z',
+      appointmentStatus: 'CANCELLED',
+      paymentStatus: 'REVIEW_REQUIRED',
+      amountCents: 1500,
+      remainingAmountCents: 1700,
+      currency: 'ARS',
+      canCancel: false,
+    });
+
+    render(<PublicBookingConfirmationView slug="mateo-barber" />);
+
+    expect(screen.getAllByText('Pago en revisión')).toHaveLength(2);
+    expect(
+      screen.getByText(/la barbería debe revisar el pago antes de confirmar el turno/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/seller mismatch/i)).not.toBeInTheDocument();
+  });
 });

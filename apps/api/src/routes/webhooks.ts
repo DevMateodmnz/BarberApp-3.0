@@ -143,18 +143,23 @@ router.post(
       const rawBody = req.body as Buffer;
       const dataId =
         typeof req.query['data.id'] === 'string' ? req.query['data.id'] : undefined;
+      const originalUrl = req.originalUrl ?? '';
+      const rawQuery = originalUrl.includes('?') ? originalUrl.slice(originalUrl.indexOf('?') + 1) : '';
+      const rawDataIdMatch = rawQuery.match(/(?:^|&)data\.id=([^&]+)/);
+      const rawDataId = rawDataIdMatch?.[1];
 
-      validateMercadoPagoWebhookSignature({
+      const signature = validateMercadoPagoWebhookSignature({
         rawBody,
         xSignature: req.header('x-signature') ?? undefined,
         xRequestId: req.header('x-request-id') ?? undefined,
         dataId,
+        rawDataId,
       });
 
       await persistMercadoPagoWebhook({
         rawBody,
         requestId: req.header('x-request-id') ?? undefined,
-        xSignature: req.header('x-signature') ?? undefined,
+        signatureTs: signature.timestamp,
         dataId: dataId ?? '',
         externalReference:
           typeof req.query.external_reference === 'string'

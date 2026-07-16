@@ -2,14 +2,16 @@ import crypto from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../../lib/errors.js';
 import { buildLifecycleUpdateForCancel } from '../../lib/appointmentLifecycle.js';
-import { decryptPaymentSecret, encryptPaymentSecret, sha256Hex, timingSafeEqualHex } from '../../lib/payments/crypto.js';
+import { decryptPaymentSecret, encryptPaymentSecret, timingSafeEqualHex } from '../../lib/payments/crypto.js';
 import { readPaymentRuntimeConfig } from '../../lib/payments/runtime.js';
 import { prisma } from '../../lib/prisma.js';
 import { cancelAppointmentNotifications, scheduleAppointmentNotificationsForNewAppointment } from '../appointmentNotificationService.js';
 import { getOperationalMercadoPagoCredentials } from './paymentConnectionService.js';
 import { createMercadoPagoCheckoutPreference, getMercadoPagoPaymentById } from './providers/mercadoPagoClient.js';
+import { ensurePaymentReviewCase, getOpenPaymentReviewForPayment, getPaymentTimelineForPayment, getProviderEventSummariesForPayment } from './paymentReviewService.js';
 
 const runtime = readPaymentRuntimeConfig(process.env);
+const MAX_WEBHOOK_SIGNATURE_HEADER_LENGTH = 512;
 
 export interface PublicBookingPaymentStateDto {
   bookingReference: string;
@@ -23,7 +25,7 @@ export interface PublicBookingPaymentStateDto {
   endAt: string;
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'IN_PROGRESS' | 'COMPLETED' | 'NO_SHOW';
   appointmentStatus: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'IN_PROGRESS' | 'COMPLETED' | 'NO_SHOW';
-  paymentStatus: 'NOT_REQUIRED' | 'CREATING' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED' | 'REVIEW_REQUIRED' | 'ERROR';
+  paymentStatus: 'NOT_REQUIRED' | 'CREATING' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED' | 'REVIEW_REQUIRED' | 'ERROR';
   amountCents: number | null;
   servicePriceCents: number;
   remainingAmountCents: number | null;
@@ -48,6 +50,7 @@ function mapPaymentStatus(status: string | null | undefined): PublicBookingPayme
     case 'CANCELLED':
     case 'EXPIRED':
     case 'REVIEW_REQUIRED':
+    case 'REFUNDED':
     case 'ERROR':
       return status;
     default:
@@ -63,7 +66,7 @@ function convertMercadoPagoAmountToCents(value: number | null): number | null {
   return Math.round(value * 100);
 }
 
-function mapMercadoPagoStatus(value: string | null): 'APPROVED' | 'PENDING' | 'REJECTED' | 'CANCELLED' | 'REVIEW_REQUIRED' {
+function mapMercadoPagoStatus(value: string | null): 'APPROVED' | 'PENDING' | 'REJECTED' | 'CANCELLED' | 'REFUNDED' | 'ERROR' {
   switch (value) {
     case 'approved':
       return 'APPROVED';
@@ -72,8 +75,9 @@ function mapMercadoPagoStatus(value: string | null): 'APPROVED' | 'PENDING' | 'R
     case 'cancelled':
       return 'CANCELLED';
     case 'refunded':
+      return 'REFUNDED';
     case 'charged_back':
-      return 'REVIEW_REQUIRED';
+      return 'ERROR';
     case 'pending':
     case 'in_process':
     default:
@@ -132,11 +136,22 @@ export async function syncBookingPaymentOnAppointmentCancellation(input: {
     };
   }
 
+  const openReview = await getOpenPaymentReviewForPayment({
+    bookingPaymentId: payment.id,
+    db,
+  });
+
   if (payment.status === 'APPROVED') {
+    await ensurePaymentReviewCase({
+      db,
+      barbershopId: input.barbershopId,
+      bookingPaymentId: payment.id,
+      reason: 'APPROVED_PAYMENT_ON_CANCELLED_APPOINTMENT',
+      now: input.now,
+    });
     await db.bookingPayment.update({
       where: { id: payment.id },
       data: {
-        status: 'REVIEW_REQUIRED',
         reviewRequiredAt: payment.reviewRequiredAt ?? input.now,
         reviewReasonCode: 'APPROVED_PAYMENT_ON_CANCELLED_APPOINTMENT',
         lastErrorCode: null,
@@ -149,7 +164,7 @@ export async function syncBookingPaymentOnAppointmentCancellation(input: {
     };
   }
 
-  if (payment.status === 'REVIEW_REQUIRED') {
+  if (payment.status === 'REVIEW_REQUIRED' || openReview) {
     return {
       latestPaymentStatus: 'REVIEW_REQUIRED' as const,
       reviewRequired: true,
@@ -210,6 +225,15 @@ export async function loadPublicBookingPaymentStateByReference(input: {
       bookingPayments: {
         orderBy: { createdAt: 'desc' },
         take: 1,
+        include: {
+          reviews: {
+            where: {
+              status: { in: ['OPEN', 'IN_PROGRESS'] },
+            },
+            orderBy: [{ openedAt: 'asc' }, { id: 'asc' }],
+            take: 1,
+          },
+        },
       },
     },
   });
@@ -222,6 +246,7 @@ export async function loadPublicBookingPaymentStateByReference(input: {
   const checkoutUrl = payment?.checkoutUrlCiphertext
     ? decryptPaymentSecret(payment.checkoutUrlCiphertext, runtime.encryptionKey)
     : null;
+  const hasOpenReview = Boolean(payment?.reviews?.length);
 
   return {
     bookingReference: appointment.publicReference ?? '',
@@ -245,7 +270,7 @@ export async function loadPublicBookingPaymentStateByReference(input: {
     endAt: appointment.endAt.toISOString(),
     status: appointment.status,
     appointmentStatus: appointment.status,
-    paymentStatus: mapPaymentStatus(payment?.status),
+    paymentStatus: hasOpenReview ? 'REVIEW_REQUIRED' : mapPaymentStatus(payment?.status),
     amountCents: payment?.amountCents ?? null,
     servicePriceCents: appointment.servicePriceCents,
     remainingAmountCents: payment ? appointment.servicePriceCents - payment.amountCents : null,
@@ -291,9 +316,13 @@ export async function createCheckoutPreferenceForBookingPayment(input: {
   if (!initPointBase) {
     throw new AppError(500, 'PAYMENT_PROVIDER_CONFIGURATION_ERROR', 'PUBLIC_WEB_BASE_URL is required for payment checkout returns');
   }
+  const webhookPublicUrl = runtime.webhookPublicUrl?.trim();
+  if (!webhookPublicUrl) {
+    throw new AppError(500, 'PAYMENT_PROVIDER_CONFIGURATION_ERROR', 'PAYMENT_WEBHOOK_PUBLIC_URL is required for Mercado Pago notifications');
+  }
 
   const expiresAt = payment.expiresAt;
-  const notificationUrl = `${initPointBase.replace(/\/$/, '')}/api/payment-webhooks/mercado-pago?external_reference=${encodeURIComponent(payment.externalReference)}`;
+  const notificationUrl = `${webhookPublicUrl}?external_reference=${encodeURIComponent(payment.externalReference)}`;
 
   const preference = await createMercadoPagoCheckoutPreference({
     runtime,
@@ -313,6 +342,9 @@ export async function createCheckoutPreferenceForBookingPayment(input: {
       payer: {
         name: payment.appointment.clientName,
         email: payment.appointment.clientEmail ?? undefined,
+      },
+      metadata: {
+        booking_payment_id: payment.id,
       },
       back_urls: {
         success: `${initPointBase}/barberias/${encodeURIComponent(input.barbershopSlug)}/pago/exito?ref=${encodeURIComponent(input.publicReference)}`,
@@ -441,6 +473,7 @@ export function validateMercadoPagoWebhookSignature(input: {
   xSignature: string | undefined;
   xRequestId: string | undefined;
   dataId: string | undefined;
+  rawDataId?: string | undefined;
 }) {
   const secret = runtime.mercadoPago.webhookSecret;
   if (!secret) {
@@ -451,17 +484,44 @@ export function validateMercadoPagoWebhookSignature(input: {
     throw new AppError(401, 'INVALID_WEBHOOK_SIGNATURE', 'Missing Mercado Pago webhook signature data');
   }
 
+  if (input.xSignature.length > MAX_WEBHOOK_SIGNATURE_HEADER_LENGTH) {
+    throw new AppError(401, 'INVALID_WEBHOOK_SIGNATURE', 'Invalid Mercado Pago webhook signature');
+  }
+
+  if ((input.rawDataId ?? input.dataId) !== input.dataId || input.dataId.trim() !== input.dataId || input.dataId.length === 0) {
+    throw new AppError(401, 'INVALID_WEBHOOK_SIGNATURE', 'Invalid Mercado Pago webhook signature');
+  }
+
   const signatureParts = new Map<string, string>();
   for (const part of input.xSignature.split(',')) {
-    const [key, value] = part.split('=');
-    if (key && value) {
-      signatureParts.set(key.trim(), value.trim());
+    const trimmed = part.trim();
+    if (!trimmed) {
+      continue;
     }
+    const pair = trimmed.split('=');
+    if (pair.length !== 2) {
+      throw new AppError(401, 'INVALID_WEBHOOK_SIGNATURE', 'Invalid Mercado Pago webhook signature');
+    }
+    const key = pair[0];
+    const value = pair[1];
+    if (key === undefined || value === undefined) {
+      throw new AppError(401, 'INVALID_WEBHOOK_SIGNATURE', 'Invalid Mercado Pago webhook signature');
+    }
+    const normalizedKey = key.trim();
+    const normalizedValue = value.trim();
+    if (!normalizedKey || !normalizedValue || signatureParts.has(normalizedKey)) {
+      throw new AppError(401, 'INVALID_WEBHOOK_SIGNATURE', 'Invalid Mercado Pago webhook signature');
+    }
+    signatureParts.set(normalizedKey, normalizedValue);
   }
 
   const timestamp = signatureParts.get('ts');
   const v1 = signatureParts.get('v1');
-  if (!timestamp || !v1) {
+  if (!timestamp || !v1 || signatureParts.size !== 2) {
+    throw new AppError(401, 'INVALID_WEBHOOK_SIGNATURE', 'Invalid Mercado Pago webhook signature');
+  }
+
+  if (!/^\d{10,13}$/.test(timestamp) || !/^[a-f0-9]{64}$/i.test(v1)) {
     throw new AppError(401, 'INVALID_WEBHOOK_SIGNATURE', 'Invalid Mercado Pago webhook signature');
   }
 
@@ -477,7 +537,7 @@ export function validateMercadoPagoWebhookSignature(input: {
 export async function persistMercadoPagoWebhook(input: {
   rawBody: Buffer;
   requestId?: string;
-  xSignature?: string;
+  signatureTs?: string;
   dataId: string;
   externalReference?: string | null;
   topic?: string | null;
@@ -509,8 +569,8 @@ export async function persistMercadoPagoWebhook(input: {
       dataId: input.dataId,
       externalReference: input.externalReference ?? uniqueExternalReference,
       requestId: input.requestId ?? null,
-      signatureTs: input.xSignature ?? null,
-      rawBodySha256: sha256Hex(input.rawBody.toString('utf8')),
+      signatureTs: input.signatureTs ?? null,
+      rawBodySha256: crypto.createHash('sha256').update(input.rawBody).digest('hex'),
     },
     update: {
       requestId: input.requestId ?? null,
@@ -532,13 +592,23 @@ export async function processPendingPaymentWebhookEvents(input: { now?: Date } =
   let processed = 0;
 
   for (const event of events) {
+    const payment = event.externalReference
+      ? await prisma.bookingPayment.findUnique({
+          where: { externalReference: event.externalReference },
+        })
+      : null;
+
     try {
       const claimed = await prisma.paymentWebhookEvent.updateMany({
         where: {
           id: event.id,
           status: { in: ['RECEIVED', 'ERROR'] },
         },
-        data: { status: 'PROCESSING', lastErrorCode: null },
+        data: {
+          status: 'PROCESSING',
+          lastErrorCode: null,
+          attemptCount: { increment: 1 },
+        },
       });
 
       if (claimed.count === 0) {
@@ -552,10 +622,6 @@ export async function processPendingPaymentWebhookEvents(input: { now?: Date } =
         });
         continue;
       }
-
-      const payment = await prisma.bookingPayment.findUnique({
-        where: { externalReference: event.externalReference },
-      });
 
       if (!payment) {
         await prisma.paymentWebhookEvent.updateMany({
@@ -592,6 +658,26 @@ export async function processPendingPaymentWebhookEvents(input: { now?: Date } =
       });
       processed += 1;
     } catch (error) {
+      if (payment) {
+        await prisma.$transaction(async (tx) => {
+          await ensurePaymentReviewCase({
+            db: tx,
+            barbershopId: payment.barbershopId,
+            bookingPaymentId: payment.id,
+            reason: 'PROVIDER_RECONCILIATION_ERROR',
+            now,
+          });
+          await tx.bookingPayment.update({
+            where: { id: payment.id },
+            data: {
+              reviewRequiredAt: now,
+              reviewReasonCode: 'PROVIDER_RECONCILIATION_ERROR',
+              lastErrorCode: error instanceof AppError ? error.code : 'UNEXPECTED_PAYMENT_WEBHOOK_ERROR',
+            },
+          });
+        });
+      }
+
       await prisma.paymentWebhookEvent.updateMany({
         where: { id: event.id, status: 'PROCESSING' },
         data: {
@@ -617,6 +703,7 @@ export async function reconcileAuthoritativePayment(input: {
     externalReference: string | null;
     collectorId: string | null;
     dateApproved: string | null;
+    bookingPaymentId: string | null;
   };
   sellerId: string | null;
   now: Date;
@@ -636,24 +723,72 @@ export async function reconcileAuthoritativePayment(input: {
 
   const providerAmountCents = convertMercadoPagoAmountToCents(input.providerPayment.transactionAmount);
   const normalizedStatus = mapMercadoPagoStatus(input.providerPayment.status);
-  const mismatch = (
-    providerAmountCents !== payment.amountCents ||
-    input.providerPayment.currencyId !== payment.currency ||
-    input.providerPayment.externalReference !== payment.externalReference ||
-    (input.sellerId && input.providerPayment.collectorId && input.sellerId !== input.providerPayment.collectorId)
-  );
+  const reviewReasons: Array<
+    | 'AMOUNT_MISMATCH'
+    | 'CURRENCY_MISMATCH'
+    | 'SELLER_MISMATCH'
+    | 'EXTERNAL_REFERENCE_MISMATCH'
+    | 'PREFERENCE_MISMATCH'
+    | 'DUPLICATE_PROVIDER_PAYMENT'
+  > = [];
 
-  if (mismatch) {
-    await prisma.bookingPayment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'REVIEW_REQUIRED',
-        reviewRequiredAt: input.now,
-        reviewReasonCode: 'AUTHORITATIVE_PAYMENT_MISMATCH',
+  if (providerAmountCents !== payment.amountCents) {
+    reviewReasons.push('AMOUNT_MISMATCH');
+  }
+  if (input.providerPayment.currencyId !== payment.currency) {
+    reviewReasons.push('CURRENCY_MISMATCH');
+  }
+  if (input.providerPayment.externalReference !== payment.externalReference) {
+    reviewReasons.push('EXTERNAL_REFERENCE_MISMATCH');
+  }
+  if (input.sellerId && input.providerPayment.collectorId && input.sellerId !== input.providerPayment.collectorId) {
+    reviewReasons.push('SELLER_MISMATCH');
+  }
+  if (input.providerPayment.bookingPaymentId && input.providerPayment.bookingPaymentId !== payment.id) {
+    reviewReasons.push('PREFERENCE_MISMATCH');
+  }
+  if (input.providerPayment.id) {
+    const duplicatePayment = await prisma.bookingPayment.findFirst({
+      where: {
         providerPaymentId: input.providerPayment.id,
-        providerStatus: input.providerPayment.status,
-        providerStatusDetail: input.providerPayment.statusDetail,
+        id: { not: payment.id },
       },
+      select: { id: true },
+    });
+    if (duplicatePayment) {
+      reviewReasons.push('DUPLICATE_PROVIDER_PAYMENT');
+    }
+  }
+
+  if (reviewReasons.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      await tx.bookingPayment.update({
+        where: { id: payment.id },
+        data: {
+          status: normalizedStatus === 'APPROVED' ? 'APPROVED' : normalizedStatus,
+          approvedAt: normalizedStatus === 'APPROVED'
+            ? (input.providerPayment.dateApproved ? new Date(input.providerPayment.dateApproved) : input.now)
+            : payment.approvedAt,
+          rejectedAt: normalizedStatus === 'REJECTED' ? input.now : payment.rejectedAt,
+          cancelledAt: normalizedStatus === 'CANCELLED' ? input.now : payment.cancelledAt,
+          providerPaymentId: input.providerPayment.id,
+          providerStatus: input.providerPayment.status,
+          providerStatusDetail: input.providerPayment.statusDetail,
+          reviewRequiredAt: input.now,
+          reviewReasonCode: reviewReasons[0],
+          lastErrorCode: null,
+        },
+      });
+
+      for (const reason of reviewReasons) {
+        await ensurePaymentReviewCase({
+          db: tx,
+          barbershopId: payment.barbershopId,
+          bookingPaymentId: payment.id,
+          reason,
+          now: input.now,
+        });
+      }
     });
     return;
   }
@@ -666,13 +801,21 @@ export async function reconcileAuthoritativePayment(input: {
         await tx.bookingPayment.update({
           where: { id: payment.id },
           data: {
-            status: 'REVIEW_REQUIRED',
+            status: 'APPROVED',
+            approvedAt,
             reviewRequiredAt: input.now,
-            reviewReasonCode: 'PAYMENT_APPROVED_AFTER_HOLD_EXPIRY',
+            reviewReasonCode: 'APPROVED_AFTER_HOLD_EXPIRY',
             providerPaymentId: input.providerPayment.id,
             providerStatus: input.providerPayment.status,
             providerStatusDetail: input.providerPayment.statusDetail,
           },
+        });
+        await ensurePaymentReviewCase({
+          db: tx,
+          barbershopId: payment.barbershopId,
+          bookingPaymentId: payment.id,
+          reason: 'APPROVED_AFTER_HOLD_EXPIRY',
+          now: input.now,
         });
 
         await tx.appointment.updateMany({
@@ -724,12 +867,20 @@ export async function reconcileAuthoritativePayment(input: {
       });
 
       if (result.count === 0) {
+        await ensurePaymentReviewCase({
+          db: tx,
+          barbershopId: payment.barbershopId,
+          bookingPaymentId: payment.id,
+          reason: 'APPROVED_AFTER_HOLD_EXPIRY',
+          now: input.now,
+        });
         await tx.bookingPayment.update({
           where: { id: payment.id },
           data: {
-            status: 'REVIEW_REQUIRED',
+            status: 'APPROVED',
+            approvedAt,
             reviewRequiredAt: input.now,
-            reviewReasonCode: 'PAYMENT_APPROVED_AFTER_HOLD_EXPIRY',
+            reviewReasonCode: 'APPROVED_AFTER_HOLD_EXPIRY',
           },
         });
         await tx.appointment.updateMany({
@@ -765,21 +916,6 @@ export async function reconcileAuthoritativePayment(input: {
       where: { id: payment.id },
       data: {
         status: 'PENDING',
-        providerPaymentId: input.providerPayment.id,
-        providerStatus: input.providerPayment.status,
-        providerStatusDetail: input.providerPayment.statusDetail,
-      },
-    });
-    return;
-  }
-
-  if (normalizedStatus === 'REVIEW_REQUIRED') {
-    await prisma.bookingPayment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'REVIEW_REQUIRED',
-        reviewRequiredAt: input.now,
-        reviewReasonCode: 'AUTHORITATIVE_REVIEW_REQUIRED',
         providerPaymentId: input.providerPayment.id,
         providerStatus: input.providerPayment.status,
         providerStatusDetail: input.providerPayment.statusDetail,
@@ -845,10 +981,10 @@ export async function getBarbershopPaymentSummary(barbershopId: string, now: Dat
         status: 'EXPIRED',
       },
     }),
-    prisma.bookingPayment.count({
+    prisma.bookingPaymentReview.count({
       where: {
         barbershopId,
-        status: 'REVIEW_REQUIRED',
+        status: { in: ['OPEN', 'IN_PROGRESS'] },
       },
     }),
     prisma.bookingPayment.count({
@@ -894,6 +1030,13 @@ export async function listBarbershopPayments(input: {
           status: true,
         },
       },
+      reviews: {
+        where: {
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
+        },
+        orderBy: [{ openedAt: 'asc' }, { id: 'asc' }],
+        take: 1,
+      },
     },
   });
 
@@ -904,10 +1047,10 @@ export async function listBarbershopPayments(input: {
     appointmentStartAt: item.appointment.startAt.toISOString(),
     serviceName: item.appointment.serviceName,
     appointmentStatus: item.appointment.status,
-    status: item.status,
+    status: item.reviews.length > 0 ? 'REVIEW_REQUIRED' : item.status,
     amountCents: item.amountCents,
     currency: item.currency,
-    reviewReasonCode: item.reviewReasonCode,
+    reviewReasonCode: item.reviews[0]?.reason ?? item.reviewReasonCode,
     expiresAt: item.expiresAt.toISOString(),
     approvedAt: toIso(item.approvedAt),
     createdAt: item.createdAt.toISOString(),
@@ -935,6 +1078,13 @@ export async function getBarbershopPaymentDetail(input: {
           status: true,
         },
       },
+      reviews: {
+        where: {
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
+        },
+        orderBy: [{ openedAt: 'asc' }, { id: 'asc' }],
+        take: 1,
+      },
     },
   });
 
@@ -942,9 +1092,12 @@ export async function getBarbershopPaymentDetail(input: {
     throw new AppError(404, 'NOT_FOUND', 'Payment not found');
   }
 
+  const openReview = payment.reviews[0] ?? null;
+
   return {
     id: payment.id,
-    status: payment.status,
+    status: openReview ? 'REVIEW_REQUIRED' : payment.status,
+    businessStatus: payment.status,
     amountCents: payment.amountCents,
     currency: payment.currency,
     expiresAt: payment.expiresAt.toISOString(),
@@ -953,7 +1106,18 @@ export async function getBarbershopPaymentDetail(input: {
     cancelledAt: toIso(payment.cancelledAt),
     expiredAt: toIso(payment.expiredAt),
     reviewRequiredAt: toIso(payment.reviewRequiredAt),
-    reviewReasonCode: payment.reviewReasonCode,
+    reviewReasonCode: openReview?.reason ?? payment.reviewReasonCode,
+    providerStatus: payment.providerStatus,
+    providerStatusDetail: payment.providerStatusDetail,
+    review: openReview
+      ? {
+          id: openReview.id,
+          status: openReview.status,
+          reason: openReview.reason,
+        }
+      : null,
+    timeline: await getPaymentTimelineForPayment(payment.id),
+    providerEvents: await getProviderEventSummariesForPayment(payment.id),
     appointment: {
       publicReference: payment.appointment.publicReference,
       customerDisplayName: payment.appointment.clientName,

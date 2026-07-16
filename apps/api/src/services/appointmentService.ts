@@ -75,6 +75,7 @@ import type {
 const APPOINTMENT_INCLUDE = {
   ...APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE,
 } satisfies Prisma.AppointmentInclude;
+type AppointmentWithInclude = Prisma.AppointmentGetPayload<{ include: typeof APPOINTMENT_INCLUDE }>;
 
 const APPOINTMENT_CHANGE_HISTORY_SELECT = {
   id: true,
@@ -114,6 +115,37 @@ interface AppointmentRecordOptions {
   publicReference?: string | null;
   publicConsentAcceptedAt?: Date | null;
   publicConsentVersion?: string | null;
+}
+
+function applyOperationalPaymentReview(
+  appointment: AppointmentWithInclude
+): AppointmentWithInclude {
+  if (!appointment.bookingPayments?.length) {
+    return appointment;
+  }
+
+  const [latestPayment] = appointment.bookingPayments;
+  if (!latestPayment || !latestPayment.reviews?.length || latestPayment.status === 'REVIEW_REQUIRED') {
+    return appointment;
+  }
+
+  return {
+    ...appointment,
+    bookingPayments: [
+      {
+        ...latestPayment,
+        status: 'REVIEW_REQUIRED',
+        reviewReasonCode: latestPayment.reviews[0]?.reason ?? latestPayment.reviewReasonCode,
+      },
+      ...appointment.bookingPayments.slice(1),
+    ],
+  };
+}
+
+function applyOperationalPaymentReviews(
+  appointments: AppointmentWithInclude[]
+): AppointmentWithInclude[] {
+  return appointments.map(applyOperationalPaymentReview);
 }
 
 interface EligibleBookingContext {
@@ -959,13 +991,14 @@ export async function listAppointments(
     scopedWhere = withLocalDateRange(where, query.date, ownerContext.timezone);
   }
 
-  return prisma.appointment.findMany({
+  const appointments = await prisma.appointment.findMany({
     where: scopedWhere,
     include: APPOINTMENT_INCLUDE,
     orderBy: { startAt: 'desc' },
     skip: query.offset,
     take: query.limit,
   });
+  return applyOperationalPaymentReviews(appointments);
 }
 
 /**
@@ -999,7 +1032,7 @@ export async function listEmployeeAppointments(
     ? await getBarbershopTimezone(barbershopId)
     : null;
 
-  return prisma.appointment.findMany({
+  const appointments = await prisma.appointment.findMany({
     where: withLocalDateRange(
       {
         barbershopId,
@@ -1013,6 +1046,7 @@ export async function listEmployeeAppointments(
     skip: query.offset,
     take: query.limit,
   });
+  return applyOperationalPaymentReviews(appointments);
 }
 
 /**
@@ -1055,7 +1089,7 @@ export async function getAppointment(
     }
   }
 
-  return appointment;
+  return applyOperationalPaymentReview(appointment);
 }
 
 export async function listAppointmentNotifications(

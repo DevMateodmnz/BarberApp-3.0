@@ -64,6 +64,42 @@ enum BookingPaymentStatus {
   ERROR
 }
 
+enum PaymentReviewStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum PaymentReviewReason {
+  APPROVED_AFTER_HOLD_EXPIRY
+  APPROVED_PAYMENT_ON_CANCELLED_APPOINTMENT
+  AMOUNT_MISMATCH
+  CURRENCY_MISMATCH
+  SELLER_MISMATCH
+  EXTERNAL_REFERENCE_MISMATCH
+  PREFERENCE_MISMATCH
+  DUPLICATE_PROVIDER_PAYMENT
+  PROVIDER_RECONCILIATION_ERROR
+  OTHER
+}
+
+enum PaymentReviewResolution {
+  REFUNDED_EXTERNALLY
+  NO_REFUND_REQUIRED
+  CUSTOMER_CREDIT_GRANTED
+  PAYMENT_ACCEPTED_MANUALLY
+  DUPLICATE_RESOLVED
+  OTHER
+}
+
+enum PaymentReviewActionType {
+  OPENED
+  MARKED_IN_PROGRESS
+  NOTE_ADDED
+  RESOLVED
+  REOPENED
+}
+
 enum PaymentWebhookEventStatus {
   RECEIVED
   PROCESSING
@@ -163,6 +199,9 @@ model User {
   acceptedInvitations                   EmployeeInvitation[]      @relation("EmployeeInvitationUser")
   manualRetriedAppointmentNotifications AppointmentNotification[] @relation("AppointmentNotificationLastManualRetryBy")
   PaymentOAuthState                     PaymentOAuthState[]
+  assignedPaymentReviews                BookingPaymentReview[]    @relation("BookingPaymentReviewAssignedTo")
+  resolvedPaymentReviews                BookingPaymentReview[]    @relation("BookingPaymentReviewResolvedBy")
+  paymentReviewActions                  BookingPaymentReviewAction[] @relation("BookingPaymentReviewActionActor")
 
   @@map("users")
 }
@@ -207,6 +246,8 @@ model Barbershop {
   paymentWebhookEvents            PaymentWebhookEvent[]
   bookingPayments                 BookingPayment[]
   PaymentOAuthState               PaymentOAuthState[]
+  paymentReviews                  BookingPaymentReview[]
+  paymentReviewActions            BookingPaymentReviewAction[]
 
   // Indexes
   @@index([ownerId])
@@ -578,6 +619,7 @@ model BookingPayment {
   barbershop        Barbershop                   @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
   paymentConnection BarbershopPaymentConnection? @relation(fields: [paymentConnectionId], references: [id], onDelete: SetNull)
   webhookEvents     PaymentWebhookEvent[]
+  reviews           BookingPaymentReview[]
 
   @@index([status, expiresAt])
   @@index([barbershopId, createdAt])
@@ -599,6 +641,7 @@ model PaymentWebhookEvent {
   requestId           String?                   @map("request_id") @db.VarChar(120)
   signatureTs         String?                   @map("signature_ts") @db.VarChar(120)
   rawBodySha256       String                    @map("raw_body_sha256") @db.VarChar(64)
+  attemptCount        Int                       @default(1) @map("attempt_count")
   processedAt         DateTime?                 @map("processed_at")
   lastErrorCode       String?                   @map("last_error_code") @db.VarChar(120)
   createdAt           DateTime                  @default(now()) @map("created_at")
@@ -611,6 +654,53 @@ model PaymentWebhookEvent {
   @@unique([provider, dataId, externalReference], map: "payment_webhook_event_provider_data_reference_key")
   @@index([status, createdAt])
   @@map("payment_webhook_events")
+}
+
+model BookingPaymentReview {
+  id               String                  @id @default(cuid())
+  barbershopId     String                  @map("barbershop_id")
+  bookingPaymentId String                  @map("booking_payment_id")
+  reason           PaymentReviewReason
+  status           PaymentReviewStatus     @default(OPEN)
+  resolution       PaymentReviewResolution?
+  openedAt         DateTime                @default(now()) @map("opened_at")
+  startedAt        DateTime?               @map("started_at")
+  resolvedAt       DateTime?               @map("resolved_at")
+  assignedToUserId String?                 @map("assigned_to_user_id")
+  resolvedByUserId String?                 @map("resolved_by_user_id")
+  latestNote       String?                 @map("latest_note") @db.VarChar(1000)
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+
+  barbershop      Barbershop                  @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  bookingPayment  BookingPayment              @relation(fields: [bookingPaymentId], references: [id], onDelete: Restrict)
+  assignedToUser  User?                       @relation("BookingPaymentReviewAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  resolvedByUser  User?                       @relation("BookingPaymentReviewResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  actions         BookingPaymentReviewAction[]
+
+  @@unique([bookingPaymentId, reason])
+  @@index([barbershopId, status, openedAt])
+  @@map("booking_payment_reviews")
+}
+
+model BookingPaymentReviewAction {
+  id           String                  @id @default(cuid())
+  barbershopId String                  @map("barbershop_id")
+  reviewId     String                  @map("review_id")
+  action       PaymentReviewActionType
+  actorUserId  String?                 @map("actor_user_id")
+  actorRole    UserRole?               @map("actor_role")
+  note         String?                 @db.VarChar(1000)
+  resolution   PaymentReviewResolution?
+  createdAt    DateTime                @default(now()) @map("created_at")
+
+  barbershop Barbershop           @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  review     BookingPaymentReview @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  actorUser  User?                @relation("BookingPaymentReviewActionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([reviewId, createdAt])
+  @@index([barbershopId, createdAt])
+  @@map("booking_payment_review_actions")
 }
 
 model AppointmentNotification {

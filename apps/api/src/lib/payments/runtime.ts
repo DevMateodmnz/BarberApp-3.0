@@ -14,6 +14,7 @@ export interface PaymentRuntimeConfig {
   nodeEnv: NodeEnv;
   encryptionKey: Buffer;
   publicWebBaseUrl?: string;
+  webhookPublicUrl?: string;
   mercadoPago: MercadoPagoRuntimeConfig;
 }
 
@@ -41,6 +42,21 @@ function normalizeBaseUrl(raw: string, name: string): string {
   }
 
   return parsed.toString().replace(/\/$/, '');
+}
+
+function normalizeWebhookUrl(raw: string, name: string): string {
+  const normalized = normalizeBaseUrl(raw, name);
+  const parsed = new URL(normalized);
+
+  if (parsed.username || parsed.password) {
+    throw new Error(`${name} must not include credentials`);
+  }
+
+  if (parsed.search || parsed.hash) {
+    throw new Error(`${name} must not include a query string or fragment`);
+  }
+
+  return normalized;
 }
 
 function decodeEncryptionKey(raw: string): Buffer {
@@ -112,10 +128,20 @@ export function readPaymentRuntimeConfig(
     }
   }
 
+  const publicWebBaseUrl = readOptionalTrimmed(env, 'PUBLIC_WEB_BASE_URL');
+  const webhookPublicUrl =
+    readOptionalTrimmed(env, 'PAYMENT_WEBHOOK_PUBLIC_URL')
+    ?? (nodeEnv === 'production' ? undefined : 'http://localhost:3000/api/v1/webhooks/mercado-pago');
+
   return {
     nodeEnv,
     encryptionKey,
-    publicWebBaseUrl: readOptionalTrimmed(env, 'PUBLIC_WEB_BASE_URL'),
+    publicWebBaseUrl: publicWebBaseUrl
+      ? normalizeBaseUrl(publicWebBaseUrl, 'PUBLIC_WEB_BASE_URL')
+      : undefined,
+    webhookPublicUrl: webhookPublicUrl
+      ? normalizeWebhookUrl(webhookPublicUrl, 'PAYMENT_WEBHOOK_PUBLIC_URL')
+      : undefined,
     mercadoPago,
   };
 }

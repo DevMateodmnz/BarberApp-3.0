@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
+const AUTH_TAG_LENGTH = 16;
+const ENVELOPE_VERSION = 'v1';
 
 export function encryptPaymentSecret(plaintext: string, key: Buffer): string {
   const iv = crypto.randomBytes(IV_LENGTH);
@@ -13,7 +15,7 @@ export function encryptPaymentSecret(plaintext: string, key: Buffer): string {
   const tag = cipher.getAuthTag();
 
   return [
-    'v1',
+    ENVELOPE_VERSION,
     iv.toString('base64url'),
     tag.toString('base64url'),
     encrypted.toString('base64url'),
@@ -22,13 +24,22 @@ export function encryptPaymentSecret(plaintext: string, key: Buffer): string {
 
 export function decryptPaymentSecret(ciphertext: string, key: Buffer): string {
   const [version, ivEncoded, tagEncoded, bodyEncoded] = ciphertext.split('.');
-  if (version !== 'v1' || !ivEncoded || !tagEncoded || !bodyEncoded) {
+  if (
+    version !== ENVELOPE_VERSION
+    || !ivEncoded
+    || !tagEncoded
+    || !bodyEncoded
+    || ciphertext.split('.').length !== 4
+  ) {
     throw new Error('Unsupported encrypted payment secret format');
   }
 
   const iv = Buffer.from(ivEncoded, 'base64url');
   const tag = Buffer.from(tagEncoded, 'base64url');
   const body = Buffer.from(bodyEncoded, 'base64url');
+  if (iv.length !== IV_LENGTH || tag.length !== AUTH_TAG_LENGTH || body.length === 0) {
+    throw new Error('Unsupported encrypted payment secret format');
+  }
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(tag);
   const decrypted = Buffer.concat([decipher.update(body), decipher.final()]);

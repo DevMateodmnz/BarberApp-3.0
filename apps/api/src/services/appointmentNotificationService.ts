@@ -76,6 +76,18 @@ export const APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE = {
       reviewReasonCode: true,
       expiresAt: true,
       approvedAt: true,
+      reviews: {
+        where: {
+          status: { in: ['OPEN', 'IN_PROGRESS'] },
+        },
+        select: {
+          id: true,
+          reason: true,
+          status: true,
+        },
+        orderBy: [{ openedAt: 'asc' as const }, { id: 'asc' as const }],
+        take: 1,
+      },
     },
     orderBy: {
       createdAt: 'desc' as const,

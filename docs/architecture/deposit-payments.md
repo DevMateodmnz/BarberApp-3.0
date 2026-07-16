@@ -1,8 +1,8 @@
 # Deposit Payments and Reservation Holds
 
 > Source of truth for BarberApp's tenant-scoped Mercado Pago deposit flow,
-> temporary reservation holds, signed webhook processing, expiration races,
-> and operator review states.
+> temporary reservation holds, direct signed webhook processing, expiration races,
+> and financial review operations.
 
 ## Scope
 
@@ -182,8 +182,11 @@ Statuses:
 - `CANCELLED`
 - `EXPIRED`
 - `REFUNDED`
-- `REVIEW_REQUIRED`
+- `REVIEW_REQUIRED` (legacy compatibility only)
 - `ERROR`
+
+Operational review is no longer represented by overwriting the payment status.
+New review state lives in `booking_payment_reviews` + `booking_payment_review_actions`.
 
 ## Checkout Pro preference lifecycle
 
@@ -206,13 +209,13 @@ Webhook endpoint:
 
 - `POST /api/v1/webhooks/mercado-pago`
 
-Public-web proxy endpoint:
+Validation uses the official Mercado Pago `x-signature` + `x-request-id` contract together with `data.id` from the direct API request URL. BarberApp rejects malformed, duplicate, oversized, or encoded signature inputs before inserting an event into `PaymentWebhookEvent`.
 
-- `POST /api/payment-webhooks/mercado-pago`
+Direct notification URL generation now points Checkout Pro to the API endpoint itself:
 
-Validation uses the official Mercado Pago signature headers and computes the
-expected signature from the raw request body metadata. Only validated events are
-inserted into `PaymentWebhookEvent`.
+- `POST /api/v1/webhooks/mercado-pago`
+- local default: `http://localhost:3000/api/v1/webhooks/mercado-pago`
+- production: configure `PAYMENT_WEBHOOK_PUBLIC_URL` explicitly
 
 The webhook inbox is append-only and idempotent by provider event key.
 
@@ -282,8 +285,8 @@ must not silently confirm the old slot.
 Outcome:
 
 ```text
-BookingPayment.status = REVIEW_REQUIRED
-review_reason_code = PAYMENT_APPROVED_AFTER_HOLD_EXPIRY
+BookingPayment.status = APPROVED
+BookingPaymentReview(OPEN, APPROVED_AFTER_HOLD_EXPIRY) created/reopened
 Appointment stays cancelled/released
 ```
 
@@ -319,3 +322,16 @@ Deferred for a later batch:
 - end-to-end owner reconnect/disconnect smoke on device
 - late-approval operator handling with manual backoffice review steps
 - refund-review operational playbook validation
+
+
+## Sandbox readiness
+
+Run:
+
+```bash
+npm run payments:sandbox-readiness --workspace @barberapp/api
+```
+
+The command validates local configuration shape, URL policy, encryption-key shape,
+direct webhook routing, required migrations, and payment table presence without
+printing secrets or making a provider call by default.

@@ -3,7 +3,15 @@ import { requireAuth } from '../middleware/auth.js';
 import { requireRole } from '../middleware/role.js';
 import { validateBody } from '../middleware/validate.js';
 import { ValidationError, BadRequestError, AppError } from '../lib/errors.js';
-import { PaymentConnectSchema, PaymentListQuerySchema, UpdateDepositPolicySchema } from '../schemas/payment.js';
+import {
+  PaymentConnectSchema,
+  PaymentListQuerySchema,
+  PaymentReviewListQuerySchema,
+  PaymentReviewNoteSchema,
+  PaymentReviewReopenSchema,
+  PaymentReviewResolveSchema,
+  UpdateDepositPolicySchema,
+} from '../schemas/payment.js';
 import { prisma } from '../lib/prisma.js';
 import {
   disconnectPaymentConnection,
@@ -18,6 +26,15 @@ import {
   listBarbershopPayments,
 } from '../services/payments/bookingPaymentService.js';
 import { getDepositPolicy, updateDepositPolicy } from '../services/payments/depositPolicyService.js';
+import {
+  addPaymentReviewNote,
+  getBarbershopPaymentReviewDetail,
+  getBarbershopPaymentReviewSummary,
+  listBarbershopPaymentReviews,
+  reopenPaymentReview,
+  resolvePaymentReview,
+  startPaymentReview,
+} from '../services/payments/paymentReviewService.js';
 
 const router = Router();
 
@@ -27,6 +44,22 @@ function paramBarbershopId(req: Request): string {
     throw new BadRequestError('Barbershop ID is required');
   }
   return id;
+}
+
+function paramReviewId(req: Request): string {
+  const reviewId = req.params.reviewId;
+  if (!reviewId) {
+    throw new BadRequestError('Review ID is required');
+  }
+  return reviewId;
+}
+
+function parsePaymentReviewQuery(req: Request) {
+  const parsed = PaymentReviewListQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    throw new ValidationError('Invalid payment review query parameters', parsed.error.flatten());
+  }
+  return parsed.data;
 }
 
 async function requireOwnedBarbershopOr404(
@@ -70,6 +103,7 @@ router.get('/payments/mercado-pago/oauth/callback', async (req, res, next) => {
           title: result.title,
           message: result.message,
           success: result.ok,
+          redirectTarget: result.redirectTarget,
         })
       );
   } catch (error) {
@@ -216,6 +250,163 @@ router.get(
         data: await getBarbershopPaymentDetail({
           barbershopId: paramBarbershopId(req),
           paymentId,
+        }),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
+  '/barbershops/:barbershopId/payments/reviews/summary',
+  requireAuth,
+  requireRole('OWNER'),
+  requireOwnedBarbershopOr404,
+  async (req, res, next) => {
+    try {
+      res.json({
+        success: true,
+        data: await getBarbershopPaymentReviewSummary({
+          barbershopId: paramBarbershopId(req),
+        }),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
+  '/barbershops/:barbershopId/payments/reviews',
+  requireAuth,
+  requireRole('OWNER'),
+  requireOwnedBarbershopOr404,
+  async (req, res, next) => {
+    try {
+      const query = parsePaymentReviewQuery(req);
+      res.json({
+        success: true,
+        data: await listBarbershopPaymentReviews({
+          barbershopId: paramBarbershopId(req),
+          status: query.status,
+          reason: query.reason,
+          dateFrom: query.dateFrom ? new Date(query.dateFrom) : undefined,
+          dateTo: query.dateTo ? new Date(query.dateTo) : undefined,
+          page: query.page,
+          limit: query.limit,
+          sort: query.sort,
+        }),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
+  '/barbershops/:barbershopId/payments/reviews/:reviewId',
+  requireAuth,
+  requireRole('OWNER'),
+  requireOwnedBarbershopOr404,
+  async (req, res, next) => {
+    try {
+      res.json({
+        success: true,
+        data: await getBarbershopPaymentReviewDetail({
+          barbershopId: paramBarbershopId(req),
+          reviewId: paramReviewId(req),
+        }),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/barbershops/:barbershopId/payments/reviews/:reviewId/start',
+  requireAuth,
+  requireRole('OWNER'),
+  requireOwnedBarbershopOr404,
+  async (req, res, next) => {
+    try {
+      res.json({
+        success: true,
+        data: await startPaymentReview({
+          barbershopId: paramBarbershopId(req),
+          reviewId: paramReviewId(req),
+          actorUserId: req.userId,
+        }),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/barbershops/:barbershopId/payments/reviews/:reviewId/notes',
+  requireAuth,
+  requireRole('OWNER'),
+  requireOwnedBarbershopOr404,
+  validateBody(PaymentReviewNoteSchema),
+  async (req, res, next) => {
+    try {
+      res.json({
+        success: true,
+        data: await addPaymentReviewNote({
+          barbershopId: paramBarbershopId(req),
+          reviewId: paramReviewId(req),
+          actorUserId: req.userId,
+          note: req.body.note,
+        }),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/barbershops/:barbershopId/payments/reviews/:reviewId/resolve',
+  requireAuth,
+  requireRole('OWNER'),
+  requireOwnedBarbershopOr404,
+  validateBody(PaymentReviewResolveSchema),
+  async (req, res, next) => {
+    try {
+      res.json({
+        success: true,
+        data: await resolvePaymentReview({
+          barbershopId: paramBarbershopId(req),
+          reviewId: paramReviewId(req),
+          actorUserId: req.userId,
+          resolution: req.body.resolution,
+          note: req.body.note ?? null,
+        }),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/barbershops/:barbershopId/payments/reviews/:reviewId/reopen',
+  requireAuth,
+  requireRole('OWNER'),
+  requireOwnedBarbershopOr404,
+  validateBody(PaymentReviewReopenSchema),
+  async (req, res, next) => {
+    try {
+      res.json({
+        success: true,
+        data: await reopenPaymentReview({
+          barbershopId: paramBarbershopId(req),
+          reviewId: paramReviewId(req),
+          actorUserId: req.userId,
+          note: req.body.note ?? null,
         }),
       });
     } catch (error) {

@@ -373,6 +373,134 @@ export interface PaymentOperationsSummary {
   approvedCancelled: number;
 }
 
+export type PaymentReviewStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
+
+export type PaymentReviewReason =
+  | 'APPROVED_AFTER_HOLD_EXPIRY'
+  | 'APPROVED_PAYMENT_ON_CANCELLED_APPOINTMENT'
+  | 'AMOUNT_MISMATCH'
+  | 'CURRENCY_MISMATCH'
+  | 'SELLER_MISMATCH'
+  | 'EXTERNAL_REFERENCE_MISMATCH'
+  | 'PREFERENCE_MISMATCH'
+  | 'DUPLICATE_PROVIDER_PAYMENT'
+  | 'PROVIDER_RECONCILIATION_ERROR'
+  | 'OTHER';
+
+export type PaymentReviewResolution =
+  | 'REFUNDED_EXTERNALLY'
+  | 'NO_REFUND_REQUIRED'
+  | 'CUSTOMER_CREDIT_GRANTED'
+  | 'PAYMENT_ACCEPTED_MANUALLY'
+  | 'DUPLICATE_RESOLVED'
+  | 'OTHER';
+
+export interface PaymentReviewSummary {
+  open: number;
+  inProgress: number;
+  resolvedRecently: number;
+  lateApproval: number;
+  cancelledPaidAppointment: number;
+  providerMismatch: number;
+}
+
+export interface PaymentReviewListItem {
+  id: string;
+  paymentId: string;
+  appointmentId: string;
+  status: PaymentReviewStatus;
+  reason: PaymentReviewReason;
+  amountCents: number;
+  currency: string;
+  customerDisplayName: string;
+  serviceName: string;
+  appointmentStartAt: string;
+  openedAt: string;
+  assignedToDisplayName: string | null;
+  latestSafeNotePreview: string | null;
+}
+
+export interface PaymentReviewPage {
+  items: PaymentReviewListItem[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface PaymentReviewTimelineItem {
+  type: string;
+  occurredAt: string;
+  label: string;
+  detail: string | null;
+}
+
+export interface PaymentProviderEventSummary {
+  id: string;
+  topic: string | null;
+  action: string | null;
+  status: 'received' | 'processing' | 'processed' | 'failed' | 'ignored';
+  lastSafeErrorCode: string | null;
+  attemptCount: number;
+  receivedAt: string;
+  processedAt: string | null;
+}
+
+export interface PaymentReviewActionItem {
+  id: string;
+  action: 'OPENED' | 'MARKED_IN_PROGRESS' | 'NOTE_ADDED' | 'RESOLVED' | 'REOPENED';
+  actorDisplayName: string | null;
+  actorRole: UserRole | null;
+  note: string | null;
+  resolution: PaymentReviewResolution | null;
+  createdAt: string;
+}
+
+export interface PaymentReviewDetail {
+  id: string;
+  payment: {
+    id: string;
+    amountCents: number;
+    currency: string;
+    status: BookingPaymentStatus;
+    providerStatus: string | null;
+    providerStatusDetail: string | null;
+    approvedAt: string | null;
+    rejectedAt: string | null;
+    cancelledAt: string | null;
+    expiredAt: string | null;
+    reviewRequiredAt: string | null;
+  };
+  appointment: {
+    id: string;
+    publicReference: string | null;
+    customerDisplayName: string;
+    serviceName: string;
+    startAt: string;
+    endAt: string;
+    status: AppointmentStatus;
+  };
+  review: {
+    status: PaymentReviewStatus;
+    reason: PaymentReviewReason;
+    resolution: PaymentReviewResolution | null;
+    openedAt: string;
+    startedAt: string | null;
+    resolvedAt: string | null;
+    assignedToDisplayName: string | null;
+    latestNote: string | null;
+  };
+  timeline: PaymentReviewTimelineItem[];
+  actions: PaymentReviewActionItem[];
+  providerEvents: PaymentProviderEventSummary[];
+  allowedActions: {
+    canStart: boolean;
+    canAddNote: boolean;
+    canResolve: boolean;
+    canReopen: boolean;
+  };
+}
+
 export type AppointmentNotificationType =
   | 'BOOKING_CONFIRMATION'
   | 'REMINDER_24H'

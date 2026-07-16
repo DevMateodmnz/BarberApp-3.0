@@ -29,6 +29,7 @@ interface Fixtures {
 }
 
 const fixtures = {} as Fixtures;
+let latestPreferenceBody: Record<string, unknown> | null = null;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -71,6 +72,8 @@ function buildWebhookSignature(input: {
 
 async function clearPaymentDomainTables() {
   await prisma.paymentWebhookEvent.deleteMany();
+  await prisma.bookingPaymentReviewAction.deleteMany();
+  await prisma.bookingPaymentReview.deleteMany();
   await prisma.bookingPayment.deleteMany();
   await prisma.paymentOAuthState.deleteMany();
   await prisma.barbershopPaymentConnection.deleteMany();
@@ -224,11 +227,13 @@ describe('Mercado Pago deposit reservation flow', () => {
   beforeEach(async () => {
     await clearPaymentDomainTables();
     await configureConnectedDeposits();
+    latestPreferenceBody = null;
     setMercadoPagoTransportForTests({
       async fetch(input, init) {
         const url = String(input);
 
         if (url.endsWith('/checkout/preferences')) {
+          latestPreferenceBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
           return new Response(
             JSON.stringify({
               id: 'pref_test_123',
@@ -296,6 +301,9 @@ describe('Mercado Pago deposit reservation flow', () => {
     expect(payment.status).toBe('PENDING');
     expect(payment.amountCents).toBe(1500);
     expect(payment.currency).toBe('ARS');
+    expect(String(latestPreferenceBody?.notification_url ?? '')).toContain('/api/v1/webhooks/mercado-pago');
+    expect(String(latestPreferenceBody?.notification_url ?? '')).not.toContain('/api/payment-webhooks/mercado-pago');
+    expect((latestPreferenceBody?.metadata as Record<string, unknown>)?.booking_payment_id).toBe(payment.id);
 
     const notifications = await prisma.appointmentNotification.findMany({
       where: { appointmentId: appointment.id },
@@ -368,6 +376,7 @@ describe('Mercado Pago deposit reservation flow', () => {
       externalReference: payment.externalReference,
       collectorId: 'seller-123',
       dateApproved: new Date().toISOString(),
+      bookingPaymentId: payment.id,
     };
 
     const webhookResponse = await request(app)
@@ -467,6 +476,7 @@ describe('Mercado Pago deposit reservation flow', () => {
         externalReference: payment.externalReference,
         collectorId: 'seller-123',
         dateApproved: now.toISOString(),
+        bookingPaymentId: payment.id,
       },
       sellerId: 'seller-123',
       now,
@@ -478,11 +488,17 @@ describe('Mercado Pago deposit reservation flow', () => {
     const persistedPayment = await prisma.bookingPayment.findUniqueOrThrow({
       where: { id: payment.id },
     });
+    const reviews = await prisma.bookingPaymentReview.findMany({
+      where: { bookingPaymentId: payment.id },
+    });
 
     expect(persistedAppointment.status).toBe('CANCELLED');
     expect(persistedAppointment.paymentHoldExpiresAt).toBeNull();
-    expect(persistedPayment.status).toBe('REVIEW_REQUIRED');
-    expect(persistedPayment.reviewReasonCode).toBe('PAYMENT_APPROVED_AFTER_HOLD_EXPIRY');
+    expect(persistedPayment.status).toBe('APPROVED');
+    expect(persistedPayment.reviewReasonCode).toBe('APPROVED_AFTER_HOLD_EXPIRY');
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]?.reason).toBe('APPROVED_AFTER_HOLD_EXPIRY');
+    expect(reviews[0]?.status).toBe('OPEN');
   });
 
   it('public cancellation of an approved deposit keeps the payment for review instead of refunding automatically', async () => {
@@ -500,6 +516,7 @@ describe('Mercado Pago deposit reservation flow', () => {
         externalReference: payment.externalReference,
         collectorId: 'seller-123',
         dateApproved: now.toISOString(),
+        bookingPaymentId: payment.id,
       },
       sellerId: 'seller-123',
       now,
@@ -521,7 +538,12 @@ describe('Mercado Pago deposit reservation flow', () => {
     const persistedPayment = await prisma.bookingPayment.findUniqueOrThrow({
       where: { id: payment.id },
     });
-    expect(persistedPayment.status).toBe('REVIEW_REQUIRED');
+    const reviews = await prisma.bookingPaymentReview.findMany({
+      where: { bookingPaymentId: payment.id },
+    });
+    expect(persistedPayment.status).toBe('APPROVED');
     expect(persistedPayment.reviewReasonCode).toBe('APPROVED_PAYMENT_ON_CANCELLED_APPOINTMENT');
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]?.reason).toBe('APPROVED_PAYMENT_ON_CANCELLED_APPOINTMENT');
   });
 });

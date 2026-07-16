@@ -31,9 +31,10 @@
 
 ## Operational review checks
 
-- [ ] OWNER sees review-required payments
+- [ ] OWNER sees review-required payments and can open the review detail
 - [ ] Approved-on-cancelled appointment shows refund-review state
 - [ ] Late approval after expiry stays cancelled and appears in review queue
+- [ ] OWNER can start, note, resolve, and reopen review cases
 - [ ] BARBER sees safe payment indicators but no credentials/settings
 
 ## Explicitly deferred from this milestone

@@ -52,7 +52,6 @@ The public web renders friendly states instead of raw enums:
 - Turno confirmado
 - Pago rechazado
 - Reserva vencida
-- Se requiere revisión
 
 ## Confirmation page behavior
 
@@ -74,3 +73,16 @@ The authoritative API may refresh or replace the browser snapshot.
 - public cancellation still works with the same public reference
 - unpaid holds are released without refund work
 - approved deposits surface refund review copy instead of promising an automatic refund
+
+
+## Review-required customer copy
+
+When a payment needs staff review, public-web shows only:
+
+```text
+Pago en revisión
+La barbería debe revisar el pago antes de confirmar el turno.
+```
+
+Internal causes such as seller mismatch, amount mismatch, duplicate payment,
+or staff notes never reach the customer surface.

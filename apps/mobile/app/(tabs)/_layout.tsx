@@ -214,6 +214,14 @@ export default function TabLayout() {
             tabBarAccessibilityLabel: t('notificationsOperations.accessibility.openDetail'),
           }}
         />
+        <Tabs.Screen
+          name="payment-review-detail"
+          options={{
+            title: t('paymentsSettings.reviews.detailTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t('paymentsSettings.reviews.detailTitle'),
+          }}
+        />
         {MOBILE_SECONDARY_ROUTES.map((route) => ({ route, title: t(route.titleKey), a11y: t(route.accessibilityLabelKey) })).map(({ route, title, a11y }) => (
           <Tabs.Screen
             key={route.tabRouteName}

@@ -11,6 +11,7 @@ import {
 
 const runtime = readPaymentRuntimeConfig(process.env);
 const OAUTH_STATE_TTL_MS = 10 * 60_000;
+const SAFE_REDIRECT_TARGET_PATTERN = /^\/(?!\/)(?!.*(?:\.\.|javascript:)).*$/i;
 
 export interface PaymentConnectionDto {
   provider: 'MERCADO_PAGO';
@@ -73,11 +74,25 @@ function buildPkceChallenge(verifier: string): string {
   return crypto.createHash('sha256').update(verifier).digest('base64url');
 }
 
+function normalizeRedirectTarget(value?: string | null): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed) {
+    return null;
+  }
+
+  if (!SAFE_REDIRECT_TARGET_PATTERN.test(trimmed)) {
+    throw new AppError(400, 'PAYMENT_OAUTH_INVALID_REDIRECT', 'Redirect target is not allowed');
+  }
+
+  return trimmed;
+}
+
 export async function startMercadoPagoConnect(input: {
   barbershopId: string;
   userId: string;
   redirectTarget?: string | null;
 }) {
+  const redirectTarget = normalizeRedirectTarget(input.redirectTarget);
   const state = randomOpaqueToken(24);
   const stateHash = sha256Hex(state);
   const verifier = randomOpaqueToken(48);
@@ -118,7 +133,7 @@ export async function startMercadoPagoConnect(input: {
         provider: 'MERCADO_PAGO',
         stateHash,
         pkceVerifierCiphertext: encryptPaymentSecret(verifier, runtime.encryptionKey),
-        redirectTarget: input.redirectTarget?.trim() || null,
+        redirectTarget,
         expiresAt,
       },
     });
@@ -144,6 +159,7 @@ export async function handleMercadoPagoOAuthCallback(input: {
       ok: false as const,
       title: 'No se pudo conectar Mercado Pago',
       message: 'Mercado Pago devolvió un error durante la autorización. Volvé a BarberApp e intentá nuevamente.',
+      redirectTarget: null,
     };
   }
 
@@ -182,7 +198,7 @@ export async function handleMercadoPagoOAuthCallback(input: {
     codeVerifier: verifier,
   });
 
-  if (!tokenResult.accessToken || !tokenResult.refreshToken) {
+  if (!tokenResult.accessToken || !tokenResult.refreshToken || !tokenResult.sellerId) {
     throw new AppError(502, 'PAYMENT_PROVIDER_INVALID_RESPONSE', 'Mercado Pago did not return OAuth credentials');
   }
 
@@ -191,10 +207,17 @@ export async function handleMercadoPagoOAuthCallback(input: {
     : null;
 
   await prisma.$transaction(async (tx) => {
-    await tx.paymentOAuthState.update({
-      where: { id: oauthState.id },
+    const consumed = await tx.paymentOAuthState.updateMany({
+      where: {
+        id: oauthState.id,
+        consumedAt: null,
+        expiresAt: { gt: now },
+      },
       data: { consumedAt: now },
     });
+    if (consumed.count === 0) {
+      throw new AppError(400, 'PAYMENT_OAUTH_STATE_INVALID', 'The Mercado Pago authorization request expired or was already used');
+    }
 
     await tx.barbershopPaymentConnection.upsert({
       where: {
@@ -238,6 +261,7 @@ export async function handleMercadoPagoOAuthCallback(input: {
     ok: true as const,
     title: 'Mercado Pago conectado',
     message: `La cuenta de ${oauthState.barbershop.name} quedó conectada. Volvé a BarberApp y actualizá el estado.`,
+    redirectTarget: oauthState.redirectTarget,
   };
 }
 
@@ -352,10 +376,15 @@ export function renderPaymentOAuthCompletionPage(input: {
   title: string;
   message: string;
   success: boolean;
+  redirectTarget?: string | null;
 }) {
   const title = escapeHtml(input.title);
   const message = escapeHtml(input.message);
   const accent = input.success ? '#166534' : '#991b1b';
+  const redirectTarget = normalizeRedirectTarget(input.redirectTarget);
+  const actionLink = redirectTarget
+    ? `<p style="margin-top:20px"><a href="${escapeHtml(redirectTarget)}" style="color:${accent}; font-weight:700; text-decoration:none;">Volver a BarberApp</a></p>`
+    : '';
 
   return `<!doctype html>
 <html lang="es">
@@ -369,6 +398,7 @@ export function renderPaymentOAuthCompletionPage(input: {
       <p style="margin-top:0; color:${accent}; font-weight:700;">${input.success ? 'Conexión completada' : 'Conexión pendiente'}</p>
       <h1 style="margin-top:0; font-size: 1.6rem;">${title}</h1>
       <p style="line-height:1.6; color:#d1d5db;">${message}</p>
+      ${actionLink}
       <p style="line-height:1.6; color:#9ca3af; margin-bottom:0;">Podés cerrar esta pestaña y volver a BarberApp.</p>
     </main>
   </body>

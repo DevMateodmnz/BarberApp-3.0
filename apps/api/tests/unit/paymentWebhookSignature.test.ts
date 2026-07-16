@@ -53,4 +53,42 @@ describe('validateMercadoPagoWebhookSignature', () => {
       })
     ).toThrow(/missing mercado pago webhook signature data/i);
   });
+
+  it('rejects duplicate signature keys', () => {
+    expect(() =>
+      validateMercadoPagoWebhookSignature({
+        rawBody: Buffer.from('{}'),
+        xSignature: `ts=1721170000,ts=1721170001,v1=${'a'.repeat(64)}`,
+        xRequestId: 'req-123',
+        dataId: '123',
+      })
+    ).toThrow(/invalid mercado pago webhook signature/i);
+  });
+
+  it('rejects encoded data ids', () => {
+    expect(() =>
+      validateMercadoPagoWebhookSignature({
+        rawBody: Buffer.from('{}'),
+        xSignature: buildSignature({
+          dataId: '123',
+          requestId: 'req-123',
+          ts: '1721170000',
+        }),
+        xRequestId: 'req-123',
+        dataId: '123',
+        rawDataId: '12%33',
+      })
+    ).toThrow(/invalid mercado pago webhook signature/i);
+  });
+
+  it('rejects oversized signature headers', () => {
+    expect(() =>
+      validateMercadoPagoWebhookSignature({
+        rawBody: Buffer.from('{}'),
+        xSignature: `ts=1721170000,v1=${'a'.repeat(600)}`,
+        xRequestId: 'req-123',
+        dataId: '123',
+      })
+    ).toThrow(/invalid mercado pago webhook signature/i);
+  });
 });

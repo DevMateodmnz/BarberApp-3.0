@@ -55,8 +55,8 @@ function resolveHeadline(confirmation: PublicBookingConfirmation) {
 
   if (paymentStatus === 'REVIEW_REQUIRED') {
     return {
-      eyebrow: 'Se requiere revisión',
-      statusLabel: 'Revisión de pago necesaria',
+      eyebrow: 'Pago en revisión',
+      statusLabel: 'Pago en revisión',
       accent: 'var(--warning, #d97706)',
     };
   }
@@ -293,6 +293,12 @@ export function PublicBookingConfirmationView({
       {confirmation.publicTerms ? (
         <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>
           {confirmation.publicTerms}
+        </p>
+      ) : null}
+
+      {(confirmation.paymentStatus ?? status?.paymentStatus) === 'REVIEW_REQUIRED' ? (
+        <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>
+          La barbería debe revisar el pago antes de confirmar el turno.
         </p>
       ) : null}
 

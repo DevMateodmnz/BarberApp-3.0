@@ -218,6 +218,8 @@ Deposits are commercially useful only when the slot being held is actually valid
    schedule model instead of assuming all barbers follow only the
    shop-wide hours.
 6. **Deposit policy and Mercado Pago reservation holds** — implemented.
+7. **Payment hardening and financial review operations** — implemented.
+8. **Promotions and loyalty** — next recommended milestone now that the money-exception loop is closed.
    Payment now creates a bounded pending reservation only after the
    slot passes canonical employee-availability checks, and confirmation
    comes only from authoritative provider state.

@@ -28,6 +28,7 @@ export interface MercadoPagoPaymentDetails {
   externalReference: string | null;
   collectorId: string | null;
   dateApproved: string | null;
+  bookingPaymentId: string | null;
 }
 
 export interface MercadoPagoTransport {
@@ -254,5 +255,12 @@ export async function getMercadoPagoPaymentById(input: {
         : null,
     dateApproved:
       typeof payload.date_approved === 'string' ? payload.date_approved : null,
+    bookingPaymentId:
+      payload.metadata
+      && typeof payload.metadata === 'object'
+      && payload.metadata !== null
+      && typeof (payload.metadata as Record<string, unknown>).booking_payment_id === 'string'
+        ? (payload.metadata as Record<string, unknown>).booking_payment_id as string
+        : null,
   };
 }

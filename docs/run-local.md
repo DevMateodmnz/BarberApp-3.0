@@ -80,6 +80,7 @@ MERCADO_PAGO_CLIENT_SECRET=your-sandbox-client-secret
 MERCADO_PAGO_REDIRECT_URI=http://localhost:3000/api/v1/payments/mercado-pago/oauth/callback
 MERCADO_PAGO_WEBHOOK_SECRET=your-sandbox-webhook-secret
 PUBLIC_WEB_BASE_URL=http://localhost:3001
+PAYMENT_WEBHOOK_PUBLIC_URL=http://localhost:3000/api/v1/webhooks/mercado-pago
 ```
 
 Notes:
@@ -110,3 +111,22 @@ npm run payments:expire-holds --workspace @barberapp/api
 ```
 
 Stop both workers before finishing the batch.
+
+
+## Payment sandbox readiness
+
+Validate local payment configuration without printing secrets or calling Mercado Pago by default:
+
+```bash
+npm run payments:sandbox-readiness --workspace @barberapp/api
+```
+
+Checks include:
+
+- OAuth redirect URI shape
+- direct webhook public URL shape
+- public-web base URL shape
+- encryption key shape
+- required payment/review migrations applied
+- payment tables present
+- public-web webhook proxy removed
