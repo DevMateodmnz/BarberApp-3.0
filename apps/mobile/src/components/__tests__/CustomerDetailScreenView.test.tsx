@@ -25,6 +25,15 @@ function makeDetail(overrides: Partial<CustomerDetail> = {}): CustomerDetail {
     upcomingCount: 1,
     lastServiceName: 'Classic Cut',
     lastEmployeeName: 'Carlos',
+    loyalty: {
+      programEnabled: true,
+      visitsRequired: 5,
+      currentStampCount: 3,
+      lifetimeEligibleVisits: 8,
+      availableRewardCount: 1,
+      lastEarnedAt: '2026-07-10T10:00:00.000Z',
+      rewards: [],
+    },
     recentAppointments: [
       {
         id: 'appt-past-1',

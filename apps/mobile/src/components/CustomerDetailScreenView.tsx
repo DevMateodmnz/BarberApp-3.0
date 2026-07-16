@@ -158,6 +158,52 @@ export function CustomerDetailScreenView({
         />
       </View>
 
+      <AppCard testID="customer-detail-loyalty-card">
+        <Text style={styles.sectionTitle}>{t('customers.loyalty.title')}</Text>
+        {detail.loyalty.programEnabled && detail.loyalty.visitsRequired ? (
+          <>
+            <Text style={styles.meta}>
+              {t('customers.loyalty.progress', {
+                current: detail.loyalty.currentStampCount,
+                target: detail.loyalty.visitsRequired,
+              })}
+            </Text>
+            <Text style={styles.meta}>
+              {t('customers.loyalty.rewards', {
+                count: detail.loyalty.availableRewardCount,
+              })}
+            </Text>
+            <Text style={styles.meta}>
+              {t('customers.loyalty.visits', {
+                count: detail.loyalty.lifetimeEligibleVisits,
+              })}
+            </Text>
+            {detail.loyalty.lastEarnedAt ? (
+              <Text style={styles.meta}>
+                {t('customers.loyalty.lastEarned', {
+                  value: formatDate(detail.loyalty.lastEarnedAt),
+                })}
+              </Text>
+            ) : null}
+            <View style={styles.listStack}>
+              {detail.loyalty.rewards.length === 0 ? (
+                <Text style={styles.meta}>{t('customers.loyalty.emptyRewards')}</Text>
+              ) : detail.loyalty.rewards.slice(0, 3).map((reward) => (
+                <View key={reward.id} style={styles.appointmentRow}>
+                  <View style={styles.appointmentCopy}>
+                    <Text style={styles.appointmentTitle}>{reward.promotionName}</Text>
+                    <Text style={styles.meta}>{t('customers.loyalty.rewardCode', { code: reward.code })}</Text>
+                  </View>
+                  <Text style={styles.status}>{t(`promotions.loyalty.status.${reward.status}`)}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : (
+          <Text style={styles.meta}>{t('customers.loyalty.disabled')}</Text>
+        )}
+      </AppCard>
+
       <AppCard testID="customer-detail-edit-form">
         <AppTextInput
           testID="customer-detail-name-input"

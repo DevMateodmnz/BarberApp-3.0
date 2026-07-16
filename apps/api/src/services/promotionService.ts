@@ -1,6 +1,7 @@
 import { Prisma, type PromotionDiscountType, type PromotionRedemptionReleaseReason, type PromotionRedemptionStatus, type PromotionServiceScope } from '@prisma/client';
 import { AppError, BadRequestError, NotFoundError } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
+import { consumeLoyaltyRewardForAppointment, expireAvailableRewardsForCustomer } from './loyaltyService.js';
 
 export const PUBLIC_PROMOTION_UNAVAILABLE_CODE = 'PROMOTION_NOT_AVAILABLE';
 export const PROMOTION_USAGE_LIMIT_REACHED_CODE = 'PROMOTION_USAGE_LIMIT_REACHED';
@@ -116,6 +117,7 @@ async function getPromotionRowForEvaluation(db: PromotionDb, input: {
           serviceId: true,
         },
       },
+      loyaltyReward: true,
     },
   });
 }
@@ -145,6 +147,14 @@ export async function evaluatePromotion(db: PromotionDb, input: {
   if (!promotion) return fail('NOT_FOUND');
   if (promotion.deletedAt) return fail('DELETED');
   if (!promotion.isActive) return fail('INACTIVE');
+  if (promotion.loyaltyReward?.status === 'AVAILABLE' && promotion.loyaltyReward.expiresAt && promotion.loyaltyReward.expiresAt.getTime() <= input.now.getTime()) {
+    await expireAvailableRewardsForCustomer(db, {
+      barbershopId: input.barbershopId,
+      customerId: promotion.loyaltyReward.customerId,
+      now: input.now,
+    });
+    return fail('EXPIRED');
+  }
   if (promotion.startsAt.getTime() > input.now.getTime()) return fail('UPCOMING');
   if (promotion.endsAt.getTime() <= input.now.getTime()) return fail('EXPIRED');
   if (input.bookingChannel === 'PUBLIC' && !promotion.appliesToPublicBookings) return fail('WRONG_CHANNEL');
@@ -157,6 +167,17 @@ export async function evaluatePromotion(db: PromotionDb, input: {
   }
   if (promotion.maxActiveRedemptions !== null && promotion.activeRedemptionCount >= promotion.maxActiveRedemptions) {
     return fail('TOTAL_LIMIT', PROMOTION_USAGE_LIMIT_REACHED_CODE);
+  }
+  if (promotion.loyaltyReward) {
+    if (!input.customerId) {
+      return fail('CUSTOMER_IDENTITY_REQUIRED', PROMOTION_CUSTOMER_IDENTITY_REQUIRED_CODE);
+    }
+    if (promotion.loyaltyReward.customerId !== input.customerId) {
+      return fail('NOT_FOUND');
+    }
+    if (promotion.loyaltyReward.status !== 'AVAILABLE') {
+      return fail('EXPIRED');
+    }
   }
   if (promotion.maxRedemptionsPerCustomer !== null) {
     if (!input.customerId) {
@@ -301,7 +322,7 @@ export async function createPromotionRedemption(db: PromotionDb, input: {
     maxRedemptionsPerCustomer: input.promotionEvaluation.promotion.maxRedemptionsPerCustomer,
   });
 
-  return db.promotionRedemption.create({
+  const redemption = await db.promotionRedemption.create({
     data: {
       barbershopId: input.barbershopId,
       promotionId: input.promotionEvaluation.promotion.id,
@@ -319,7 +340,14 @@ export async function createPromotionRedemption(db: PromotionDb, input: {
       consumedAt: input.status === 'CONSUMED' ? input.now : null,
     },
   });
+
+  if (input.status === 'CONSUMED') {
+    await consumeLoyaltyRewardForAppointment(db, { appointmentId: input.appointmentId, now: input.now });
+  }
+
+  return redemption;
 }
+
 
 export async function consumeReservedPromotionRedemptionForAppointment(db: PromotionDb, input: {
   appointmentId: string;
@@ -337,7 +365,11 @@ export async function consumeReservedPromotionRedemptionForAppointment(db: Promo
       releaseReason: null,
     },
   });
-  return result.count === 1;
+  if (result.count === 1) {
+    await consumeLoyaltyRewardForAppointment(db, { appointmentId: input.appointmentId, now: input.now });
+    return true;
+  }
+  return false;
 }
 
 export async function releaseReservedPromotionRedemptionForAppointment(db: PromotionDb, input: {

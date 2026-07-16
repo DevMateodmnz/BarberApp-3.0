@@ -21,7 +21,6 @@ Implemented in this milestone:
 Explicitly deferred:
 
 - promotion stacking
-- loyalty points / rewards balances
 - automatic restoration of consumed usage on cancellation
 - customer-facing promotion discovery
 - bulk import/export tools
@@ -248,3 +247,8 @@ This milestone intentionally lays the groundwork for future loyalty features:
 - safe public failure surfaces
 
 Loyalty is explicitly deferred until this coupon foundation is pushed and physically QA'd.
+
+
+## Loyalty reward integration
+
+Loyalty now reuses this engine by cloning a configured promotion template into an opaque, customer-bound reward promotion at issuance time. Reward validation still flows through `evaluatePromotion(...)`, and authoritative consumption still flows through `promotion_redemptions`, so there is no second discount engine.

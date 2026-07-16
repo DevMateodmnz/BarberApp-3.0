@@ -49,6 +49,11 @@ import {
   PromotionUpdateSchema,
 } from '../schemas/promotion.js';
 import {
+  LoyaltyAdminAdjustmentSchema,
+  LoyaltyLedgerListQuerySchema,
+  LoyaltyProgramUpdateSchema,
+} from '../schemas/loyalty.js';
+import {
   NotificationOperationsQuerySchema,
   NotificationRetryBodySchema,
 } from '../schemas/notification.js';
@@ -71,6 +76,7 @@ import {
 import * as customerService from '../services/customerService.js';
 import * as scheduleBoardService from '../services/scheduleBoardService.js';
 import * as promotionService from '../services/promotionService.js';
+import * as loyaltyService from '../services/loyaltyService.js';
 import { BadRequestError } from '../lib/errors.js';
 import { ValidationError } from '../lib/errors.js';
 import { normalizeEmail } from '../lib/email.js';
@@ -94,6 +100,19 @@ function paramPromotionId(req: Request): string {
   const id = req.params.promotionId;
   if (!id) throw new BadRequestError('Promotion ID is required');
   return id;
+}
+
+function parseLoyaltyLedgerListQuery(req: Request) {
+  const parsed = LoyaltyLedgerListQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid loyalty ledger query parameters',
+      parsed.error.flatten(),
+    );
+  }
+
+  return parsed.data;
 }
 
 function parsePromotionRedemptionListQuery(req: Request) {
@@ -548,6 +567,101 @@ router.post(
         now: new Date(),
       });
       res.json({ success: true, data: evaluation });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/loyalty-program',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const program = await loyaltyService.getLoyaltyProgram(paramBarbershopId(req));
+      res.json({ success: true, data: program });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.put(
+  '/:barbershopId/loyalty-program',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(LoyaltyProgramUpdateSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const program = await loyaltyService.upsertLoyaltyProgram(
+        paramBarbershopId(req),
+        req.userId,
+        req.body,
+      );
+      res.json({ success: true, data: program });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/customers/:customerId/loyalty',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const summary = await loyaltyService.getCustomerLoyaltySummary({
+        barbershopId: paramBarbershopId(req),
+        customerId: req.params.customerId ?? '',
+      });
+      if (!summary) {
+        throw new BadRequestError('Customer not found');
+      }
+      res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/loyalty-ledger',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const query = parseLoyaltyLedgerListQuery(req);
+      const page = await loyaltyService.listLoyaltyLedger({
+        barbershopId: paramBarbershopId(req),
+        customerId: query.customerId,
+        page: query.page,
+        limit: query.limit,
+      });
+      res.json({ success: true, data: page });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:barbershopId/customers/:customerId/loyalty-adjustments',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(LoyaltyAdminAdjustmentSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const summary = await loyaltyService.createLoyaltyAdminAdjustment({
+        barbershopId: paramBarbershopId(req),
+        customerId: req.params.customerId ?? '',
+        userId: req.userId,
+        actorRole: req.userRole,
+        stampDelta: req.body.stampDelta,
+        reason: req.body.reason,
+      });
+      res.json({ success: true, data: summary });
     } catch (error) {
       next(error);
     }

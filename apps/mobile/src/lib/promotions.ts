@@ -2,6 +2,9 @@ import { localizeUnknownError } from '@/i18n/errors.js';
 import { api, ApiError, type ApiResponse, type GetToken } from './api.js';
 import type {
   CreatePromotionInput,
+  LoyaltyCustomerSummary,
+  LoyaltyLedgerPage,
+  LoyaltyProgramSettings,
   PromotionDetail,
   PromotionListItem,
   PromotionRedemptionPage,
@@ -158,4 +161,68 @@ export async function quoteStaffPromotion(
   );
 
   return ensureSuccess(response, localizeUnknownError('Failed to quote promotion'));
+}
+
+export async function fetchLoyaltyProgram(
+  getToken: GetToken,
+  barbershopId: string,
+): Promise<LoyaltyProgramSettings> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<LoyaltyProgramSettings>>(
+    `/barbershops/${barbershopId}/loyalty-program`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, localizeUnknownError('Failed to fetch loyalty program'));
+}
+
+export async function updateLoyaltyProgram(
+  getToken: GetToken,
+  barbershopId: string,
+  payload: {
+    isEnabled: boolean;
+    visitsRequired: number;
+    rewardPromotionId?: string | null;
+    rewardValidityDays?: number | null;
+  },
+): Promise<LoyaltyProgramSettings> {
+  const token = await getToken();
+  const response = await api.put<ApiResponse<LoyaltyProgramSettings>>(
+    `/barbershops/${barbershopId}/loyalty-program`,
+    payload,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, localizeUnknownError('Failed to update loyalty program'));
+}
+
+export async function fetchCustomerLoyaltySummary(
+  getToken: GetToken,
+  barbershopId: string,
+  customerId: string,
+): Promise<LoyaltyCustomerSummary> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<LoyaltyCustomerSummary>>(
+    `/barbershops/${barbershopId}/customers/${customerId}/loyalty`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, localizeUnknownError('Failed to fetch customer loyalty summary'));
+}
+
+export async function fetchLoyaltyLedger(
+  getToken: GetToken,
+  barbershopId: string,
+  input: { customerId?: string; page?: number; limit?: number } = {},
+): Promise<LoyaltyLedgerPage> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<LoyaltyLedgerPage>>(
+    `/barbershops/${barbershopId}/loyalty-ledger`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: input,
+    },
+  );
+
+  return ensureSuccess(response, localizeUnknownError('Failed to fetch loyalty ledger'));
 }

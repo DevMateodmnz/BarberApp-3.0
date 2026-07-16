@@ -7,6 +7,7 @@ import { normalizeEmail } from '../lib/email.js';
 import { NotFoundError } from '../lib/errors.js';
 import { tryNormalizeClientPhoneE164 } from '../lib/phoneNormalization.js';
 import { prisma } from '../lib/prisma.js';
+import { getCustomerLoyaltySummary } from './loyaltyService.js';
 
 export type CustomerDb = Prisma.TransactionClient | typeof prisma;
 
@@ -101,6 +102,24 @@ export interface CustomerDetailResult {
   upcomingCount: number;
   lastServiceName: string | null;
   lastEmployeeName: string | null;
+  loyalty: {
+    programEnabled: boolean;
+    visitsRequired: number | null;
+    currentStampCount: number;
+    lifetimeEligibleVisits: number;
+    availableRewardCount: number;
+    lastEarnedAt: string | null;
+    rewards: Array<{
+      id: string;
+      code: string;
+      status: string;
+      issuedAt: string;
+      expiresAt: string | null;
+      redeemedAt: string | null;
+      revokedAt: string | null;
+      promotionName: string;
+    }>;
+  };
   recentAppointments: Array<{
     id: string;
     startAt: string;
@@ -704,10 +723,15 @@ export async function getCustomerDetail(
     return null;
   }
 
-  const [counts, lastVisit, recentAppointments, upcomingAppointments] =
+  const [counts, lastVisit, loyalty, recentAppointments, upcomingAppointments] =
     await Promise.all([
       readCustomerCounts(input.barbershopId, input.customerId, now),
       readLastVisitedService(input.barbershopId, input.customerId, now),
+      getCustomerLoyaltySummary({
+        barbershopId: input.barbershopId,
+        customerId: input.customerId,
+        now,
+      }),
       prisma.appointment.findMany({
         where: {
           customerId: input.customerId,
@@ -767,6 +791,15 @@ export async function getCustomerDetail(
     upcomingCount: counts.upcomingCount,
     lastServiceName: lastVisit.lastServiceName,
     lastEmployeeName: lastVisit.lastEmployeeName,
+    loyalty: {
+      programEnabled: loyalty?.programEnabled ?? false,
+      visitsRequired: loyalty?.visitsRequired ?? null,
+      currentStampCount: loyalty?.currentStampCount ?? 0,
+      lifetimeEligibleVisits: loyalty?.lifetimeEligibleVisits ?? 0,
+      availableRewardCount: loyalty?.availableRewardCount ?? 0,
+      lastEarnedAt: loyalty?.lastEarnedAt ?? null,
+      rewards: loyalty?.rewards ?? [],
+    },
     recentAppointments: recentAppointments.map((row) => ({
       id: row.id,
       startAt: row.startAt.toISOString(),

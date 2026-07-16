@@ -352,4 +352,4 @@ This milestone ships the first safe promotions foundation instead of jumping dir
 - redemption audit with reserved / consumed / released lifecycle
 - discounted deposits and zero-price public bookings
 
-Loyalty remains deferred until this coupon stack is pushed, physically QA'd, and validated against real operator workflows.
+The follow-up loyalty slice is now implemented locally on Thursday, July 16, 2026 as a visit-based reward system that reuses the promotion engine; physical operator QA remains pending.

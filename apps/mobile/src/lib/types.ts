@@ -961,6 +961,69 @@ export interface CustomerDirectoryPage {
   limit: number;
 }
 
+export interface LoyaltyRewardSummary {
+  id: string;
+  code: string;
+  status: 'AVAILABLE' | 'REDEEMED' | 'EXPIRED' | 'REVOKED';
+  issuedAt: string;
+  expiresAt: string | null;
+  redeemedAt: string | null;
+  revokedAt: string | null;
+  promotionName: string;
+}
+
+export interface LoyaltyCustomerSummary {
+  programEnabled: boolean;
+  visitsRequired: number | null;
+  currentStampCount: number;
+  lifetimeEligibleVisits: number;
+  availableRewardCount: number;
+  lastEarnedAt: string | null;
+  rewards: LoyaltyRewardSummary[];
+}
+
+export interface LoyaltyProgramSettings {
+  id: string | null;
+  isEnabled: boolean;
+  visitsRequired: number;
+  rewardValidityDays: number | null;
+  rewardPromotion: null | {
+    id: string;
+    name: string;
+    code: string;
+    discountType: PromotionDiscountType;
+    fixedDiscountCents: number | null;
+    percentageBasisPoints: number | null;
+    minimumPriceCents: number | null;
+    serviceScope: PromotionServiceScope;
+    appliesToPublicBookings: boolean;
+    appliesToStaffBookings: boolean;
+    serviceIds: string[];
+  };
+}
+
+export interface LoyaltyLedgerListItem {
+  id: string;
+  eventType: string;
+  stampDelta: number;
+  rewardDelta: number;
+  reason: string | null;
+  customerId: string;
+  customerName: string;
+  sourceAppointmentId: string | null;
+  loyaltyRewardId: string | null;
+  actorRole: UserRole | null;
+  actorDisplayName: string | null;
+  createdAt: string;
+}
+
+export interface LoyaltyLedgerPage {
+  items: LoyaltyLedgerListItem[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
 export interface CustomerDetailAppointment {
   id: string;
   startAt: string;
@@ -999,6 +1062,7 @@ export interface CustomerDetail {
   upcomingCount: number;
   lastServiceName: string | null;
   lastEmployeeName: string | null;
+  loyalty: LoyaltyCustomerSummary;
   recentAppointments: CustomerDetailAppointment[];
   upcomingAppointments: CustomerDetailUpcomingAppointment[];
 }

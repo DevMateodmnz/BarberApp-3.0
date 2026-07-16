@@ -61,6 +61,7 @@ import {
   getPromotionRedemptionForAppointment,
   PAID_APPOINTMENT_REPRICE_NOT_SUPPORTED_CODE,
 } from './promotionService.js';
+import { processCompletedAppointmentLoyalty } from './loyaltyService.js';
 import type {
   AppointmentStatus,
   PrismaClient,
@@ -1654,6 +1655,17 @@ export async function transitionAppointmentStatus(
         types: ['REMINDER_24H'],
         now,
       });
+
+      if (newStatus === 'COMPLETED') {
+        await processCompletedAppointmentLoyalty(tx, {
+          appointmentId,
+          barbershopId: appointment.barbershopId,
+          customerId: appointment.customerId,
+          userId,
+          role,
+          now,
+        });
+      }
     }
 
     return tx.appointment.findUniqueOrThrow({

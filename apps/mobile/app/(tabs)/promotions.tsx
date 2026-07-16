@@ -10,6 +10,8 @@ import { fetchBarbershopServices } from '@/lib/services.js';
 import { useContextStore } from '@/lib/store.js';
 import type {
   CreatePromotionInput,
+  LoyaltyLedgerPage,
+  LoyaltyProgramSettings,
   PromotionDetail,
   PromotionListItem,
   PromotionRedemptionStatus,
@@ -20,11 +22,14 @@ import type {
 } from '@/lib/types.js';
 import {
   createPromotion,
+  fetchLoyaltyLedger,
+  fetchLoyaltyProgram,
   fetchPromotionDetail,
   fetchPromotionRedemptions,
   fetchPromotions,
   fetchPromotionSummary,
   setPromotionActive,
+  updateLoyaltyProgram,
   updatePromotion,
 } from '@/lib/promotions.js';
 import { tokens } from '@/theme/index.js';
@@ -121,6 +126,13 @@ export default function PromotionsScreen() {
 
   const { context, isLoading: isContextLoading, error: contextError, loadContext } = useContextStore();
   const [summary, setSummary] = useState<PromotionSummary | null>(null);
+  const [loyaltyProgram, setLoyaltyProgram] = useState<LoyaltyProgramSettings | null>(null);
+  const [loyaltyLedger, setLoyaltyLedger] = useState<LoyaltyLedgerPage['items']>([]);
+  const [loyaltyVisitsRequired, setLoyaltyVisitsRequired] = useState('5');
+  const [loyaltyRewardValidityDays, setLoyaltyRewardValidityDays] = useState('');
+  const [loyaltyRewardPromotionId, setLoyaltyRewardPromotionId] = useState<string | null>(null);
+  const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
+  const [savingLoyalty, setSavingLoyalty] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [promotions, setPromotions] = useState<PromotionListItem[]>([]);
   const [selectedPromotion, setSelectedPromotion] = useState<PromotionDetail | null>(null);
@@ -150,12 +162,20 @@ export default function PromotionsScreen() {
     setError(null);
 
     try {
-      const [nextSummary, nextPromotions, nextServices] = await Promise.all([
+      const [nextSummary, nextLoyaltyProgram, nextLoyaltyLedger, nextPromotions, nextServices] = await Promise.all([
         fetchPromotionSummary(getTokenRef.current, context.barbershopId),
+        fetchLoyaltyProgram(getTokenRef.current, context.barbershopId),
+        fetchLoyaltyLedger(getTokenRef.current, context.barbershopId, { limit: 10 }),
         fetchPromotions(getTokenRef.current, context.barbershopId),
         fetchBarbershopServices(getTokenRef.current, context.barbershopId, { includeInactive: true }),
       ]);
       setSummary(nextSummary);
+      setLoyaltyProgram(nextLoyaltyProgram);
+      setLoyaltyLedger(nextLoyaltyLedger.items);
+      setLoyaltyEnabled(nextLoyaltyProgram.isEnabled);
+      setLoyaltyVisitsRequired(String(nextLoyaltyProgram.visitsRequired));
+      setLoyaltyRewardValidityDays(nextLoyaltyProgram.rewardValidityDays ? String(nextLoyaltyProgram.rewardValidityDays) : '');
+      setLoyaltyRewardPromotionId(nextLoyaltyProgram.rewardPromotion?.id ?? null);
       setPromotions(nextPromotions);
       setServices(nextServices.filter((service) => service.isActive));
     } catch (nextError) {
@@ -272,6 +292,29 @@ export default function PromotionsScreen() {
     }
   }, [buildPayload, context?.barbershopId, form, load, loadPromotionDetailState, t, validateForm]);
 
+  const handleSaveLoyalty = useCallback(async () => {
+    if (!context?.barbershopId || !getTokenRef.current) return;
+
+    setSavingLoyalty(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const nextProgram = await updateLoyaltyProgram(getTokenRef.current, context.barbershopId, {
+        isEnabled: loyaltyEnabled,
+        visitsRequired: Number(loyaltyVisitsRequired || '0'),
+        rewardPromotionId: loyaltyRewardPromotionId,
+        rewardValidityDays: loyaltyRewardValidityDays.trim() ? Number(loyaltyRewardValidityDays) : null,
+      });
+      setLoyaltyProgram(nextProgram);
+      setMessage(t('promotions.loyalty.saved'));
+      await load();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : t('errors.unknownApi'));
+    } finally {
+      setSavingLoyalty(false);
+    }
+  }, [context?.barbershopId, load, loyaltyEnabled, loyaltyRewardPromotionId, loyaltyRewardValidityDays, loyaltyVisitsRequired, t]);
+
   if (!isLoaded || !isSignedIn) return null;
 
   if (isContextLoading && !context) {
@@ -313,6 +356,76 @@ export default function PromotionsScreen() {
           <Text style={styles.bodyText}>{t('promotions.summary.upcoming', { count: summary?.upcomingPromotions ?? 0 })}</Text>
           <Text style={styles.bodyText}>{t('promotions.summary.consumed', { count: summary?.totalConsumedRedemptions ?? 0 })}</Text>
           <Text style={styles.bodyText}>{t('promotions.summary.discount', { amount: formatMoney(summary?.totalDiscountCents ?? 0) })}</Text>
+        </AppCard>
+        <AppCard testID="promotions-loyalty-card" variant="outlined">
+          <SectionHeader title={t('promotions.loyalty.title')} />
+          <Text style={styles.helperText}>{t('promotions.loyalty.help')}</Text>
+          <View style={styles.filterRow}>
+            <Pressable
+              testID="promotions-loyalty-enabled"
+              onPress={() => setLoyaltyEnabled(true)}
+              style={[styles.filterChip, loyaltyEnabled && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, loyaltyEnabled && styles.filterChipTextActive]}>{t('promotions.loyalty.enabled')}</Text>
+            </Pressable>
+            <Pressable
+              testID="promotions-loyalty-disabled"
+              onPress={() => setLoyaltyEnabled(false)}
+              style={[styles.filterChip, !loyaltyEnabled && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterChipText, !loyaltyEnabled && styles.filterChipTextActive]}>{t('promotions.loyalty.disabled')}</Text>
+            </Pressable>
+          </View>
+          <AppTextInput
+            testID="promotions-loyalty-visits-required"
+            label={t('promotions.loyalty.visitsRequired')}
+            value={loyaltyVisitsRequired}
+            onChangeText={(value) => setLoyaltyVisitsRequired(value.replace(/[^0-9]/gu, ''))}
+            keyboardType="number-pad"
+          />
+          <AppTextInput
+            testID="promotions-loyalty-validity-days"
+            label={t('promotions.loyalty.rewardValidityDays')}
+            value={loyaltyRewardValidityDays}
+            onChangeText={(value) => setLoyaltyRewardValidityDays(value.replace(/[^0-9]/gu, ''))}
+            keyboardType="number-pad"
+          />
+          <SectionHeader title={t('promotions.loyalty.rewardPromotion')} />
+          {loyaltyProgram?.rewardPromotion ? (
+            <Text style={styles.helperText}>{loyaltyProgram.rewardPromotion.name}</Text>
+          ) : null}
+          <View style={styles.filterRow}>
+            {promotions.map((promotion) => (
+              <Pressable
+                key={promotion.id}
+                testID={`promotions-loyalty-template-${promotion.id}`}
+                onPress={() => setLoyaltyRewardPromotionId(promotion.id)}
+                style={[styles.filterChip, loyaltyRewardPromotionId === promotion.id && styles.filterChipActive]}
+              >
+                <Text style={[styles.filterChipText, loyaltyRewardPromotionId === promotion.id && styles.filterChipTextActive]}>{promotion.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.buttonRow}>
+            <AppButton
+              testID="promotions-loyalty-save"
+              title={t('promotions.loyalty.save')}
+              loading={savingLoyalty}
+              onPress={() => void handleSaveLoyalty()}
+            />
+          </View>
+          <SectionHeader title={t('promotions.loyalty.ledgerTitle')} />
+          {loyaltyLedger.length === 0 ? (
+            <Text style={styles.bodyText}>{t('promotions.loyalty.ledgerEmpty')}</Text>
+          ) : loyaltyLedger.map((item) => (
+            <View key={item.id} style={styles.appointmentRow}>
+              <View style={styles.appointmentCopy}>
+                <Text style={styles.appointmentTitle}>{t(`promotions.loyalty.events.${item.eventType}`)}</Text>
+                <Text style={styles.helperText}>{item.customerName}</Text>
+              </View>
+              <Text style={styles.bodyText}>{item.stampDelta !== 0 ? `${item.stampDelta > 0 ? '+' : ''}${item.stampDelta}` : `${item.rewardDelta > 0 ? '+' : ''}${item.rewardDelta}`}</Text>
+            </View>
+          ))}
         </AppCard>
 
         <AppCard testID="promotions-filters-card" variant="outlined">
@@ -574,6 +687,21 @@ const styles = StyleSheet.create({
   },
   promotionName: {
     ...tokens.typography.variant.body,
+    color: tokens.colors.textPrimary,
+    fontWeight: tokens.typography.weight.semibold,
+  },
+  appointmentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: tokens.spacing[2],
+    alignItems: 'center',
+  },
+  appointmentCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  appointmentTitle: {
+    ...tokens.typography.variant.bodySmall,
     color: tokens.colors.textPrimary,
     fontWeight: tokens.typography.weight.semibold,
   },

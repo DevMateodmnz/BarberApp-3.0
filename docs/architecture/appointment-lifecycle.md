@@ -139,7 +139,9 @@ against `allowedRoles` for the target status.
 ## Lifecycle timestamps
 
 Each transition to a non-cancel terminal state stamps exactly
-one timestamp column:
+one timestamp column.
+
+`COMPLETED` now also triggers the loyalty earning hook inside the same authoritative transaction when the appointment is linked to a customer and the barbershop has loyalty enabled.
 
 | Target status | Column |
 | --- | --- |
