@@ -7,6 +7,7 @@ import { buildAvailabilitySlots } from '../lib/availabilitySlots.js';
 import { getPublicBookingPolicy } from '../lib/publicBookingPolicy.js';
 import { prisma } from '../lib/prisma.js';
 import { resolvePublishedPublicBarbershop } from './publicCatalogService.js';
+import { releaseExpiredPaymentHolds } from './payments/bookingPaymentService.js';
 
 export interface PublicAvailabilityDto {
   slug: string;
@@ -112,6 +113,11 @@ export async function getPublicBarberAvailabilityBySlug(
   if (!employee) {
     throw createPublicNotFoundError();
   }
+
+  await releaseExpiredPaymentHolds({
+    now,
+    employeeId: employee.id,
+  });
 
   const slots = await buildAvailabilitySlots({
     barbershopId: barbershop.id,

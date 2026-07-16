@@ -82,18 +82,24 @@ describe('PublicBookingFlow', () => {
       screen.getByRole('heading', { name: /mateo barber/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('radio', { name: /corte clásico/i })
+      screen.getByRole('combobox', { name: /servicio/i })
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole('radio', { name: /corte clásico/i }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /servicio/i }),
+      'svc_1'
+    );
 
     await waitFor(() => {
       expect(loadBarbers).toHaveBeenCalledWith('svc_1');
     });
 
-    await user.click(screen.getByRole('radio', { name: /mateo/i }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /profesional/i }),
+      'barber_1'
+    );
     await user.type(
-      screen.getByLabelText(/fecha de reserva/i),
+      screen.getByLabelText(/^fecha$/i),
       '2026-07-20'
     );
     await user.click(
@@ -113,8 +119,8 @@ describe('PublicBookingFlow', () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /10:00/i }));
 
-    expect(screen.getByText(/turno seleccionado/i)).toBeInTheDocument();
-    expect(screen.getByText(/20 de julio de 2026/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/nombre y apellido/i)).toBeInTheDocument();
+    expect(screen.getByText(/horarios para 20 de julio de 2026/i)).toBeInTheDocument();
   });
 
   it('shows an empty-state message when the selected service has no barbers', async () => {
@@ -131,7 +137,10 @@ describe('PublicBookingFlow', () => {
       />
     );
 
-    await user.click(screen.getByRole('radio', { name: /barba/i }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /servicio/i }),
+      'svc_2'
+    );
 
     expect(
       await screen.findByText(/no hay barberos disponibles para este servicio/i)
@@ -183,10 +192,16 @@ describe('PublicBookingFlow', () => {
       />
     );
 
-    await user.click(screen.getByRole('radio', { name: /corte clásico/i }));
-    await user.click(await screen.findByRole('radio', { name: /mateo/i }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /servicio/i }),
+      'svc_1'
+    );
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: /profesional/i }),
+      'barber_1'
+    );
     await user.type(
-      screen.getByLabelText(/fecha de reserva/i),
+      screen.getByLabelText(/^fecha$/i),
       '2026-07-20'
     );
     await user.click(
@@ -204,7 +219,7 @@ describe('PublicBookingFlow', () => {
     await waitFor(() => {
       expect(consentCheckbox).toBeChecked();
     });
-    await user.click(screen.getByRole('button', { name: /reservar turno/i }));
+    await user.click(screen.getByRole('button', { name: /confirmar turno/i }));
 
     await waitFor(() => {
       expect(submitBooking).toHaveBeenCalledWith({
@@ -228,6 +243,71 @@ describe('PublicBookingFlow', () => {
         bookingReference: 'pb_TEST1234567890',
       })
     );
+  });
+
+  it('shows the server-calculated deposit disclosure before confirming when the service requires a deposit', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <PublicBookingFlow
+        shop={shop}
+        services={[
+          {
+            ...services[0]!,
+            depositRequired: true,
+            depositAmountCents: 1500,
+            remainingAmountCents: 1700,
+          },
+        ]}
+        bookingConfig={{
+          ...bookingConfig,
+          depositPolicy: {
+            enabled: true,
+            mode: 'FIXED',
+            holdDurationMinutes: 15,
+            currency: 'ARS',
+            publicTerms: 'La reserva se confirma con la seña.',
+          },
+        }}
+        loadBarbers={vi.fn().mockResolvedValue([
+          { barberId: 'barber_1', displayName: 'Mateo' },
+        ])}
+        loadAvailability={vi.fn().mockResolvedValue({
+          slug: shop.slug,
+          serviceId: 'svc_1',
+          barberId: 'barber_1',
+          localDate: '2026-07-20',
+          timezone: shop.timezone,
+          slotIntervalMinutes: 30,
+          serviceDurationMinutes: 30,
+          slots: [
+            {
+              startAt: '2026-07-20T13:00:00.000Z',
+              endAt: '2026-07-20T13:30:00.000Z',
+            },
+          ],
+        })}
+        submitBooking={vi.fn()}
+      />
+    );
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /servicio/i }),
+      'svc_1'
+    );
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: /profesional/i }),
+      'barber_1'
+    );
+    await user.type(screen.getByLabelText(/^fecha$/i), '2026-07-20');
+    await user.click(screen.getByRole('button', { name: /ver horarios disponibles/i }));
+    await user.click(await screen.findByRole('button', { name: /10:00/i }));
+
+    expect(await screen.findByText(/seña para confirmar el turno/i)).toBeInTheDocument();
+    expect(screen.getByText(/seña requerida/i)).toHaveTextContent(/15/);
+    expect(screen.getByText(/saldo en barbería/i)).toHaveTextContent(/17/);
+    expect(screen.getByText(/reservado durante 15 minutos/i)).toBeInTheDocument();
+    expect(screen.getByText(/la reserva se confirma con la seña/i)).toBeInTheDocument();
   });
 
   it('shows a validation error when the optional email is malformed', async () => {
@@ -260,18 +340,24 @@ describe('PublicBookingFlow', () => {
       />
     );
 
-    await user.click(screen.getByRole('radio', { name: /corte clásico/i }));
-    await user.click(await screen.findByRole('radio', { name: /mateo/i }));
-    await user.type(screen.getByLabelText(/fecha de reserva/i), '2026-07-20');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /servicio/i }),
+      'svc_1'
+    );
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: /profesional/i }),
+      'barber_1'
+    );
+    await user.type(screen.getByLabelText(/^fecha$/i), '2026-07-20');
     await user.click(screen.getByRole('button', { name: /ver horarios disponibles/i }));
     await user.click(await screen.findByRole('button', { name: /10:00/i }));
     await user.type(screen.getByLabelText(/nombre y apellido/i), 'Mateo');
     await user.type(screen.getByLabelText(/teléfono/i), '+543811234567');
     await user.type(screen.getByLabelText(/email \(opcional\)/i), 'bad-email');
     await user.click(screen.getByRole('checkbox', { name: /acepto compartir mis datos/i }));
-    await user.click(screen.getByRole('button', { name: /reservar turno/i }));
+    await user.click(screen.getByRole('button', { name: /confirmar turno/i }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/ingresá un email válido/i);
+    expect(await screen.findByText(/ingresá un email válido/i)).toBeInTheDocument();
   });
 
   it('keeps the form visible after a stale-slot conflict so the customer can recover', async () => {
@@ -335,9 +421,15 @@ describe('PublicBookingFlow', () => {
       />
     );
 
-    await user.click(screen.getByRole('radio', { name: /corte clásico/i }));
-    await user.click(await screen.findByRole('radio', { name: /mateo/i }));
-    await user.type(screen.getByLabelText(/fecha de reserva/i), '2026-07-20');
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: /servicio/i }),
+      'svc_1'
+    );
+    await user.selectOptions(
+      await screen.findByRole('combobox', { name: /profesional/i }),
+      'barber_1'
+    );
+    await user.type(screen.getByLabelText(/^fecha$/i), '2026-07-20');
     await user.click(
       screen.getByRole('button', { name: /ver horarios disponibles/i })
     );
@@ -353,12 +445,12 @@ describe('PublicBookingFlow', () => {
       'Conflicto controlado'
     );
     await user.click(screen.getByRole('checkbox', { name: /acepto compartir/i }));
-    await user.click(screen.getByRole('button', { name: /reservar turno/i }));
+    await user.click(screen.getByRole('button', { name: /confirmar turno/i }));
 
-    await expect(
-      await screen.findByRole('alert')
-    ).toHaveTextContent(/ese horario ya no está disponible/i);
-    expect(screen.queryByText(/turno seleccionado/i)).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(/ese horario ya no está disponible/i)
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/nombre y apellido/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/nombre y apellido/i)).toHaveValue(
       'Cliente Conflicto'
     );
@@ -367,8 +459,7 @@ describe('PublicBookingFlow', () => {
       'Conflicto controlado'
     );
     expect(screen.getByRole('button', { name: /10:30/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /reservar turno/i })
-    ).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^10:00$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /confirmar turno/i })).toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ import type {
   PublicBarber,
   PublicBookingConfig,
   PublicBookingConfirmation,
+  PublicPaymentStatus,
   PublicCancelBookingPayload,
   PublicCancelBookingResult,
   PublicCreateAppointmentPayload,
@@ -237,5 +238,14 @@ export async function cancelPublicAppointment(input: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input.payload),
     }
+  );
+}
+
+export async function getPublicPaymentStatus(input: {
+  slug: string;
+  publicReference: string;
+}) {
+  return fetchPublicApi<PublicPaymentStatus>(
+    `/public/barbershops/${encodeURIComponent(input.slug)}/bookings/${encodeURIComponent(input.publicReference)}/payment`
   );
 }

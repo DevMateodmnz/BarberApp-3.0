@@ -15,6 +15,11 @@ import {
   handleUserDeleted,
 } from '../services/userSyncService.js';
 import { reconcileEmployeeInvitation } from '../services/employeeInvitationService.js';
+import {
+  persistMercadoPagoWebhook,
+  processPendingPaymentWebhookEvents,
+  validateMercadoPagoWebhookSignature,
+} from '../services/payments/bookingPaymentService.js';
 
 const router = Router();
 
@@ -123,6 +128,45 @@ router.post(
         await handleUserDeleted(payload as never);
       }
       // Unknown event types → 200 OK (acknowledge, prevent Clerk retries)
+
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/mercado-pago',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rawBody = req.body as Buffer;
+      const dataId =
+        typeof req.query['data.id'] === 'string' ? req.query['data.id'] : undefined;
+
+      validateMercadoPagoWebhookSignature({
+        rawBody,
+        xSignature: req.header('x-signature') ?? undefined,
+        xRequestId: req.header('x-request-id') ?? undefined,
+        dataId,
+      });
+
+      await persistMercadoPagoWebhook({
+        rawBody,
+        requestId: req.header('x-request-id') ?? undefined,
+        xSignature: req.header('x-signature') ?? undefined,
+        dataId: dataId ?? '',
+        externalReference:
+          typeof req.query.external_reference === 'string'
+            ? req.query.external_reference
+            : null,
+        topic: typeof req.query.type === 'string' ? req.query.type : null,
+        action: typeof req.query.action === 'string' ? req.query.action : null,
+      });
+
+      void processPendingPaymentWebhookEvents().catch(() => {
+        // Best-effort async reconciliation after a successful ack.
+      });
 
       res.json({ success: true });
     } catch (error) {

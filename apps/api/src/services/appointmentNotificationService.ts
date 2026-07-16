@@ -67,6 +67,21 @@ export const APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE = {
       { createdAt: 'asc' as const },
     ],
   },
+  bookingPayments: {
+    select: {
+      id: true,
+      status: true,
+      amountCents: true,
+      currency: true,
+      reviewReasonCode: true,
+      expiresAt: true,
+      approvedAt: true,
+    },
+    orderBy: {
+      createdAt: 'desc' as const,
+    },
+    take: 1,
+  },
 } satisfies Prisma.AppointmentInclude;
 
 export interface ProcessAppointmentNotificationBatchResult {

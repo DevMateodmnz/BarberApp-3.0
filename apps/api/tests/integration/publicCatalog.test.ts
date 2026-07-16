@@ -362,6 +362,9 @@ describe('GET /api/v1/public/barbershops/:slug/services', () => {
         durationMinutes: 45,
         priceCents: 4500,
         currency: 'ARS',
+        depositRequired: false,
+        depositAmountCents: null,
+        remainingAmountCents: null,
       },
       {
         serviceId: fixtures.activeServiceB.id,
@@ -370,6 +373,9 @@ describe('GET /api/v1/public/barbershops/:slug/services', () => {
         durationMinutes: 30,
         priceCents: 3000,
         currency: 'ARS',
+        depositRequired: false,
+        depositAmountCents: null,
+        remainingAmountCents: null,
       },
     ]);
   });
@@ -484,6 +490,13 @@ describe('GET /api/v1/public/barbershops/:slug/booking-config', () => {
           minimumNoticeMinutes: 60,
           maximumBookingHorizonDays: 30,
           slotIntervalMinutes: 30,
+        },
+        depositPolicy: {
+          enabled: false,
+          mode: 'DISABLED',
+          holdDurationMinutes: 15,
+          currency: 'ARS',
+          publicTerms: null,
         },
       },
     });

@@ -68,3 +68,45 @@ Run continuously:
 ```bash
 npm run notifications:worker --workspace @barberapp/api
 ```
+
+## Mercado Pago local payment setup
+
+Suggested `apps/api/.env` values for local development:
+
+```env
+PAYMENT_CREDENTIAL_ENCRYPTION_KEY=base64-32-byte-key
+MERCADO_PAGO_CLIENT_ID=your-sandbox-client-id
+MERCADO_PAGO_CLIENT_SECRET=your-sandbox-client-secret
+MERCADO_PAGO_REDIRECT_URI=http://localhost:3000/api/v1/payments/mercado-pago/oauth/callback
+MERCADO_PAGO_WEBHOOK_SECRET=your-sandbox-webhook-secret
+PUBLIC_WEB_BASE_URL=http://localhost:3001
+```
+
+Notes:
+
+- use sandbox/test Mercado Pago credentials only
+- do not log tokens or authorization codes
+- production credential activation is out of scope for this milestone
+
+## Payment workers
+
+Webhook reconciliation worker:
+
+```bash
+npm run payments:webhooks --workspace @barberapp/api -- --once
+```
+
+Hold expiration worker:
+
+```bash
+npm run payments:expire-holds --workspace @barberapp/api -- --once
+```
+
+Run continuously during local development only when needed:
+
+```bash
+npm run payments:webhooks --workspace @barberapp/api
+npm run payments:expire-holds --workspace @barberapp/api
+```
+
+Stop both workers before finishing the batch.

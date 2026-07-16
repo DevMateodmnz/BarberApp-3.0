@@ -325,6 +325,54 @@ export type AppointmentStatus =
   | 'CANCELLED'
   | 'NO_SHOW';
 
+export type PaymentConnectionStatus =
+  | 'DISCONNECTED'
+  | 'CONNECTING'
+  | 'CONNECTED'
+  | 'REFRESH_REQUIRED'
+  | 'REVOKED'
+  | 'ERROR';
+
+export type DepositPolicyMode = 'DISABLED' | 'FIXED' | 'PERCENTAGE';
+
+export type BookingPaymentStatus =
+  | 'CREATING'
+  | 'PENDING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'EXPIRED'
+  | 'REFUNDED'
+  | 'REVIEW_REQUIRED'
+  | 'ERROR';
+
+export interface PaymentConnection {
+  provider: 'MERCADO_PAGO';
+  status: PaymentConnectionStatus;
+  sellerId: string | null;
+  publicKeyPresent: boolean;
+  connectedAt: string | null;
+  lastRefreshedAt: string | null;
+  revokedAt: string | null;
+  lastErrorCode: string | null;
+}
+
+export interface DepositPolicySettings {
+  mode: DepositPolicyMode;
+  fixedAmountCents: number | null;
+  percentageBasisPoints: number | null;
+  holdDurationMinutes: number;
+  currency: 'ARS';
+  publicTerms: string | null;
+}
+
+export interface PaymentOperationsSummary {
+  pendingTooLong: number;
+  expired: number;
+  reviewRequired: number;
+  approvedCancelled: number;
+}
+
 export type AppointmentNotificationType =
   | 'BOOKING_CONFIRMATION'
   | 'REMINDER_24H'
@@ -463,6 +511,15 @@ export interface Appointment {
   };
   notifications?: AppointmentNotificationSummary[];
   changes?: AppointmentChange[];
+  bookingPayments?: Array<{
+    id: string;
+    status: BookingPaymentStatus;
+    amountCents: number;
+    currency: string;
+    reviewReasonCode: string | null;
+    expiresAt: string;
+    approvedAt: string | null;
+  }>;
   client: {
     id: string;
     name: string | null;
@@ -535,6 +592,7 @@ export interface DailyScheduleBoardAppointment {
   noShowCount: number;
   hasPreviousNoShows: boolean;
   notificationSummary: DailyScheduleBoardAppointmentNotificationSummary | null;
+  bookingPaymentStatus?: BookingPaymentStatus | null;
   isOutsideWorkingHours: boolean;
   outsideWorkingHoursReasonCode:
     | 'BARBERSHOP_CLOSED'

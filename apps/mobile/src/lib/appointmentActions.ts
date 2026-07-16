@@ -1,6 +1,7 @@
 import type {
   AppointmentNotificationSummary,
   AppointmentStatus,
+  BookingPaymentStatus,
   CurrentUserContext,
 } from './types.js';
 
@@ -102,4 +103,26 @@ export function buildAppointmentNotificationLabels(
     .filter((value, index, array) => array.indexOf(value) === index);
 
   return labels;
+}
+
+export function buildAppointmentPaymentLabels(
+  paymentStatus: BookingPaymentStatus | null | undefined,
+  t: (key: string) => string,
+): string[] {
+  switch (paymentStatus) {
+    case 'PENDING':
+    case 'CREATING':
+      return [t('appointments.paymentLabels.pending')];
+    case 'APPROVED':
+      return [t('appointments.paymentLabels.approved')];
+    case 'EXPIRED':
+    case 'CANCELLED':
+      return [t('appointments.paymentLabels.expired')];
+    case 'REJECTED':
+      return [t('appointments.paymentLabels.rejected')];
+    case 'REVIEW_REQUIRED':
+      return [t('appointments.paymentLabels.reviewRequired')];
+    default:
+      return [];
+  }
 }

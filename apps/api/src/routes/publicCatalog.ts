@@ -20,6 +20,7 @@ import {
   createPublicBookingBySlug,
   getPublicBookingConfirmationByReference,
 } from '../services/publicBookingService.js';
+import { loadPublicBookingPaymentStateByReference } from '../services/payments/bookingPaymentService.js';
 import {
   getPublicBarbershopBySlug,
   getPublicBookingConfigBySlug,
@@ -231,6 +232,33 @@ export function createPublicCatalogRouter(
           reason,
         });
         res.json({ success: true, data: result.appointment });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.get(
+    '/barbershops/:slug/bookings/:reference/payment',
+    catalogReadRateLimit,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const payment = await loadPublicBookingPaymentStateByReference({
+          slug: paramSlug(req),
+          publicReference: req.params.reference ?? '',
+        });
+        res.json({
+          success: true,
+          data: {
+            appointmentStatus: payment.appointmentStatus,
+            paymentStatus: payment.paymentStatus,
+            amount: payment.amountCents,
+            currency: payment.currency,
+            expiresAt: payment.expiresAt,
+            canRetry: payment.canRetry,
+            canCancel: payment.canCancel,
+          },
+        });
       } catch (error) {
         next(error);
       }

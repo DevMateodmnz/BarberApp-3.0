@@ -72,6 +72,7 @@ export default function ManageScreen() {
     <Screen scrollable testID="manage-screen">
       <ManageContent
         role={context.role}
+        onPayments={() => router.push('/(tabs)/payments')}
         onNotifications={() => router.push('/(tabs)/notifications')}
         onServices={() => router.push('/(tabs)/services')}
         onEmployees={() => router.push('/(tabs)/employees')}

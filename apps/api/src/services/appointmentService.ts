@@ -25,7 +25,10 @@ import {
   APPOINTMENT_SLOT_INTERVAL_MINUTES,
   isSlotBoundaryMinute,
 } from '../lib/appointmentScheduling.js';
-import { BLOCKING_APPOINTMENT_STATUSES } from '../lib/appointmentBlocking.js';
+import {
+  BLOCKING_APPOINTMENT_STATUSES,
+  buildBlockingAppointmentWhereInput,
+} from '../lib/appointmentBlocking.js';
 import { buildAvailabilitySlots } from '../lib/availabilitySlots.js';
 import {
   buildLifecycleUpdateForCancel,
@@ -47,6 +50,11 @@ import { tryNormalizeClientPhoneE164 } from '../lib/phoneNormalization.js';
 import { validateEmployeeInBarbershop } from './employeeService.js';
 import { normalizeEmail } from '../lib/email.js';
 import { validateEmployeeAvailabilityWindow } from './employeeScheduleService.js';
+import {
+  assertAppointmentCanBeConfirmedWithPayment,
+  releaseExpiredPaymentHolds,
+  syncBookingPaymentOnAppointmentCancellation,
+} from './payments/bookingPaymentService.js';
 import type {
   AppointmentStatus,
   PrismaClient,
@@ -628,7 +636,7 @@ export async function hasTimeConflict(
     where: {
       id: excludeId ? { not: excludeId } : undefined,
       employeeId,
-      status: { in: BLOCKING_APPOINTMENT_STATUSES },
+      ...buildBlockingAppointmentWhereInput(new Date()),
       startAt: { lt: endAt },
       endAt: { gt: startAt },
     },
@@ -666,6 +674,7 @@ export async function createAppointment(
   const startAt = new Date(startAtStr);
   validateAppointmentStartAt(startAt, timezone);
   const endAt = calculateAppointmentEndAt(startAt, service.durationMinutes);
+  await releaseExpiredPaymentHolds({ now: new Date(), employeeId });
 
   await validateEmployeeAvailabilityWindow({
     barbershopId,
@@ -758,6 +767,7 @@ export async function createStaffAppointment(
     startAt,
     bookingContext.service.durationMinutes
   );
+  await releaseExpiredPaymentHolds({ now: notificationNow, employeeId });
 
   await validateEmployeeAvailabilityWindow({
     barbershopId,
@@ -886,6 +896,11 @@ export async function getAppointmentAvailability(input: AvailabilityInput) {
       throw new NotFoundError('Appointment');
     }
   }
+
+  await releaseExpiredPaymentHolds({
+    now,
+    employeeId,
+  });
 
   const slots = await buildAvailabilitySlots({
     barbershopId,
@@ -1301,6 +1316,11 @@ export async function rescheduleAppointment(
         db: tx,
       });
 
+      await releaseExpiredPaymentHolds({
+        now,
+        employeeId: targetEmployeeId,
+      });
+
       const conflict = await hasTimeConflict(
         targetEmployeeId,
         nextStartAt,
@@ -1430,6 +1450,10 @@ export async function transitionAppointmentStatus(
 
   validateStatusTransition(appointment.status, newStatus, role);
 
+  if (appointment.status === 'PENDING' && newStatus === 'CONFIRMED') {
+    await assertAppointmentCanBeConfirmedWithPayment({ appointmentId });
+  }
+
   const lifecycleUpdate = buildLifecycleUpdateForStatus(newStatus, role, now);
 
   return prisma.$transaction(async (tx) => {
@@ -1449,10 +1473,22 @@ export async function transitionAppointmentStatus(
     }
 
     if (newStatus === 'CANCELLED') {
+      await syncBookingPaymentOnAppointmentCancellation({
+        appointmentId,
+        barbershopId: appointment.barbershopId,
+        now,
+        reasonCode: 'APPOINTMENT_CANCELLED_BY_STAFF',
+        db: tx,
+      });
       await cancelAppointmentNotifications(tx, {
         appointmentId,
         barbershopId: appointment.barbershopId,
         types: ['BOOKING_CONFIRMATION', 'REMINDER_24H'],
+        now,
+      });
+    } else if (appointment.status === 'PENDING' && newStatus === 'CONFIRMED') {
+      await scheduleAppointmentNotificationsForNewAppointment(tx, {
+        appointmentId,
         now,
       });
     } else if (newStatus === 'COMPLETED' || newStatus === 'NO_SHOW') {
@@ -1530,6 +1566,17 @@ export async function cancelAppointment(
         'CANCELLED'
       );
     }
+
+    await syncBookingPaymentOnAppointmentCancellation({
+      appointmentId,
+      barbershopId: appointment.barbershopId,
+      now: options.now ?? new Date(),
+      reasonCode:
+        role === 'CLIENT'
+          ? 'APPOINTMENT_CANCELLED_BY_CLIENT'
+          : 'APPOINTMENT_CANCELLED_BY_STAFF',
+      db: tx,
+    });
 
     await cancelAppointmentNotifications(tx, {
       appointmentId,

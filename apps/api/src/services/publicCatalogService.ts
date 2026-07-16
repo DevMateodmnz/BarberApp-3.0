@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import { getPublicBookingConsent } from '../lib/publicBookingConsent.js';
 import { getPublicBookingPolicy } from '../lib/publicBookingPolicy.js';
 import { validatePublicSlug } from '../lib/publicSlug.js';
+import { getDepositPolicyPreviewForService } from './payments/depositPolicyService.js';
 
 export interface PublicBarbershopDto {
   slug: string;
@@ -17,6 +18,9 @@ export interface PublicServiceDto {
   durationMinutes: number;
   priceCents: number;
   currency: string;
+  depositRequired: boolean;
+  depositAmountCents: number | null;
+  remainingAmountCents: number | null;
 }
 
 export interface PublicBarberDto {
@@ -33,6 +37,13 @@ export interface PublicBookingConfigDto {
     minimumNoticeMinutes: number;
     maximumBookingHorizonDays: number;
     slotIntervalMinutes: number;
+  };
+  depositPolicy: {
+    enabled: boolean;
+    mode: 'DISABLED' | 'FIXED' | 'PERCENTAGE';
+    holdDurationMinutes: number;
+    currency: 'ARS';
+    publicTerms: string | null;
   };
 }
 
@@ -125,14 +136,28 @@ export async function listPublicServicesBySlug(
     },
   });
 
-  return services.map((service) => ({
-    serviceId: service.id,
-    name: service.name,
-    description: service.description,
-    durationMinutes: service.durationMinutes,
-    priceCents: service.priceCents,
-    currency: service.currency,
-  }));
+  const result: PublicServiceDto[] = [];
+
+  for (const service of services) {
+    const depositPreview = await getDepositPolicyPreviewForService({
+      barbershopId: barbershop.id,
+      servicePriceCents: service.priceCents,
+    });
+
+    result.push({
+      serviceId: service.id,
+      name: service.name,
+      description: service.description,
+      durationMinutes: service.durationMinutes,
+      priceCents: service.priceCents,
+      currency: service.currency,
+      depositRequired: depositPreview.enabled,
+      depositAmountCents: depositPreview.amountCents,
+      remainingAmountCents: depositPreview.remainingAmountCents,
+    });
+  }
+
+  return result;
 }
 
 export async function listEligiblePublicBarbersBySlug(
@@ -193,10 +218,14 @@ export async function listEligiblePublicBarbersBySlug(
 export async function getPublicBookingConfigBySlug(
   slug: string
 ): Promise<PublicBookingConfigDto> {
-  await resolvePublishedPublicBarbershop(slug);
+  const barbershop = await resolvePublishedPublicBarbershop(slug);
 
   const consent = getPublicBookingConsent();
   const policy = getPublicBookingPolicy();
+  const depositPolicy = await getDepositPolicyPreviewForService({
+    barbershopId: barbershop.id,
+    servicePriceCents: 10_000,
+  });
 
   return {
     consent: {
@@ -207,6 +236,13 @@ export async function getPublicBookingConfigBySlug(
       minimumNoticeMinutes: policy.minimumNoticeMinutes,
       maximumBookingHorizonDays: policy.maximumBookingHorizonDays,
       slotIntervalMinutes: policy.slotIntervalMinutes,
+    },
+    depositPolicy: {
+      enabled: depositPolicy.enabled,
+      mode: depositPolicy.mode,
+      holdDurationMinutes: depositPolicy.holdDurationMinutes,
+      currency: depositPolicy.currency,
+      publicTerms: depositPolicy.publicTerms,
     },
   };
 }

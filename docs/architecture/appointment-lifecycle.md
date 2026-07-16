@@ -69,6 +69,29 @@ schedule board therefore shows it, counts it, and excludes it from
 available gaps. Do not fork a second “board-only” interpretation of
 blocking status.
 
+## Deposit-backed pending holds
+
+The payment milestone keeps `PENDING` as a first-class lifecycle status, but it
+now has **two valid meanings**:
+
+1. legacy/staff pending appointment not tied to an online payment hold;
+2. public deposit-backed reservation hold waiting for payment approval.
+
+Payment-backed pending rows add:
+
+- `paymentHoldExpiresAt`
+- optional linked `BookingPayment` rows
+- deferred confirmation notifications until approval
+
+Important rules:
+
+- an unexpired payment-backed `PENDING` appointment still blocks the slot;
+- an expired hold is treated as non-blocking by the canonical blocking helper
+  even before the cleanup worker finishes cancellation;
+- `paymentConfirmedAt` is audit-only and is populated only after authoritative
+  provider approval;
+- staff may not manually confirm an unpaid deposit-backed `PENDING` appointment.
+
 ## Operational daily schedule board
 
 The mobile Agenda view and

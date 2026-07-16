@@ -9,6 +9,7 @@ import appointmentRoutes from './routes/appointments.js';
 import barbershopRoutes from './routes/barbershops.js';
 import meRoutes from './routes/me.js';
 import onboardingRoutes from './routes/onboarding.js';
+import paymentsRoutes from './routes/payments.js';
 import { createPublicCatalogRouter } from './routes/publicCatalog.js';
 import webhookRoutes from './routes/webhooks.js';
 
@@ -38,6 +39,7 @@ export function createApp(config: ApiRuntimeConfig): express.Express {
   });
 
   app.use('/api/v1/public', createPublicCatalogRouter(config));
+  app.use('/api/v1', paymentsRoutes);
   app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
   app.use('/api/v1/barbershops', barbershopRoutes);
   app.use('/api/v1/me', meRoutes);

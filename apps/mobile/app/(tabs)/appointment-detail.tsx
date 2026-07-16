@@ -5,7 +5,12 @@ import { useTranslation } from 'react-i18next';
 
 import { AppointmentDetailScreenView, type AppointmentDetailActionViewModel } from '@/components/AppointmentDetailScreenView.js';
 import { getAppointmentTransitionLabel } from '@/i18n/index.js';
-import { buildAppointmentNotificationLabels, canRescheduleAppointment, getAvailableAppointmentTransitions } from '@/lib/appointmentActions.js';
+import {
+  buildAppointmentNotificationLabels,
+  buildAppointmentPaymentLabels,
+  canRescheduleAppointment,
+  getAvailableAppointmentTransitions,
+} from '@/lib/appointmentActions.js';
 import {
   cancelAppointment as cancelAppointmentApi,
   fetchAppointment,
@@ -164,6 +169,20 @@ export default function AppointmentDetailScreen() {
     meta: formatBusinessDateLabel(notification.scheduledFor.slice(0, 10)),
   })), [notificationLabels, notifications, t]);
 
+  const paymentRows = useMemo(() => {
+    const latestPaymentStatus = appointment?.bookingPayments?.[0]?.status ?? null;
+    return buildAppointmentPaymentLabels(latestPaymentStatus, (key) => t(key)).map((label) => ({
+      id: `payment-${latestPaymentStatus ?? 'none'}`,
+      label,
+      meta: null,
+    }));
+  }, [appointment?.bookingPayments, t]);
+
+  const detailNotificationRows = useMemo(
+    () => [...paymentRows, ...notificationRows],
+    [notificationRows, paymentRows],
+  );
+
   const changeRows = useMemo(() => changes.map((change) => ({
     id: change.id,
     title: t('appointmentReschedule.historyItemTitle'),
@@ -190,7 +209,7 @@ export default function AppointmentDetailScreen() {
       summaryTimeLabel={summaryTimeLabel}
       employeeDisplayLabel={employeeDisplayLabel}
       changeRows={changeRows}
-      notificationRows={notificationRows}
+      notificationRows={detailNotificationRows}
       actions={actions}
       isLoading={isLoading}
       error={error}

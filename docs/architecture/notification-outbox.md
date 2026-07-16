@@ -131,6 +131,15 @@ Environment variables:
 
 The worker fails clearly if SMTP is not configured.
 
+## Deposit-payment boundary
+
+Public bookings that require a deposit do **not** schedule the usual
+`BOOKING_CONFIRMATION` or `REMINDER_24H` rows at appointment-creation time.
+Those notifications are created only after authoritative payment approval.
+
+This prevents contradictory messaging such as "turno confirmado" while the
+payment is still pending, expired, or under review.
+
 ## Privacy
 
 - delivery payload omits internal notes, auth tokens, and Clerk identifiers

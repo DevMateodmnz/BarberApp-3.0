@@ -34,7 +34,7 @@ durable foundations, not because they are next on the list.
 3. **Customer directory and visit history**
 4. **Appointment confirmations, reminders, delivery operations, and audited rescheduling**
 5. **Employee-specific availability and time off**
-6. **Deposits and Mercado Pago**
+6. **Deposits and Mercado Pago** — implemented in the current milestone
 7. **Promotions and loyalty**
 8. **Platform administration and scalable tenant onboarding**
 9. **Marketplace, search, and reviews** — only after multiple real
@@ -55,7 +55,7 @@ reliability story is real.
 | Business search | Out of scope until multiple real shops exist | Marketplace search | We will not build a marketplace or reviews layer until at least 3–5 real businesses are active |
 | Promotions | Out of scope until CRM is real | Promotions and discount codes | Defer until reminders + deposits + loyalty are real |
 | Premium subscription | Out of scope | Premium tier for shops | We will not add a paid tier for shops until the baseline product is operationally excellent |
-| Mercado Pago | Still deferred, now intentionally gated behind accurate employee-specific availability | Mercado Pago deposits and full payments | Only start after booking, rescheduling, Agenda, and employee availability all agree on who is actually working |
+| Mercado Pago | Tenant-scoped deposit holds, Checkout Pro, signed webhook reconciliation, and mobile/public visibility are now implemented | Mercado Pago deposits and full payments | Keep each seller isolated, confirm only from authoritative provider state, and defer refunds/commissions until a later financial-operations phase |
 | Platform commissions | Out of scope; one-business-per-OWNER is the current unit | Commission and transfer model | We will not introduce a commission model until we have multi-tenant operations we can charge for |
 | Platform admin | Out of scope | Platform administrator dashboard | Defer |
 | Reliability and lifecycle tracking | Strong: DB-level double-booking constraint + transition state machine + idempotency | Less explicit lifecycle visibility per the reference's public surface | This is our differentiator. We record every transition, every cancel, every no-show, and we surface it to staff before they commit a new booking |
@@ -217,12 +217,12 @@ Deposits are commercially useful only when the slot being held is actually valid
    so every booking surface now shares one accurate employee
    schedule model instead of assuming all barbers follow only the
    shop-wide hours.
-6. **Deposit policy and Mercado Pago reservation holds** — next.
-   Payment should create a bounded pending reservation only after
-   the slot has passed the canonical employee-availability
-   checks.
-7. **Promotions and loyalty** — only after the payment stack is
-   real.
+6. **Deposit policy and Mercado Pago reservation holds** — implemented.
+   Payment now creates a bounded pending reservation only after the
+   slot passes canonical employee-availability checks, and confirmation
+   comes only from authoritative provider state.
+7. **Promotions and loyalty** — next only after observing real deposit
+   behavior and no-show impact.
 8. **Platform administration** — when multi-tenant operations
    become a real product problem, not a theoretical one.
 9. **Marketplace, search, and reviews** — only after multiple

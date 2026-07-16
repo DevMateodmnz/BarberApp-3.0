@@ -18,6 +18,7 @@ import {
 } from '@/components/AppointmentsAgendaScreenView.js';
 import { getAppointmentTransitionLabel } from '@/i18n/index.js';
 import {
+  buildAppointmentPaymentLabels,
   buildAppointmentNotificationLabels,
   getAvailableAppointmentTransitions,
 } from '@/lib/appointmentActions.js';
@@ -58,7 +59,9 @@ function buildAgendaAttentionLabels(
   appointment: DailyScheduleBoardAppointment,
   t: (key: string, options?: Record<string, unknown>) => string,
 ) {
-  const labels: string[] = [];
+  const labels = buildAppointmentPaymentLabels(appointment.bookingPaymentStatus, (key) =>
+    t(key),
+  );
 
   if (appointment.isReturningCustomer) {
     labels.push(t('appointments.agenda.returningCustomer'));
@@ -419,7 +422,13 @@ export default function AppointmentsScreen() {
           context?.role === 'OWNER' && appointment.employee?.user?.name
             ? t('appointments.employeeLabel', { name: appointment.employee.user.name })
             : null,
-        notificationLabels: buildAppointmentNotificationLabels(appointment.notifications, t),
+        notificationLabels: [
+          ...buildAppointmentPaymentLabels(
+            appointment.bookingPayments?.[0]?.status ?? null,
+            (key) => t(key),
+          ),
+          ...buildAppointmentNotificationLabels(appointment.notifications, t),
+        ],
         notes: appointment.notes,
         actions,
       };

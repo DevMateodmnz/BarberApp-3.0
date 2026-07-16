@@ -41,21 +41,16 @@ interface PublicBookingFlowProps {
   onBookingConfirmed?: (confirmation: PublicBookingConfirmation) => void;
 }
 
-function formatPrice(priceCents: number, currency: string) {
+function formatPrice(priceCents: number | null | undefined, currency: string) {
+  if (priceCents === null || priceCents === undefined) {
+    return '—';
+  }
+
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency,
     maximumFractionDigits: 0,
   }).format(priceCents / 100);
-}
-
-function formatLocalTime(isoString: string, timezone: string) {
-  return new Intl.DateTimeFormat('es-AR', {
-    timeZone: timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(isoString));
 }
 
 function formatLocalDateLabel(localDate: string, timezone: string) {
@@ -111,9 +106,7 @@ export function PublicBookingFlow({
   const [localDate, setLocalDate] = useState('');
   const [barbers, setBarbers] = useState<PublicBarber[]>([]);
   const [barberMessage, setBarberMessage] = useState('');
-  const [availability, setAvailability] = useState<PublicAvailability | null>(
-    null
-  );
+  const [availability, setAvailability] = useState<PublicAvailability | null>(null);
   const [selectedSlotStartAt, setSelectedSlotStartAt] = useState('');
   const [availabilityMessage, setAvailabilityMessage] = useState('');
   const [isLoadingBarbers, setIsLoadingBarbers] = useState(false);
@@ -138,10 +131,10 @@ export function PublicBookingFlow({
   );
 
   const selectedSlot = useMemo(
-    () =>
-      availability?.slots.find((slot) => slot.startAt === selectedSlotStartAt) ?? null,
+    () => availability?.slots.find((slot) => slot.startAt === selectedSlotStartAt) ?? null,
     [availability, selectedSlotStartAt]
   );
+
   const shouldShowBookingForm = Boolean(
     selectedService &&
       selectedBarber &&
@@ -159,7 +152,13 @@ export function PublicBookingFlow({
     ((confirmation: PublicBookingConfirmation) => {
       clearPendingBookingAttempt(shop.slug);
       saveBookingConfirmation(shop.slug, confirmation);
-      window.location.assign(`/barberias/${shop.slug}/confirmacion`);
+
+      if (confirmation.checkoutUrl && confirmation.appointmentStatus === 'PENDING') {
+        window.location.assign(confirmation.checkoutUrl);
+        return;
+      }
+
+      window.location.assign(`/barberias/${shop.slug}/confirmacion?ref=${encodeURIComponent(confirmation.bookingReference)}`);
     });
 
   useEffect(() => {
@@ -278,7 +277,6 @@ export function PublicBookingFlow({
     event.preventDefault();
 
     const payload = buildBookingPayload();
-
     if (!payload) {
       return;
     }
@@ -290,17 +288,12 @@ export function PublicBookingFlow({
       const persistedAttempt = readPendingBookingAttempt(shop.slug);
       const currentFingerprint = JSON.stringify(payload);
       const idempotencyKey =
-        persistedAttempt &&
-        JSON.stringify(persistedAttempt.payload) === currentFingerprint
+        persistedAttempt && JSON.stringify(persistedAttempt.payload) === currentFingerprint
           ? persistedAttempt.idempotencyKey
           : globalThis.crypto?.randomUUID?.() ??
             `booking_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-      const pendingAttempt = {
-        idempotencyKey,
-        payload,
-      };
-
+      const pendingAttempt = { idempotencyKey, payload };
       savePendingBookingAttempt(shop.slug, pendingAttempt);
 
       const confirmation = await submitBooking({
@@ -308,7 +301,6 @@ export function PublicBookingFlow({
         payload: pendingAttempt.payload,
       });
 
-      clearPendingBookingAttempt(shop.slug);
       handleBookingConfirmed(confirmation);
     } catch (error) {
       if (
@@ -331,7 +323,7 @@ export function PublicBookingFlow({
         setSubmitMessage(mapBrowserError(error));
       } else {
         setSubmitMessage(
-          'No pudimos confirmar si la reserva se completó. Reintentá con el mismo formulario para validar el mismo turno.'
+          'No pudimos confirmar el estado de la reserva. Reintentá con el mismo formulario para validar el mismo turno.'
         );
       }
     } finally {
@@ -341,276 +333,184 @@ export function PublicBookingFlow({
 
   return (
     <main className={styles.page}>
-      <section className={styles.card} aria-labelledby="public-booking-title">
-        <p className={styles.eyebrow}>Reserva online</p>
-        <h1 id="public-booking-title" className={styles.title}>
-          {shop.name}
-        </h1>
-        <p className={styles.subtitle}>Zona horaria: {shop.timezone}</p>
-        <p className={styles.subtitle}>
-          Reserva con {bookingConfig.policy.minimumNoticeMinutes} minutos de
-          anticipación y hasta {bookingConfig.policy.maximumBookingHorizonDays}{' '}
-          días corridos.
-        </p>
+      <section className={styles.card}>
+        <div className={styles.headerBlock}>
+          <p className={styles.eyebrow}>Reservá tu turno</p>
+          <h1 className={styles.title}>{shop.name}</h1>
+          <p className={styles.subtitle}>
+            Elegí servicio, profesional y horario. La agenda respeta la disponibilidad real de la barbería.
+          </p>
+        </div>
 
-        <div className={styles.stack}>
-          <fieldset className={styles.section}>
-            <legend className={styles.legend}>1. Elegí un servicio</legend>
-            {services.length === 0 ? (
-              <p className={styles.status}>
-                Esta barbería todavía no publicó servicios para reservar.
-              </p>
-            ) : (
-              <div className={styles.optionList}>
-                {services.map((service) => (
-                  <label key={service.serviceId} className={styles.option}>
-                    <span className={styles.optionInline}>
-                      <input
-                        type="radio"
-                        name="service"
-                        value={service.serviceId}
-                        checked={selectedServiceId === service.serviceId}
-                        onChange={() => void handleServiceChange(service.serviceId)}
-                      />
-                      <span>
-                        <span className={styles.optionTitle}>{service.name}</span>
-                        <br />
-                        <span className={styles.muted}>
-                          {service.durationMinutes} min ·{' '}
-                          {formatPrice(service.priceCents, service.currency)}
-                        </span>
-                        {service.description ? (
-                          <>
-                            <br />
-                            <span className={styles.muted}>{service.description}</span>
-                          </>
-                        ) : null}
-                      </span>
-                    </span>
-                  </label>
-                ))}
+        <div className={styles.section}>
+          <label className={styles.label} htmlFor="service-select">
+            Servicio
+          </label>
+          <select
+            id="service-select"
+            className={styles.select}
+            value={selectedServiceId}
+            onChange={(event) => void handleServiceChange(event.target.value)}
+          >
+            <option value="">Seleccioná un servicio</option>
+            {services.map((service) => (
+              <option key={service.serviceId} value={service.serviceId}>
+                {service.name} · {formatPrice(service.priceCents, service.currency)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selectedService ? (
+          <div className={styles.infoPanel}>
+            <p className={styles.infoTitle}>{selectedService.name}</p>
+            <p className={styles.infoBody}>
+              Duración estimada: {selectedService.durationMinutes} minutos.
+            </p>
+            {selectedService.depositRequired ? (
+              <div className={styles.depositPanel}>
+                <p className={styles.infoTitle}>Seña para confirmar el turno</p>
+                <p className={styles.infoBody}>
+                  Total del servicio: {formatPrice(selectedService.priceCents, selectedService.currency)}.
+                </p>
+                <p className={styles.infoBody}>
+                  Seña requerida: {formatPrice(selectedService.depositAmountCents, selectedService.currency)}.
+                </p>
+                <p className={styles.infoBody}>
+                  Saldo en barbería: {formatPrice(selectedService.remainingAmountCents, selectedService.currency)}.
+                </p>
+                <p className={styles.infoBody}>
+                  El horario quedará reservado durante {bookingConfig.depositPolicy?.holdDurationMinutes ?? 15} minutos mientras realizás el pago.
+                </p>
+                <p className={styles.infoBody}>
+                  Tu turno se confirmará cuando Mercado Pago apruebe la operación.
+                </p>
+                {bookingConfig.depositPolicy?.publicTerms ? (
+                  <p className={styles.infoBody}>{bookingConfig.depositPolicy.publicTerms}</p>
+                ) : null}
               </div>
-            )}
-          </fieldset>
+            ) : null}
+          </div>
+        ) : null}
 
-          <fieldset className={styles.section} disabled={!selectedServiceId}>
-            <legend className={styles.legend}>2. Elegí un barbero</legend>
-            {isLoadingBarbers ? (
-              <p className={styles.status}>Buscando barberos disponibles…</p>
-            ) : barbers.length > 0 ? (
-              <div className={styles.optionList}>
-                {barbers.map((barber) => (
-                  <label key={barber.barberId} className={styles.option}>
-                    <span className={styles.optionInline}>
-                      <input
-                        type="radio"
-                        name="barber"
-                        value={barber.barberId}
-                        checked={selectedBarberId === barber.barberId}
-                        onChange={() => {
-                          clearAttemptState();
-                          setSelectedBarberId(barber.barberId);
-                          setAvailability(null);
-                          setSelectedSlotStartAt('');
-                          setAvailabilityMessage('');
-                        }}
-                      />
-                      <span className={styles.optionTitle}>{barber.displayName}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <p className={barberMessage ? styles.error : styles.status}>
-                {barberMessage || 'Primero elegí un servicio.'}
-              </p>
-            )}
-          </fieldset>
+        {selectedServiceId ? (
+          <div className={styles.section}>
+            <label className={styles.label} htmlFor="barber-select">
+              Profesional
+            </label>
+            <select
+              id="barber-select"
+              className={styles.select}
+              value={selectedBarberId}
+              onChange={(event) => {
+                clearAttemptState();
+                setSelectedBarberId(event.target.value);
+                setLocalDate('');
+                setAvailability(null);
+                setSelectedSlotStartAt('');
+                setAvailabilityMessage('');
+              }}
+              disabled={isLoadingBarbers || barbers.length === 0}
+            >
+              <option value="">Seleccioná un profesional</option>
+              {barbers.map((barber) => (
+                <option key={barber.barberId} value={barber.barberId}>
+                  {barber.displayName}
+                </option>
+              ))}
+            </select>
+            {barberMessage ? <p className={styles.message}>{barberMessage}</p> : null}
+          </div>
+        ) : null}
 
-          <section className={styles.section} aria-labelledby="date-section-title">
-            <h2 id="date-section-title" className={styles.legend}>
-              3. Elegí una fecha
-            </h2>
-            <div className={styles.controls}>
-              <label className={styles.label}>
-                Fecha de reserva
-                <input
-                  aria-label="Fecha de reserva"
-                  className={styles.input}
-                  type="date"
-                  value={localDate}
-                  onChange={(event) => {
+        {selectedBarber ? (
+          <div className={styles.section}>
+            <label className={styles.label} htmlFor="date-select">
+              Fecha
+            </label>
+            <input
+              id="date-select"
+              className={styles.input}
+              type="date"
+              value={localDate}
+              onChange={(event) => {
+                clearAttemptState();
+                setLocalDate(event.target.value);
+                setAvailability(null);
+                setSelectedSlotStartAt('');
+                setAvailabilityMessage('');
+              }}
+            />
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={() => void handleAvailabilityLookup()}
+              disabled={!localDate || isLoadingAvailability}
+            >
+              {isLoadingAvailability ? 'Buscando horarios…' : 'Ver horarios disponibles'}
+            </button>
+            {availabilityMessage ? <p className={styles.message}>{availabilityMessage}</p> : null}
+          </div>
+        ) : null}
+
+        {availability && availability.slots.length > 0 ? (
+          <div className={styles.section}>
+            <p className={styles.label}>
+              Horarios para {formatLocalDateLabel(availability.localDate, availability.timezone)}
+            </p>
+            <div className={styles.slotGrid}>
+              {availability.slots.map((slot) => (
+                <button
+                  key={slot.startAt}
+                  type="button"
+                  className={slot.startAt === selectedSlotStartAt ? styles.slotButtonActive : styles.slotButton}
+                  onClick={() => {
                     clearAttemptState();
-                    setLocalDate(event.currentTarget.value);
-                    setAvailability(null);
-                    setSelectedSlotStartAt('');
-                    setAvailabilityMessage('');
+                    setSelectedSlotStartAt(slot.startAt);
                   }}
-                  disabled={!selectedBarberId}
-                />
-              </label>
-              <button
-                type="button"
-                className={styles.button}
-                onClick={() => void handleAvailabilityLookup()}
-                disabled={!selectedServiceId || !selectedBarberId || !localDate}
-              >
-                Ver horarios disponibles
-              </button>
+                >
+                  {new Intl.DateTimeFormat('es-AR', {
+                    timeZone: availability.timezone,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  }).format(new Date(slot.startAt))}
+                </button>
+              ))}
             </div>
-          </section>
+          </div>
+        ) : null}
 
-          <section className={styles.section} aria-labelledby="slot-section-title">
-            <h2 id="slot-section-title" className={styles.legend}>
-              4. Elegí un horario
-            </h2>
-            {isLoadingAvailability ? (
-              <p className={styles.status}>Buscando horarios disponibles…</p>
-            ) : availability?.slots.length ? (
-              <div className={styles.slotGrid}>
-                {availability.slots.map((slot) => {
-                  const isActive = slot.startAt === selectedSlotStartAt;
-                  const className = isActive
-                    ? `${styles.slotButton} ${styles.slotButtonActive}`
-                    : styles.slotButton;
+        {shouldShowBookingForm ? (
+          <form className={styles.form} onSubmit={handleSubmit}>
+            <label className={styles.label} htmlFor="client-name">Nombre y apellido</label>
+            <input id="client-name" className={styles.input} value={clientName} onChange={(event) => setClientName(event.target.value)} />
 
-                  return (
-                    <button
-                      key={slot.startAt}
-                      type="button"
-                      className={className}
-                      onClick={() => {
-                        clearAttemptState();
-                        setSelectedSlotStartAt(slot.startAt);
-                      }}
-                    >
-                      {formatLocalTime(slot.startAt, availability.timezone)}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className={availabilityMessage ? styles.error : styles.status}>
-                {availabilityMessage || 'Elegí servicio, barbero y fecha para ver horarios.'}
-              </p>
-            )}
+            <label className={styles.label} htmlFor="client-phone">Teléfono</label>
+            <input id="client-phone" className={styles.input} value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} placeholder="+543811234567" />
 
-            {selectedSlot && selectedService && selectedBarber ? (
-              <p className={styles.summary}>
-                Turno seleccionado: {selectedService.name} con{' '}
-                {selectedBarber.displayName} el{' '}
-                {formatLocalDateLabel(localDate, shop.timezone)} a las{' '}
-                {formatLocalTime(selectedSlot.startAt, shop.timezone)}.
+            <label className={styles.label} htmlFor="client-email">Email (opcional)</label>
+            <input id="client-email" className={styles.input} value={clientEmail} onChange={(event) => setClientEmail(event.target.value)} />
+
+            <label className={styles.label} htmlFor="client-notes">Notas (opcional)</label>
+            <textarea id="client-notes" className={styles.textarea} value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
+
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" checked={consentAccepted} onChange={(event) => setConsentAccepted(event.target.checked)} />
+              <span>{bookingConfig.consent.text}</span>
+            </label>
+
+            {submitMessage ? (
+              <p ref={submitMessageRef} className={styles.message} tabIndex={-1}>
+                {submitMessage}
               </p>
             ) : null}
-          </section>
 
-          {shouldShowBookingForm ? (
-            <section className={styles.section} aria-labelledby="form-section-title">
-              <h2 id="form-section-title" className={styles.legend}>
-                5. Completá tus datos
-              </h2>
-              <form
-                className={styles.formGrid}
-                noValidate
-                onSubmit={(event) => void handleSubmit(event)}
-              >
-                <label className={styles.label}>
-                  Nombre y apellido
-                  <input
-                    className={styles.input}
-                    type="text"
-                    value={clientName}
-                    onChange={(event) => {
-                      clearAttemptState();
-                      setClientName(event.currentTarget.value);
-                    }}
-                    autoComplete="name"
-                    required
-                  />
-                </label>
-
-                <label className={styles.label}>
-                  Teléfono
-                  <input
-                    className={styles.input}
-                    type="tel"
-                    value={clientPhone}
-                    onChange={(event) => {
-                      clearAttemptState();
-                      setClientPhone(event.currentTarget.value);
-                    }}
-                    autoComplete="tel"
-                    inputMode="tel"
-                    pattern="^\\+[1-9]\\d{7,15}$"
-                    required
-                  />
-                </label>
-
-                <label className={styles.label}>
-                  Email (opcional)
-                  <input
-                    className={styles.input}
-                    type="email"
-                    value={clientEmail}
-                    onChange={(event) => {
-                      clearAttemptState();
-                      setClientEmail(event.currentTarget.value);
-                    }}
-                    autoComplete="email"
-                    inputMode="email"
-                    placeholder="email@ejemplo.com"
-                  />
-                </label>
-
-                <label className={styles.label}>
-                  Notas (opcional)
-                  <textarea
-                    className={styles.textarea}
-                    value={notes}
-                    onChange={(event) => {
-                      clearAttemptState();
-                      setNotes(event.currentTarget.value);
-                    }}
-                    maxLength={500}
-                  />
-                </label>
-
-                <label className={styles.checkboxRow}>
-                  <input
-                    type="checkbox"
-                    checked={consentAccepted}
-                    onChange={(event) => {
-                      clearAttemptState();
-                      setConsentAccepted(event.currentTarget.checked);
-                    }}
-                    required
-                  />
-                  <span>{bookingConfig.consent.text}</span>
-                </label>
-
-                {submitMessage ? (
-                  <p
-                    ref={submitMessageRef}
-                    className={styles.error}
-                    role="alert"
-                    tabIndex={-1}
-                  >
-                    {submitMessage}
-                  </p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  className={styles.button}
-                  disabled={isSubmitting || !selectedSlot}
-                >
-                  {isSubmitting ? 'Reservando…' : 'Reservar turno'}
-                </button>
-              </form>
-            </section>
-          ) : null}
-        </div>
+            <button type="submit" className={styles.primaryButton} disabled={isSubmitting}>
+              {isSubmitting ? 'Procesando…' : selectedService?.depositRequired ? 'Reservar y pagar seña' : 'Confirmar turno'}
+            </button>
+          </form>
+        ) : null}
       </section>
     </main>
   );

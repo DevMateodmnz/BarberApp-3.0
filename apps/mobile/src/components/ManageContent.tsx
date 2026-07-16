@@ -11,6 +11,7 @@ import { tokens } from '@/theme/index.js';
 
 export interface ManageContentProps {
   role: 'OWNER' | 'BARBER' | 'CLIENT';
+  onPayments: () => void;
   onNotifications: () => void;
   onServices: () => void;
   onEmployees: () => void;
@@ -21,6 +22,7 @@ export interface ManageContentProps {
 
 export function ManageContent({
   role,
+  onPayments,
   onNotifications,
   onServices,
   onEmployees,
@@ -70,6 +72,15 @@ export function ManageContent({
               <View style={styles.tileList}>
                 {isOwner ? (
                   <>
+                    <NavigationTile
+                      testID="manage-payments"
+                      title={t('paymentsSettings.title')}
+                      description={t('manage.items.payments.description')}
+                      iconName="card-outline"
+                      accessibilityLabel={t('paymentsSettings.title')}
+                      onPress={onPayments}
+                      showChevron
+                    />
                     <NavigationTile
                       testID="manage-notifications"
                       title={t('notificationsOperations.title')}

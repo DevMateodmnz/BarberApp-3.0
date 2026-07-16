@@ -3,6 +3,7 @@ import type {
   PublicBarber,
   PublicBookingConfirmation,
   PublicCreateAppointmentPayload,
+  PublicPaymentStatus,
 } from '@/lib/api/types';
 
 interface ApiEnvelope<T> {
@@ -87,5 +88,14 @@ export function submitPublicBooking(input: {
       },
       body: JSON.stringify(input.payload),
     }
+  );
+}
+
+export function loadPublicPaymentStatus(input: {
+  slug: string;
+  reference: string;
+}) {
+  return fetchEnvelope<PublicPaymentStatus>(
+    `/api/public-booking/shops/${encodeURIComponent(input.slug)}/bookings/${encodeURIComponent(input.reference)}/payment`
   );
 }

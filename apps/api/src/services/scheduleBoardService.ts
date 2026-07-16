@@ -28,6 +28,7 @@ type ScheduleBoardDb = Pick<
   | 'appointmentNotification'
   | 'barbershop'
   | 'barbershopScheduleException'
+  | 'bookingPayment'
   | 'employee'
   | 'employeeScheduleException'
   | 'employeeService'
@@ -126,7 +127,13 @@ function createStatusSummary() {
 
 function addAppointmentToSummary(
   summary: ReturnType<typeof createStatusSummary>,
-  appointment: { status: AppointmentStatus; startAt: Date; endAt: Date }
+  appointment: {
+    status: AppointmentStatus;
+    startAt: Date;
+    endAt: Date;
+    paymentHoldExpiresAt?: Date | null;
+  },
+  now: Date
 ) {
   if (appointment.status === 'PENDING') {
     summary.pending += 1;
@@ -142,7 +149,7 @@ function addAppointmentToSummary(
     summary.cancelled += 1;
   }
 
-  if (isBlockingAppointmentStatus(appointment.status)) {
+  if (isBlockingAppointmentStatus(appointment.status, appointment.paymentHoldExpiresAt ?? null, now)) {
     summary.occupiedMinutes += Math.max(
       0,
       Math.round((appointment.endAt.getTime() - appointment.startAt.getTime()) / 60_000)
@@ -689,6 +696,7 @@ export async function getDailyScheduleBoard(
         startAt: true,
         endAt: true,
         status: true,
+        paymentHoldExpiresAt: true,
         deletedAt: true,
       },
       orderBy: [
@@ -718,6 +726,25 @@ export async function getDailyScheduleBoard(
   ]);
 
   const appointmentIds = appointments.map((appointment) => appointment.id);
+  const latestBookingPayments = appointmentIds.length > 0
+    ? await db.bookingPayment.findMany({
+        where: {
+          appointmentId: { in: appointmentIds },
+        },
+        select: {
+          appointmentId: true,
+          status: true,
+          createdAt: true,
+        },
+        orderBy: [{ appointmentId: 'asc' }, { createdAt: 'desc' }],
+      })
+    : [];
+  const bookingPaymentStatusByAppointment = new Map<string, typeof latestBookingPayments[number]['status']>();
+  for (const payment of latestBookingPayments) {
+    if (!bookingPaymentStatusByAppointment.has(payment.appointmentId)) {
+      bookingPaymentStatusByAppointment.set(payment.appointmentId, payment.status);
+    }
+  }
   const failedNotifications = appointmentIds.length > 0
     ? await db.appointmentNotification.groupBy({
         by: ['appointmentId'],
@@ -820,7 +847,7 @@ export async function getDailyScheduleBoard(
       const employeeSchedule = employeeSchedules.get(employee.id)!;
       const employeeAppointments = appointmentsByEmployee.get(employee.id) ?? [];
       const blockingAppointments = employeeAppointments
-        .filter((appointment) => isBlockingAppointmentStatus(appointment.status))
+        .filter((appointment) => isBlockingAppointmentStatus(appointment.status, appointment.paymentHoldExpiresAt ?? null, now))
         .map((appointment) => ({
           startAt: appointment.startAt,
           endAt: appointment.endAt,
@@ -830,7 +857,7 @@ export async function getDailyScheduleBoard(
       const summary = createStatusSummary();
 
       for (const appointment of employeeAppointments) {
-        addAppointmentToSummary(summary, appointment);
+        addAppointmentToSummary(summary, appointment, now);
       }
 
       const closedIntervals = deriveClosedIntervals(
@@ -914,6 +941,7 @@ export async function getDailyScheduleBoard(
               appointment.endAt
             ),
             status: appointment.status,
+            bookingPaymentStatus: bookingPaymentStatusByAppointment.get(appointment.id) ?? null,
             clientDisplayName: appointment.clientName,
             customerId: appointment.customerId,
             isReturningCustomer: customerAggregate.completedCount > 0,

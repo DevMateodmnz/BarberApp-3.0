@@ -236,6 +236,9 @@ export const en = {
     businessSectionHint: 'Move occasional administration off Home while keeping it close.',
     settingsSectionTitle: 'App settings',
     items: {
+      payments: {
+        description: 'Connect Mercado Pago, configure deposits, and review payment attention items.',
+      },
       notifications: {
         description: 'Review delivery status, retry failures, and inspect notification history.',
       },
@@ -254,6 +257,53 @@ export const en = {
       language: {
         description: 'Change the interface language without restarting the app.',
       },
+    },
+  },
+  paymentsSettings: {
+    title: 'Payments & deposits',
+    subtitle: 'Connect Mercado Pago, configure public deposits, and track payment operations.',
+    blockedTitle: 'Owner access only',
+    blockedMessage: 'Only owners can manage payment settings.',
+    saving: 'Saving…',
+    save: 'Save settings',
+    connection: {
+      title: 'Mercado Pago connection',
+      connect: 'Connect Mercado Pago',
+      reconnect: 'Reconnect',
+      disconnect: 'Disconnect',
+      status: {
+        DISCONNECTED: 'Disconnected',
+        CONNECTING: 'Connecting',
+        CONNECTED: 'Connected',
+        REFRESH_REQUIRED: 'Reconnect required',
+        REVOKED: 'Disconnected',
+        ERROR: 'Error',
+      },
+    },
+    policy: {
+      title: 'Deposit policy',
+      fixedAmount: 'Fixed deposit (cents)',
+      percentageBasisPoints: 'Percentage (basis points)',
+      holdDuration: 'Hold duration (minutes)',
+      publicTerms: 'Public terms',
+      previewExample: 'Example preview uses server-side integer money rules and will apply to public bookings only.',
+      modes: {
+        DISABLED: 'Disabled',
+        FIXED: 'Fixed',
+        PERCENTAGE: 'Percentage',
+      },
+    },
+    attention: {
+      title: 'Operational attention',
+      pendingTooLong: 'Pending too long: {{count}}',
+      expired: 'Expired: {{count}}',
+      reviewRequired: 'Review required: {{count}}',
+      approvedCancelled: 'Approved on cancelled appointments: {{count}}',
+    },
+    messages: {
+      connectStarted: 'Mercado Pago authorization opened in the browser.',
+      disconnected: 'Mercado Pago was disconnected and deposits were disabled.',
+      policySaved: 'Deposit settings updated successfully.',
     },
   },
   summary: {
@@ -276,6 +326,13 @@ export const en = {
     detailAction: 'View detail',
     detailNotificationsTitle: 'Notification history',
     detailNotificationsEmpty: 'No delivery events yet.',
+    paymentLabels: {
+      pending: 'Deposit pending',
+      approved: 'Deposit paid',
+      expired: 'Reservation expired',
+      rejected: 'Payment rejected',
+      reviewRequired: 'Payment review required',
+    },
     detailHistoryEmpty: 'No change history yet.',
     modeTitle: 'View mode',
     modes: {

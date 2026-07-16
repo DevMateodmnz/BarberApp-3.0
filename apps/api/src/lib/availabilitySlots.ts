@@ -10,6 +10,7 @@ import {
 } from './dateUtils.js';
 import { timeToMinutes } from './businessHours.js';
 import { resolveEmployeeEffectiveScheduleForDate } from './employeeEffectiveSchedule.js';
+import { buildBlockingAppointmentWhereInput } from './appointmentBlocking.js';
 
 type AvailabilityDatabase = Pick<PrismaClient, 'appointment'>;
 
@@ -92,7 +93,6 @@ export async function buildAvailabilitySlots(
     timezone,
     serviceDurationMinutes,
     slotIntervalMinutes,
-    blockingStatuses,
   } = input;
 
   const now = input.now ?? new Date();
@@ -123,7 +123,7 @@ export async function buildAvailabilitySlots(
         ? { not: input.excludeAppointmentId }
         : undefined,
       employeeId,
-      status: { in: blockingStatuses },
+      ...buildBlockingAppointmentWhereInput(now),
       startAt: { lt: nextDayStart },
       endAt: { gt: dayStart },
     },

@@ -20,7 +20,6 @@ import {
 import { getPublicBookingPolicy } from '../lib/publicBookingPolicy.js';
 import {
   getLocalDateStringInTimeZone,
-  getLocalTimeStringInTimeZone,
 } from '../lib/dateUtils.js';
 import { buildLifecycleUpdateForCancel } from '../lib/appointmentLifecycle.js';
 import * as customerService from './customerService.js';
@@ -38,20 +37,19 @@ import {
 import { normalizeEmail } from '../lib/email.js';
 import { resolvePublishedPublicBarbershop } from './publicCatalogService.js';
 import { validateEmployeeAvailabilityWindow } from './employeeScheduleService.js';
+import {
+  getLatestBookingPaymentForAppointment,
+  createCheckoutPreferenceForBookingPayment,
+  loadPublicBookingPaymentStateByReference,
+  releaseExpiredPaymentHolds,
+  syncBookingPaymentOnAppointmentCancellation,
+} from './payments/bookingPaymentService.js';
+import { getDepositPolicyPreviewForService } from './payments/depositPolicyService.js';
+import { generatePaymentExternalReference } from '../lib/payments/references.js';
 
-interface PublicBookingConfirmationDto {
-  bookingReference: string;
-  barbershopName: string;
-  serviceName: string;
-  barberName: string;
-  timezone: string;
-  localDate: string;
-  localStartTime: string;
-  startAt: string;
-  endAt: string;
-  clientPhoneDisplay: string;
-  status: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW' | 'IN_PROGRESS' | 'PENDING';
-}
+type PublicBookingConfirmationDto = Awaited<
+  ReturnType<typeof loadPublicBookingPaymentStateByReference>
+>;
 
 interface CreatePublicBookingInput {
   slug: string;
@@ -84,11 +82,6 @@ function isPrivateAvailabilityError(error: unknown): boolean {
   );
 }
 
-function resolvePublicBarberDisplayName(name: string | null): string {
-  const trimmed = name?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : 'Barber';
-}
-
 function isUniqueConstraintError(error: unknown): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -112,52 +105,6 @@ function normalizePublicBookingStartAt(value: string): Date {
   return parsed;
 }
 
-function mapPublicAppointmentConfirmation(appointment: {
-  publicReference: string | null;
-  clientPhone: string | null;
-  status: PublicBookingConfirmationDto['status'];
-  startAt: Date;
-  endAt: Date;
-  serviceName: string;
-  barbershop: {
-    name: string;
-    timezone: string;
-  };
-  employee: {
-    user: {
-      name: string | null;
-    };
-  };
-}): PublicBookingConfirmationDto {
-  if (!appointment.publicReference) {
-    throw new AppError(
-      409,
-      'PUBLIC_BOOKING_IDEMPOTENCY_CONFLICT',
-      'The stored public booking replay record is incomplete'
-    );
-  }
-
-  return {
-    bookingReference: appointment.publicReference,
-    barbershopName: appointment.barbershop.name,
-    serviceName: appointment.serviceName,
-    barberName: resolvePublicBarberDisplayName(appointment.employee.user.name),
-    timezone: appointment.barbershop.timezone,
-    localDate: getLocalDateStringInTimeZone(
-      appointment.barbershop.timezone,
-      appointment.startAt
-    ),
-    localStartTime: getLocalTimeStringInTimeZone(
-      appointment.barbershop.timezone,
-      appointment.startAt
-    ),
-    startAt: appointment.startAt.toISOString(),
-    endAt: appointment.endAt.toISOString(),
-    clientPhoneDisplay: appointment.clientPhone ?? '',
-    status: appointment.status,
-  };
-}
-
 async function loadPublicAppointmentConfirmation(
   appointmentId: string
 ): Promise<PublicBookingConfirmationDto> {
@@ -165,30 +112,11 @@ async function loadPublicAppointmentConfirmation(
     where: { id: appointmentId },
     select: {
       publicReference: true,
-      clientPhone: true,
-      status: true,
-      startAt: true,
-      endAt: true,
-      serviceName: true,
-      barbershop: {
-        select: {
-          name: true,
-          timezone: true,
-        },
-      },
-      employee: {
-        select: {
-          user: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      },
+      barbershop: { select: { publicSlug: true } },
     },
   });
 
-  if (!appointment || appointment.status !== 'CONFIRMED') {
+  if (!appointment?.publicReference || !appointment.barbershop.publicSlug) {
     throw new AppError(
       409,
       'PUBLIC_BOOKING_IDEMPOTENCY_CONFLICT',
@@ -196,58 +124,23 @@ async function loadPublicAppointmentConfirmation(
     );
   }
 
-  return mapPublicAppointmentConfirmation(appointment);
+  return loadPublicBookingPaymentStateByReference({
+    slug: appointment.barbershop.publicSlug,
+    publicReference: appointment.publicReference,
+  });
 }
 
 export async function getPublicBookingConfirmationByReference(input: {
   slug: string;
   publicReference: string;
 }): Promise<PublicBookingConfirmationDto> {
-  const trimmedReference = input.publicReference.trim();
-
-  if (!isPublicBookingReference(trimmedReference)) {
+  if (!isPublicBookingReference(input.publicReference.trim())) {
     throw createPublicNotFoundError();
   }
-
-  const appointment = await prisma.appointment.findUnique({
-    where: { publicReference: trimmedReference },
-    select: {
-      publicReference: true,
-      clientPhone: true,
-      status: true,
-      startAt: true,
-      endAt: true,
-      serviceName: true,
-      barbershop: {
-        select: {
-          publicSlug: true,
-          isActive: true,
-          name: true,
-          timezone: true,
-        },
-      },
-      employee: {
-        select: {
-          user: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      },
-    },
+  return loadPublicBookingPaymentStateByReference({
+    slug: input.slug,
+    publicReference: input.publicReference.trim(),
   });
-
-  if (
-    !appointment ||
-    !appointment.barbershop.publicSlug ||
-    appointment.barbershop.publicSlug !== input.slug ||
-    !appointment.barbershop.isActive
-  ) {
-    throw createPublicNotFoundError();
-  }
-
-  return mapPublicAppointmentConfirmation(appointment);
 }
 
 export async function createPublicBookingBySlug(
@@ -370,6 +263,7 @@ export async function createPublicBookingBySlug(
       });
 
       const endAt = calculateAppointmentEndAt(startAt, service.durationMinutes);
+      await releaseExpiredPaymentHolds({ now, employeeId: employee.id });
 
       try {
         await validateEmployeeAvailabilityWindow({
@@ -393,6 +287,11 @@ export async function createPublicBookingBySlug(
         throw createPublicSlotUnavailableError();
       }
 
+      const depositPreview = await getDepositPolicyPreviewForService({
+        barbershopId: barbershop.id,
+        servicePriceCents: service.priceCents,
+      });
+
       // Link the appointment to a first-class Customer record.
       // Public booking input is already E.164, so the phone is
       // directly usable. The upsert is idempotent; two concurrent
@@ -409,6 +308,11 @@ export async function createPublicBookingBySlug(
         }
       );
 
+      const publicReference = generatePublicBookingReference();
+      const holdExpiresAt = depositPreview.enabled
+        ? new Date(now.getTime() + depositPreview.holdDurationMinutes * 60_000)
+        : null;
+
       const appointment = await tx.appointment.create({
         data: {
           barbershopId: barbershop.id,
@@ -418,15 +322,13 @@ export async function createPublicBookingBySlug(
           serviceId: service.id,
           startAt,
           endAt,
-          status: 'CONFIRMED',
+          status: depositPreview.enabled ? 'PENDING' : 'CONFIRMED',
+          paymentHoldExpiresAt: holdExpiresAt,
           clientName,
           clientPhone,
           clientEmail,
-          // Public booking input is already E.164 (validated upstream);
-          // mirror it into the normalized column so the customer lookup
-          // endpoint can aggregate public + staff history.
           clientPhoneNormalized: clientPhone,
-          publicReference: generatePublicBookingReference(),
+          publicReference,
           publicConsentAcceptedAt: now,
           publicConsentVersion: consent.version,
           notes,
@@ -434,10 +336,33 @@ export async function createPublicBookingBySlug(
         },
       });
 
-      await scheduleAppointmentNotificationsForNewAppointment(tx, {
-        appointmentId: appointment.id,
-        now,
-      });
+      if (!depositPreview.enabled) {
+        await scheduleAppointmentNotificationsForNewAppointment(tx, {
+          appointmentId: appointment.id,
+          now,
+        });
+      }
+
+      const bookingPayment = depositPreview.enabled
+        ? await tx.bookingPayment.create({
+            data: {
+              barbershopId: barbershop.id,
+              appointmentId: appointment.id,
+              provider: 'MERCADO_PAGO',
+              purpose: 'DEPOSIT',
+              status: 'CREATING',
+              amountCents: depositPreview.amountCents!,
+              currency: depositPreview.currency,
+              policyModeSnapshot: depositPreview.mode,
+              policyValueSnapshot:
+                depositPreview.mode === 'FIXED'
+                  ? depositPreview.amountCents!
+                  : Math.round((depositPreview.amountCents! * 10_000) / service.priceCents),
+              externalReference: generatePaymentExternalReference(),
+              expiresAt: holdExpiresAt!,
+            },
+          })
+        : null;
 
       await tx.publicBookingIdempotency.update({
         where: {
@@ -454,26 +379,51 @@ export async function createPublicBookingBySlug(
 
       return {
         replayed: false,
-        confirmation: {
-          bookingReference: appointment.publicReference ?? '',
-          barbershopName: barbershop.name,
-          serviceName: appointment.serviceName,
-          barberName: resolvePublicBarberDisplayName(employee.user.name),
-          timezone: barbershop.timezone,
-          localDate,
-          localStartTime: getLocalTimeStringInTimeZone(
-            barbershop.timezone,
-            startAt
-          ),
-          startAt: appointment.startAt.toISOString(),
-          endAt: appointment.endAt.toISOString(),
-          clientPhoneDisplay: clientPhone,
-          status: 'CONFIRMED' as const,
-        },
+        appointmentId: appointment.id,
+        publicReference,
+        bookingPaymentId: bookingPayment?.id ?? null,
       };
     });
 
-    return result;
+    if (result.bookingPaymentId) {
+      try {
+        await createCheckoutPreferenceForBookingPayment({
+          bookingPaymentId: result.bookingPaymentId,
+          publicReference: result.publicReference,
+          barbershopSlug: barbershop.slug,
+        });
+      } catch (error) {
+        await prisma.$transaction(async (tx) => {
+          await tx.bookingPayment.update({
+            where: { id: result.bookingPaymentId! },
+            data: {
+              status: 'ERROR',
+              lastErrorCode:
+                error instanceof AppError ? error.code : 'PAYMENT_PREFERENCE_FAILED',
+            },
+          });
+          await tx.appointment.update({
+            where: { id: result.appointmentId },
+            data: {
+              status: 'CANCELLED',
+              paymentHoldExpiresAt: null,
+              ...buildLifecycleUpdateForCancel({
+                actorRole: null,
+                source: 'SYSTEM',
+                now,
+                reason: 'PAYMENT_PREFERENCE_FAILED',
+              }),
+            },
+          });
+        });
+        throw error;
+      }
+    }
+
+    return {
+      replayed: result.replayed,
+      confirmation: await loadPublicAppointmentConfirmation(result.appointmentId),
+    };
   } catch (error) {
     if (isUniqueConstraintError(error)) {
       const existing = await prisma.publicBookingIdempotency.findUnique({
@@ -542,6 +492,18 @@ interface PublicCancelResult {
     cancelledAt: string;
     cancellationSource: 'PUBLIC_BOOKING';
     cancelReason: string | null;
+    paymentStatus?:
+      | 'CREATING'
+      | 'PENDING'
+      | 'APPROVED'
+      | 'REJECTED'
+      | 'CANCELLED'
+      | 'EXPIRED'
+      | 'REFUNDED'
+      | 'REVIEW_REQUIRED'
+      | 'ERROR'
+      | null;
+    refundReviewRequired?: boolean;
   };
 }
 
@@ -626,17 +588,31 @@ export async function cancelPublicBookingByReference(
       throw createPublicNotFoundError();
     }
 
+    const latestPayment = await getLatestBookingPaymentForAppointment(
+      diagnostic.id,
+      tx
+    );
+    const allowPendingCancellation =
+      diagnostic.status === 'PENDING' &&
+      latestPayment !== null &&
+      ['CREATING', 'PENDING', 'ERROR', 'REJECTED', 'CANCELLED'].includes(
+        latestPayment.status
+      );
+    const cancellableStatuses: Array<'CONFIRMED' | 'PENDING'> =
+      allowPendingCancellation ? ['CONFIRMED', 'PENDING'] : ['CONFIRMED'];
+
     // 2. The atomic CAS. PostgreSQL evaluates the predicate and
     //    the SET atomically: the only writer that can succeed is
-    //    the one that finds status='CONFIRMED' AND startAt > now.
+    //    the one that finds an eligible future booking state.
     const updated = await tx.appointment.updateMany({
       where: {
         id: diagnostic.id,
-        status: 'CONFIRMED',
+        status: { in: cancellableStatuses },
         startAt: { gt: now },
       },
       data: {
         status: 'CANCELLED',
+        paymentHoldExpiresAt: null,
         ...lifecycleUpdate,
       },
     });
@@ -666,7 +642,7 @@ export async function cancelPublicBookingByReference(
       throw new AppError(
         409,
         'PUBLIC_BOOKING_CANCELLATION_CLOSED',
-        currentStatus !== 'CONFIRMED'
+        currentStatus !== 'CONFIRMED' && currentStatus !== 'PENDING'
           ? `This booking is ${currentStatus.toLowerCase()} and cannot be cancelled by the customer`
           : 'This booking can no longer be cancelled because it has already started'
       );
@@ -674,6 +650,14 @@ export async function cancelPublicBookingByReference(
 
     // 3. CAS won. Read back the full row (still inside the
     //    transaction) so the response is consistent.
+    const paymentSync = await syncBookingPaymentOnAppointmentCancellation({
+      appointmentId: diagnostic.id,
+      barbershopId: diagnostic.barbershopId,
+      now,
+      reasonCode: 'APPOINTMENT_CANCELLED_BY_PUBLIC_BOOKING',
+      db: tx,
+    });
+
     await cancelAppointmentNotifications(tx, {
       appointmentId: diagnostic.id,
       barbershopId: diagnostic.barbershopId,
@@ -690,8 +674,13 @@ export async function cancelPublicBookingByReference(
         cancelledAt: true,
         cancellationSource: true,
         cancelReason: true,
+        paymentHoldExpiresAt: true,
       },
-    });
+    }).then((appointment) => ({
+      ...appointment,
+      paymentStatus: paymentSync.latestPaymentStatus,
+      refundReviewRequired: paymentSync.reviewRequired,
+    }));
   });
 
   if (!casResult.publicReference) {
@@ -721,6 +710,8 @@ export async function cancelPublicBookingByReference(
       cancelledAt: (cancelled.cancelledAt as Date).toISOString(),
       cancellationSource: 'PUBLIC_BOOKING',
       cancelReason: cancelled.cancelReason,
+      paymentStatus: cancelled.paymentStatus ?? null,
+      refundReviewRequired: cancelled.refundReviewRequired ?? false,
     },
   };
 }

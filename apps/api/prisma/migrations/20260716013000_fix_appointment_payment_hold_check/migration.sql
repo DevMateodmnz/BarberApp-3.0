@@ -1,0 +1,5 @@
+-- No-op migration.
+-- The appointment payment-hold constraint fix was folded back into the
+-- uncommitted `20260716010000_add_mercado_pago_deposit_payments` migration
+-- before the milestone commit. This placeholder preserves local migration
+-- history for databases that already observed this follow-up step.

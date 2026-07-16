@@ -21,6 +21,9 @@ export interface PublicService {
   durationMinutes: number;
   priceCents: number;
   currency: string;
+  depositRequired?: boolean;
+  depositAmountCents?: number | null;
+  remainingAmountCents?: number | null;
 }
 
 export interface PublicBarber {
@@ -52,6 +55,13 @@ export interface PublicBookingConfig {
     maximumBookingHorizonDays: number;
     slotIntervalMinutes: number;
   };
+  depositPolicy?: {
+    enabled: boolean;
+    mode: 'DISABLED' | 'FIXED' | 'PERCENTAGE';
+    holdDurationMinutes: number;
+    currency: 'ARS';
+    publicTerms: string | null;
+  };
 }
 
 export interface PublicBookingConfirmation {
@@ -64,8 +74,44 @@ export interface PublicBookingConfirmation {
   localStartTime: string;
   startAt: string;
   endAt: string;
-  clientPhoneDisplay: string;
-  status: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW' | 'IN_PROGRESS' | 'PENDING';
+  clientPhoneDisplay?: string;
+  status?: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW' | 'IN_PROGRESS' | 'PENDING';
+  appointmentStatus?:
+    | 'CONFIRMED'
+    | 'CANCELLED'
+    | 'COMPLETED'
+    | 'NO_SHOW'
+    | 'IN_PROGRESS'
+    | 'PENDING';
+  paymentStatus?:
+    | 'NOT_REQUIRED'
+    | 'CREATING'
+    | 'PENDING'
+    | 'APPROVED'
+    | 'REJECTED'
+    | 'CANCELLED'
+    | 'EXPIRED'
+    | 'REVIEW_REQUIRED'
+    | 'ERROR';
+  amountCents?: number | null;
+  servicePriceCents?: number;
+  remainingAmountCents?: number | null;
+  currency?: string;
+  expiresAt?: string | null;
+  checkoutUrl?: string | null;
+  canRetry?: boolean;
+  canCancel?: boolean;
+  publicTerms?: string | null;
+}
+
+export interface PublicPaymentStatus {
+  appointmentStatus: PublicBookingConfirmation['appointmentStatus'];
+  paymentStatus: PublicBookingConfirmation['paymentStatus'];
+  amount: number | null;
+  currency: string;
+  expiresAt: string | null;
+  canRetry: boolean;
+  canCancel: boolean;
 }
 
 export interface PublicCreateAppointmentPayload {
@@ -91,4 +137,6 @@ export interface PublicCancelBookingResult {
   cancelledAt: string;
   cancellationSource: 'PUBLIC_BOOKING';
   cancelReason: string | null;
+  paymentStatus?: PublicBookingConfirmation['paymentStatus'];
+  refundReviewRequired?: boolean;
 }
