@@ -252,3 +252,5 @@ Loyalty is explicitly deferred until this coupon foundation is pushed and physic
 ## Loyalty reward integration
 
 Loyalty now reuses this engine by cloning a configured promotion template into an opaque, customer-bound reward promotion at issuance time. Reward validation still flows through `evaluatePromotion(...)`, and authoritative consumption still flows through `promotion_redemptions`, so there is no second discount engine.
+
+Generated loyalty reward promotions are operationally isolated from the normal OWNER campaign surface: the ordinary promotion list and summary analytics only include owner-managed campaigns/templates, while issued loyalty rewards remain addressable only through customer-loyalty reads and the authoritative redemption flow.

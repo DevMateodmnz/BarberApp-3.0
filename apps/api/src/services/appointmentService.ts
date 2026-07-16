@@ -61,7 +61,7 @@ import {
   getPromotionRedemptionForAppointment,
   PAID_APPOINTMENT_REPRICE_NOT_SUPPORTED_CODE,
 } from './promotionService.js';
-import { processCompletedAppointmentLoyalty } from './loyaltyService.js';
+import { getCustomerLoyaltySummary, processCompletedAppointmentLoyalty } from './loyaltyService.js';
 import type {
   AppointmentStatus,
   PrismaClient,
@@ -1773,12 +1773,26 @@ export async function cancelAppointment(
  * UI (the warning banner is the actionable part).
  */
 export interface CustomerInsights {
+  customerId: string | null;
   visitCount: number;
   noShowCount: number;
   cancelledCount: number;
   completedCount: number;
   lastVisitAt: string | null;
   lastNoShowAt: string | null;
+  loyalty: {
+    programEnabled: boolean;
+    visitsRequired: number | null;
+    currentStampCount: number;
+    availableRewardCount: number;
+    rewards: Array<{
+      id: string;
+      code: string;
+      status: 'AVAILABLE' | 'REDEEMED' | 'EXPIRED' | 'REVOKED';
+      expiresAt: string | null;
+      promotionName: string;
+    }>;
+  } | null;
   recentAppointments: Array<{
     id: string;
     startAt: string;
@@ -1894,6 +1908,12 @@ export async function lookupCustomerByPhone(
     },
     orderBy: { startAt: 'desc' },
   });
+  const loyalty = customer
+    ? await getCustomerLoyaltySummary({
+        barbershopId,
+        customerId: customer.id,
+      })
+    : null;
 
   let noShowCount = 0;
   let cancelledCount = 0;
@@ -1930,12 +1950,28 @@ export async function lookupCustomerByPhone(
   }));
 
   return {
+    customerId: customer?.id ?? null,
     visitCount: matches.length,
     noShowCount,
     cancelledCount,
     completedCount,
     lastVisitAt: lastVisitAt ? lastVisitAt.toISOString() : null,
     lastNoShowAt: lastNoShowAt ? lastNoShowAt.toISOString() : null,
+    loyalty: loyalty
+      ? {
+          programEnabled: loyalty.programEnabled,
+          visitsRequired: loyalty.visitsRequired,
+          currentStampCount: loyalty.currentStampCount,
+          availableRewardCount: loyalty.availableRewardCount,
+          rewards: loyalty.rewards.map((reward) => ({
+            id: reward.id,
+            code: reward.code,
+            status: reward.status,
+            expiresAt: reward.expiresAt,
+            promotionName: reward.promotionName,
+          })),
+        }
+      : null,
     recentAppointments,
   };
 }

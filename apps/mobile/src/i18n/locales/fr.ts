@@ -715,6 +715,14 @@ export const fr = {
       promotionEnterCode: 'Enter a promotion code first.',
       promotionNeedsReapply: 'Reapply the promotion after changing the phone number.',
     },
+    loyalty: {
+      title: 'Loyalty reward available',
+      progress: 'Stamps: {{current}} / {{target}}',
+      rewards: 'Available rewards: {{count}}',
+      rewardCode: 'Reward code: {{code}}',
+      rewardExpires: 'Expires: {{value}}',
+      applyReward: 'Apply reward',
+    },
     successFeedback: 'Rendez-vous créé avec succès.',
     accessibility: {
       employeeOption: 'Sélectionner l’employé {{name}}',

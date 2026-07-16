@@ -357,4 +357,151 @@ describe('loyalty earning and redemption', () => {
     expect(quoteSpent.status).toBe(200);
     expect(quoteSpent.body.data.eligible).toBe(false);
   });
+
+  it('keeps generated loyalty rewards out of the ordinary promotion list and summary', async () => {
+    const first = await createInProgressAppointment('2026-07-23', '10:00');
+    const second = await createInProgressAppointment('2026-07-24', '10:00');
+
+    await request(app)
+      .put(`/api/v1/appointments/${first.id}/status`)
+      .set(authHeader(fixtures.barber.clerkUserId))
+      .send({ status: 'COMPLETED' });
+    await request(app)
+      .put(`/api/v1/appointments/${second.id}/status`)
+      .set(authHeader(fixtures.barber.clerkUserId))
+      .send({ status: 'COMPLETED' });
+
+    const promotions = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shop.id}/promotions`)
+      .set(authHeader(fixtures.owner.clerkUserId));
+    expect(promotions.status).toBe(200);
+    expect(promotions.body.data).toHaveLength(1);
+    expect(promotions.body.data[0].id).toBe(fixtures.templatePromotion.id);
+
+    const summary = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shop.id}/promotions/summary`)
+      .set(authHeader(fixtures.owner.clerkUserId));
+    expect(summary.status).toBe(200);
+    expect(summary.body.data.activePromotions).toBe(1);
+    expect(summary.body.data.totalConsumedRedemptions).toBe(0);
+  });
+
+  it('returns matched customer loyalty details in the staff customer lookup response', async () => {
+    const first = await createInProgressAppointment('2026-07-20', '10:00');
+    const second = await createInProgressAppointment('2026-07-21', '10:00');
+
+    await request(app)
+      .put(`/api/v1/appointments/${first.id}/status`)
+      .set(authHeader(fixtures.barber.clerkUserId))
+      .send({ status: 'COMPLETED' });
+    await request(app)
+      .put(`/api/v1/appointments/${second.id}/status`)
+      .set(authHeader(fixtures.barber.clerkUserId))
+      .send({ status: 'COMPLETED' });
+
+    const lookup = await request(app)
+      .post(`/api/v1/barbershops/${fixtures.shop.id}/customers/lookup`)
+      .set(authHeader(fixtures.owner.clerkUserId))
+      .send({ phone: fixtures.customer.phone });
+
+    expect(lookup.status).toBe(200);
+    expect(lookup.body.data.customerId).toBe(fixtures.customer.id);
+    expect(lookup.body.data.loyalty.programEnabled).toBe(true);
+    expect(lookup.body.data.loyalty.availableRewardCount).toBe(1);
+    expect(lookup.body.data.loyalty.rewards[0].status).toBe('AVAILABLE');
+  });
+
+  it('stops earning while disabled and resumes after re-enable without deleting issued state', async () => {
+    const first = await createInProgressAppointment('2026-07-26', '10:00');
+
+    await request(app)
+      .put(`/api/v1/appointments/${first.id}/status`)
+      .set(authHeader(fixtures.barber.clerkUserId))
+      .send({ status: 'COMPLETED' });
+
+    await upsertLoyaltyProgram(fixtures.shop.id, fixtures.owner.id, {
+      isEnabled: false,
+      visitsRequired: 2,
+      rewardPromotionId: fixtures.templatePromotion.id,
+      rewardValidityDays: 30,
+    });
+
+    const disabled = await createInProgressAppointment('2026-07-27', '10:00');
+    await request(app)
+      .put(`/api/v1/appointments/${disabled.id}/status`)
+      .set(authHeader(fixtures.barber.clerkUserId))
+      .send({ status: 'COMPLETED' });
+
+    let summary = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shop.id}/customers/${fixtures.customer.id}/loyalty`)
+      .set(authHeader(fixtures.owner.clerkUserId));
+    expect(summary.status).toBe(200);
+    expect(summary.body.data.programEnabled).toBe(false);
+    expect(summary.body.data.currentStampCount).toBe(1);
+    expect(summary.body.data.lifetimeEligibleVisits).toBe(1);
+
+    await upsertLoyaltyProgram(fixtures.shop.id, fixtures.owner.id, {
+      isEnabled: true,
+      visitsRequired: 2,
+      rewardPromotionId: fixtures.templatePromotion.id,
+      rewardValidityDays: 30,
+    });
+
+    const reenabled = await createInProgressAppointment('2026-07-28', '10:00');
+    await request(app)
+      .put(`/api/v1/appointments/${reenabled.id}/status`)
+      .set(authHeader(fixtures.barber.clerkUserId))
+      .send({ status: 'COMPLETED' });
+
+    summary = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shop.id}/customers/${fixtures.customer.id}/loyalty`)
+      .set(authHeader(fixtures.owner.clerkUserId));
+    expect(summary.status).toBe(200);
+    expect(summary.body.data.programEnabled).toBe(true);
+    expect(summary.body.data.currentStampCount).toBe(0);
+    expect(summary.body.data.availableRewardCount).toBe(1);
+  });
+
+  it('applies a lowered threshold on the next earning event without retroactive issuance at config time', async () => {
+    await upsertLoyaltyProgram(fixtures.shop.id, fixtures.owner.id, {
+      isEnabled: true,
+      visitsRequired: 3,
+      rewardPromotionId: fixtures.templatePromotion.id,
+      rewardValidityDays: 30,
+    });
+
+    const first = await createInProgressAppointment('2026-07-29', '10:00');
+
+    await request(app)
+      .put(`/api/v1/appointments/${first.id}/status`)
+      .set(authHeader(fixtures.barber.clerkUserId))
+      .send({ status: 'COMPLETED' });
+
+    await upsertLoyaltyProgram(fixtures.shop.id, fixtures.owner.id, {
+      isEnabled: true,
+      visitsRequired: 2,
+      rewardPromotionId: fixtures.templatePromotion.id,
+      rewardValidityDays: 30,
+    });
+
+    let summary = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shop.id}/customers/${fixtures.customer.id}/loyalty`)
+      .set(authHeader(fixtures.owner.clerkUserId));
+    expect(summary.status).toBe(200);
+    expect(summary.body.data.currentStampCount).toBe(1);
+    expect(summary.body.data.availableRewardCount).toBe(0);
+
+    const second = await createInProgressAppointment('2026-07-30', '10:00');
+    await request(app)
+      .put(`/api/v1/appointments/${second.id}/status`)
+      .set(authHeader(fixtures.barber.clerkUserId))
+      .send({ status: 'COMPLETED' });
+
+    summary = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shop.id}/customers/${fixtures.customer.id}/loyalty`)
+      .set(authHeader(fixtures.owner.clerkUserId));
+    expect(summary.status).toBe(200);
+    expect(summary.body.data.currentStampCount).toBe(0);
+    expect(summary.body.data.availableRewardCount).toBe(1);
+  });
 });

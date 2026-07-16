@@ -18,7 +18,11 @@ import {
   type AppointmentCreationValidationKey,
 } from '@/lib/appointmentCreationDomain.js';
 import { formatBusinessDateLabel, getTodayDateString } from '@/lib/format.js';
-import type { CurrentUserContext, StaffPromotionQuote } from '@/lib/types.js';
+import type {
+  CurrentUserContext,
+  LoyaltyCustomerSummary,
+  StaffPromotionQuote,
+} from '@/lib/types.js';
 import { tokens } from '@/theme/index.js';
 
 export interface AppointmentEmployeeOption {
@@ -92,6 +96,10 @@ export interface AppointmentCreateScreenViewProps {
   promotionMessage: string | null;
   isQuotingPromotion: boolean;
   customerWarning: CustomerWarning | null;
+  customerLoyalty: Pick<
+    LoyaltyCustomerSummary,
+    'programEnabled' | 'visitsRequired' | 'currentStampCount' | 'availableRewardCount' | 'rewards'
+  > | null;
   fieldErrors: Partial<Record<AppointmentCreationField, AppointmentCreationValidationKey>>;
   submissionErrorKey: AppointmentCreationErrorKey | null;
   summary: AppointmentBookingSummaryViewModel | null;
@@ -109,6 +117,7 @@ export interface AppointmentCreateScreenViewProps {
   onNotesChange: (value: string) => void;
   onPromotionCodeChange: (value: string) => void;
   onApplyPromotion: () => void;
+  onApplyLoyaltyReward: (code: string) => void;
   onRemovePromotion: () => void;
   onSubmit: () => void;
 }
@@ -206,6 +215,7 @@ export function AppointmentCreateScreenView({
   promotionMessage,
   isQuotingPromotion,
   customerWarning,
+  customerLoyalty,
   fieldErrors,
   submissionErrorKey,
   summary,
@@ -223,6 +233,7 @@ export function AppointmentCreateScreenView({
   onNotesChange,
   onPromotionCodeChange,
   onApplyPromotion,
+  onApplyLoyaltyReward,
   onRemovePromotion,
   onSubmit,
 }: AppointmentCreateScreenViewProps) {
@@ -636,6 +647,64 @@ export function AppointmentCreateScreenView({
                     </View>
                   ) : null}
 
+                  {customerLoyalty?.programEnabled && customerLoyalty.visitsRequired ? (
+                    <View
+                      style={styles.customerLoyaltyCard}
+                      testID="appointment-create-customer-loyalty"
+                    >
+                      <Text style={styles.customerLoyaltyTitle}>
+                        {t('appointmentCreation.loyalty.title')}
+                      </Text>
+                      <Text style={styles.helperText}>
+                        {t('appointmentCreation.loyalty.progress', {
+                          current: customerLoyalty.currentStampCount,
+                          target: customerLoyalty.visitsRequired,
+                        })}
+                      </Text>
+                      <Text style={styles.helperText}>
+                        {t('appointmentCreation.loyalty.rewards', {
+                          count: customerLoyalty.availableRewardCount,
+                        })}
+                      </Text>
+                      {customerLoyalty.rewards
+                        .filter((reward) => reward.status === 'AVAILABLE')
+                        .slice(0, 2)
+                        .map((reward) => (
+                          <View
+                            key={reward.id}
+                            style={styles.customerLoyaltyRewardRow}
+                            testID={`appointment-create-loyalty-reward-${reward.id}`}
+                          >
+                            <View style={styles.customerLoyaltyRewardCopy}>
+                              <Text style={styles.summaryValue}>{reward.promotionName}</Text>
+                              <Text style={styles.helperText}>
+                                {t('appointmentCreation.loyalty.rewardCode', {
+                                  code: reward.code,
+                                })}
+                              </Text>
+                              {reward.expiresAt ? (
+                                <Text style={styles.helperText}>
+                                  {t('appointmentCreation.loyalty.rewardExpires', {
+                                    value: formatLocalizedDate(reward.expiresAt.slice(0, 10), {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                    }) ?? reward.expiresAt,
+                                  })}
+                                </Text>
+                              ) : null}
+                            </View>
+                            <AppButton
+                              testID={`appointment-create-apply-loyalty-${reward.id}`}
+                              title={t('appointmentCreation.loyalty.applyReward')}
+                              variant="secondary"
+                              onPress={() => onApplyLoyaltyReward(reward.code)}
+                            />
+                          </View>
+                        ))}
+                    </View>
+                  ) : null}
+
                   <AppTextInput
                     testID="appointment-create-notes"
                     label={t('appointmentCreation.labels.notesOptional')}
@@ -970,6 +1039,27 @@ const styles = StyleSheet.create({
   promotionSection: {
     gap: tokens.spacing[3],
     marginTop: tokens.spacing[2],
+  },
+  customerLoyaltyCard: {
+    backgroundColor: tokens.colors.surfaceVariant,
+    borderColor: tokens.colors.border,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    gap: tokens.spacing[2],
+    marginTop: tokens.spacing[3],
+    paddingHorizontal: tokens.spacing[4],
+    paddingVertical: tokens.spacing[3],
+  },
+  customerLoyaltyTitle: {
+    ...tokens.typography.variant.body,
+    color: tokens.colors.textPrimary,
+    fontWeight: tokens.typography.weight.semibold,
+  },
+  customerLoyaltyRewardRow: {
+    gap: tokens.spacing[2],
+  },
+  customerLoyaltyRewardCopy: {
+    gap: tokens.spacing[1],
   },
   promotionActions: {
     flexDirection: 'row',

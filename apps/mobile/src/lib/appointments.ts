@@ -12,6 +12,7 @@ import type {
   CreateStaffAppointmentInput,
   DailyScheduleBoard,
   FetchAppointmentAvailabilityInput,
+  LoyaltyCustomerSummary,
   RescheduleAppointmentInput,
 } from './types.js';
 
@@ -181,12 +182,17 @@ export async function cancelAppointment(
  * in API logs that capture response bodies).
  */
 export interface CustomerInsights {
+  customerId: string | null;
   visitCount: number;
   noShowCount: number;
   cancelledCount: number;
   completedCount: number;
   lastVisitAt: string | null;
   lastNoShowAt: string | null;
+  loyalty: Pick<
+    LoyaltyCustomerSummary,
+    'programEnabled' | 'visitsRequired' | 'currentStampCount' | 'availableRewardCount' | 'rewards'
+  > | null;
   recentAppointments: Array<{
     id: string;
     startAt: string;

@@ -122,6 +122,14 @@ async function getPromotionRowForEvaluation(db: PromotionDb, input: {
   });
 }
 
+function createCampaignOnlyError(): AppError {
+  return new AppError(
+    409,
+    'PROMOTION_GENERATED_REWARD_IMMUTABLE',
+    'Generated loyalty reward promotions cannot be managed as ordinary campaigns'
+  );
+}
+
 export async function evaluatePromotion(db: PromotionDb, input: {
   barbershopId: string;
   code: string;
@@ -419,7 +427,13 @@ export async function getPromotionRedemptionForAppointment(db: PromotionDb, appo
 
 export async function listBarbershopPromotions(barbershopId: string, now: Date = new Date()) {
   const items = await prisma.promotion.findMany({
-    where: { barbershopId, deletedAt: null },
+    where: {
+      barbershopId,
+      deletedAt: null,
+      loyaltyReward: {
+        is: null,
+      },
+    },
     include: {
       services: {
         select: { serviceId: true, service: { select: { name: true } } },
@@ -467,11 +481,40 @@ export async function listBarbershopPromotions(barbershopId: string, now: Date =
 
 export async function getPromotionSummary(barbershopId: string, now: Date = new Date()): Promise<PromotionSummaryDto> {
   const [activePromotions, upcomingPromotions, aggregates] = await Promise.all([
-    prisma.promotion.count({ where: { barbershopId, deletedAt: null, isActive: true, startsAt: { lte: now }, endsAt: { gt: now } } }),
-    prisma.promotion.count({ where: { barbershopId, deletedAt: null, startsAt: { gt: now } } }),
+    prisma.promotion.count({
+      where: {
+        barbershopId,
+        deletedAt: null,
+        loyaltyReward: {
+          is: null,
+        },
+        isActive: true,
+        startsAt: { lte: now },
+        endsAt: { gt: now },
+      },
+    }),
+    prisma.promotion.count({
+      where: {
+        barbershopId,
+        deletedAt: null,
+        loyaltyReward: {
+          is: null,
+        },
+        startsAt: { gt: now },
+      },
+    }),
     prisma.promotionRedemption.groupBy({
       by: ['status'],
-      where: { barbershopId },
+      where: {
+        barbershopId,
+        promotion: {
+          is: {
+            loyaltyReward: {
+              is: null,
+            },
+          },
+        },
+      },
       _count: { _all: true },
       _sum: { discountCents: true },
     }),
@@ -624,8 +667,14 @@ export async function updatePromotion(barbershopId: string, promotionId: string,
   appliesToStaffBookings?: boolean;
   isActive?: boolean;
 }) {
-  const promotion = await prisma.promotion.findFirst({ where: { id: promotionId, barbershopId } });
+  const promotion = await prisma.promotion.findFirst({
+    where: { id: promotionId, barbershopId },
+    include: { loyaltyReward: { select: { id: true } } },
+  });
   if (!promotion) throw new NotFoundError('Promotion');
+  if (promotion.loyaltyReward) {
+    throw createCampaignOnlyError();
+  }
   const redemptionCount = await prisma.promotionRedemption.count({ where: { promotionId } });
   if (redemptionCount > 0 && (input.name === undefined && input.startsAt === undefined && input.endsAt === undefined && input.appliesToPublicBookings === undefined && input.appliesToStaffBookings === undefined && input.isActive === undefined)) {
     throw new AppError(409, PROMOTION_IMMUTABLE_AFTER_USE_CODE, 'Used promotions only allow limited future-facing updates');
@@ -645,8 +694,14 @@ export async function updatePromotion(barbershopId: string, promotionId: string,
 }
 
 export async function setPromotionActive(barbershopId: string, promotionId: string, userId: string, isActive: boolean) {
-  const promotion = await prisma.promotion.findFirst({ where: { id: promotionId, barbershopId } });
+  const promotion = await prisma.promotion.findFirst({
+    where: { id: promotionId, barbershopId },
+    include: { loyaltyReward: { select: { id: true } } },
+  });
   if (!promotion) throw new NotFoundError('Promotion');
+  if (promotion.loyaltyReward) {
+    throw createCampaignOnlyError();
+  }
   return prisma.promotion.update({ where: { id: promotionId }, data: { isActive, updatedByUserId: userId } });
 }
 

@@ -728,6 +728,14 @@ export const es = {
       promotionEnterCode: 'Ingresa primero un código de promoción.',
       promotionNeedsReapply: 'Reaplica la promoción después de cambiar el teléfono.',
     },
+    loyalty: {
+      title: 'Recompensa de fidelidad disponible',
+      progress: 'Sellos: {{current}} / {{target}}',
+      rewards: 'Recompensas disponibles: {{count}}',
+      rewardCode: 'Código de recompensa: {{code}}',
+      rewardExpires: 'Vence: {{value}}',
+      applyReward: 'Aplicar recompensa',
+    },
     successFeedback: 'Turno creado correctamente.',
     accessibility: {
       employeeOption: 'Seleccionar empleado {{name}}',

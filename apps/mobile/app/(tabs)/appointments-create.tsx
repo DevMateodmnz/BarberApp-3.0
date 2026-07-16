@@ -466,6 +466,7 @@ export default function AppointmentCreateScreen() {
       current
         ? {
           ...current,
+          customerId: null,
           clientPhone: value,
           submissionError: null,
           fieldErrors: {
@@ -516,12 +517,28 @@ export default function AppointmentCreateScreen() {
             return;
           }
           setCustomerInsights(insights);
+          setCreationState((current) => (
+            current && current.clientPhone.trim() === phone
+              ? {
+                  ...current,
+                  customerId: insights.customerId,
+                }
+              : current
+          ));
         })
         .catch(() => {
           if (customerLookupRequestIdRef.current !== requestId) {
             return;
           }
           setCustomerInsights(null);
+          setCreationState((current) => (
+            current && current.clientPhone.trim() === phone
+              ? {
+                  ...current,
+                  customerId: null,
+                }
+              : current
+          ));
         });
     }, 400);
 
@@ -588,14 +605,14 @@ export default function AppointmentCreateScreen() {
     setPromotionMessage(null);
   }, []);
 
-  const handleApplyPromotion = useCallback(async () => {
+  const handleApplyPromotion = useCallback(async (codeOverride?: string) => {
     if (!creationContext?.barbershopId || !creationState?.serviceId || !getTokenRef.current) {
       setPromotionQuote(null);
       setPromotionMessage(t('appointmentCreation.messages.promotionSelectServiceFirst'));
       return;
     }
 
-    const trimmedCode = creationState.promotionCode.trim();
+    const trimmedCode = (codeOverride ?? creationState.promotionCode).trim();
     if (!trimmedCode) {
       setPromotionQuote(null);
       setPromotionMessage(t('appointmentCreation.messages.promotionEnterCode'));
@@ -641,6 +658,13 @@ export default function AppointmentCreateScreen() {
       }
     }
   }, [creationContext?.barbershopId, creationState, t]);
+
+  const handleApplyLoyaltyReward = useCallback((code: string) => {
+    setCreationState((current) => (
+      current ? applyAppointmentCreationPromotionCodeChange(current, code) : current
+    ));
+    void handleApplyPromotion(code);
+  }, [handleApplyPromotion]);
 
   const refreshAvailability = useCallback(async () => {
     setAvailabilityReloadNonce((current) => current + 1);
@@ -841,6 +865,7 @@ export default function AppointmentCreateScreen() {
       promotionMessage={promotionMessage}
       isQuotingPromotion={isQuotingPromotion}
       customerWarning={customerWarning}
+      customerLoyalty={customerInsights?.loyalty ?? null}
       fieldErrors={creationState?.fieldErrors ?? {}}
       submissionErrorKey={creationState?.submissionError?.key ?? null}
       summary={summary}
@@ -867,6 +892,7 @@ export default function AppointmentCreateScreen() {
       onApplyPromotion={() => {
         void handleApplyPromotion();
       }}
+      onApplyLoyaltyReward={handleApplyLoyaltyReward}
       onRemovePromotion={handleRemovePromotion}
       onSubmit={() => {
         void handleSubmit();

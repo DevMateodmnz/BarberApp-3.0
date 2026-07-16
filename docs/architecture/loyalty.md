@@ -160,6 +160,8 @@ Promotion evaluation now adds a loyalty-specific guard when the promotion belong
 - reward status must still be `AVAILABLE`
 - expired rewards are lazily marked expired with a ledger event before failing
 
+The staff customer-lookup response now also returns the matched `customerId` plus a bounded loyalty summary so the appointment-create flow can safely show stamp progress and offer available reward shortcuts without exposing another customer's reward state.
+
 Authoritative redemption keeps the existing promotion lifecycle:
 
 ```text
@@ -190,7 +192,7 @@ Negative totals are clamped to zero by the existing promotion calculation.
 - disabling the loyalty program stops future earning only
 - existing stamps remain in the summary
 - existing issued rewards remain available until redeemed, expired, or revoked
-- changing the threshold is forward-looking; current summary state is preserved and the new threshold applies to future earning or admin adjustments
+- changing the threshold is forward-looking; current summary state is preserved, config changes alone do not issue rewards, and a lower threshold can produce multiple rewards on the next qualifying earning/admin-adjustment write if the carried stamp balance exceeds the new target
 
 ## Privacy and authorization
 

@@ -119,6 +119,7 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
     promotionMessage: null,
     isQuotingPromotion: false,
     customerWarning: null,
+    customerLoyalty: null,
     fieldErrors: {},
     submissionErrorKey: null,
     summary: makeSummary(),
@@ -136,6 +137,7 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
     onNotesChange: vi.fn(),
     onPromotionCodeChange: vi.fn(),
     onApplyPromotion: vi.fn(),
+    onApplyLoyaltyReward: vi.fn(),
     onRemovePromotion: vi.fn(),
     onSubmit: vi.fn(),
     ...overrides,
@@ -365,5 +367,38 @@ describe('AppointmentCreateScreenView promotion section', () => {
     expect(findByTestId(tree, 'appointment-create-promotion-code')).toBeDefined();
     expect(findByText(tree, 'Use 3 to 32 characters: letters, numbers, hyphen, or underscore.')).toBeDefined();
     expect(findByTestId(tree, 'appointment-create-summary-section')).toBeDefined();
+  });
+
+  it('renders customer loyalty progress and applies an available reward shortcut', () => {
+    const onApplyLoyaltyReward = vi.fn();
+    const tree = renderView({
+      customerLoyalty: {
+        programEnabled: true,
+        visitsRequired: 5,
+        currentStampCount: 4,
+        availableRewardCount: 1,
+        rewards: [
+          {
+            id: 'reward-1',
+            code: 'LOYALTY-ABC123',
+            status: 'AVAILABLE',
+            issuedAt: '2026-07-10T10:00:00.000Z',
+            expiresAt: '2026-07-31T10:00:00.000Z',
+            redeemedAt: null,
+            revokedAt: null,
+            promotionName: 'Free loyalty cut',
+          },
+        ],
+      },
+      onApplyLoyaltyReward,
+    });
+
+    expect(findByTestId(tree, 'appointment-create-customer-loyalty')).toBeDefined();
+    expect(findByText(tree, 'Loyalty reward available')).toBeDefined();
+    expect(findByText(tree, 'Stamps: 4 / 5')).toBeDefined();
+    expect(findByText(tree, 'Reward code: LOYALTY-ABC123')).toBeDefined();
+
+    press(findByTestId(tree, 'appointment-create-apply-loyalty-reward-1'));
+    expect(onApplyLoyaltyReward).toHaveBeenCalledWith('LOYALTY-ABC123');
   });
 });

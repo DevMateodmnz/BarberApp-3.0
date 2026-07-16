@@ -34,9 +34,9 @@ Verify the visit-based loyalty flow added on Thursday, July 16, 2026.
 
 ## Staff redemption
 
-1. Copy the reward code from the customer profile.
-2. Create a new staff appointment for the same customer.
-3. Apply the reward code.
+1. Open the same customer in staff appointment creation.
+2. Confirm the loyalty panel shows current stamps, available reward count, and the active reward code/expiry.
+3. Apply the reward from the loyalty panel shortcut (or manually use the same code from the customer profile).
 4. Confirm the quoted discount matches the template reward semantics.
 5. Save the appointment.
 6. Re-open the customer profile.
