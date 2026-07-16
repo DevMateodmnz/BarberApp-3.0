@@ -335,3 +335,14 @@ npm run payments:sandbox-readiness --workspace @barberapp/api
 The command validates local configuration shape, URL policy, encryption-key shape,
 direct webhook routing, required migrations, and payment table presence without
 printing secrets or making a provider call by default.
+
+## Promotions interaction
+
+Deposits are calculated from the immutable appointment `final_price_cents` snapshot.
+
+Implications:
+
+- discounts reduce the deposit amount when deposit policy is enabled
+- zero-final-price public bookings skip Mercado Pago entirely
+- approved paid bookings are not silently repriced during service-changing reschedules
+- payment review, owner surfaces, and webhook reconciliation all read the frozen discounted amount rather than recomputing from current service or promotion rules

@@ -19,7 +19,8 @@ export type AppointmentCreationField =
   | 'clientName'
   | 'clientPhone'
   | 'clientEmail'
-  | 'notes';
+  | 'notes'
+  | 'promotionCode';
 
 export type AppointmentCreationValidationKey =
   | 'employeeRequired'
@@ -32,6 +33,7 @@ export type AppointmentCreationValidationKey =
   | 'clientPhoneTooLong'
   | 'clientEmailInvalid'
   | 'notesTooLong'
+  | 'promotionCodeInvalid'
   | 'invalidDate'
   | 'staleSlot';
 
@@ -72,6 +74,7 @@ export interface AppointmentCreationState {
   customerId: string | null;
   employeeId: string | null;
   serviceId: string | null;
+  promotionCode: string;
   localDate: string;
   selectedSlotStartAt: string | null;
   clientName: string;
@@ -119,6 +122,10 @@ function trimOptionalText(value?: string | null): string | undefined {
 
 function normalizeClientName(value: string): string {
   return value.trim();
+}
+
+export function normalizePromotionCode(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/gu, '');
 }
 
 function isValidClientEmail(value: string): boolean {
@@ -176,6 +183,7 @@ export function createInitialAppointmentCreationState(
     customerId: null,
     employeeId: context.role === 'BARBER' ? context.authenticatedEmployeeId : null,
     serviceId: null,
+    promotionCode: '',
     localDate: '',
     selectedSlotStartAt: null,
     clientName: '',
@@ -298,6 +306,7 @@ export function syncAppointmentCreationContext(
     clientPhone: state.clientPhone,
     clientEmail: state.clientEmail,
     notes: state.notes,
+    promotionCode: state.promotionCode,
     localDate: state.localDate,
   };
 }
@@ -321,6 +330,21 @@ export function applyAppointmentCreationEmployeeChange(
       serviceId: undefined,
       localDate: undefined,
       selectedSlot: undefined,
+    },
+    submissionError: null,
+  };
+}
+
+export function applyAppointmentCreationPromotionCodeChange(
+  state: AppointmentCreationState,
+  promotionCode: string
+): AppointmentCreationState {
+  return {
+    ...state,
+    promotionCode,
+    fieldErrors: {
+      ...state.fieldErrors,
+      promotionCode: undefined,
     },
     submissionError: null,
   };
@@ -558,6 +582,11 @@ export function validateAppointmentCreationDraft(
     fieldErrors.notes = 'notesTooLong';
   }
 
+  const normalizedPromotionCode = normalizePromotionCode(state.promotionCode);
+  if (normalizedPromotionCode && !/^[A-Z0-9_-]{3,32}$/u.test(normalizedPromotionCode)) {
+    fieldErrors.promotionCode = 'promotionCodeInvalid';
+  }
+
   if (!state.selectedSlotStartAt) {
     fieldErrors.selectedSlot = 'slotRequired';
   } else if (
@@ -618,6 +647,7 @@ export function buildCreateStaffAppointmentPayload(
       ? { clientEmail: trimOptionalText(state.clientEmail) }
       : {}),
     ...(trimOptionalText(state.notes) ? { notes: trimOptionalText(state.notes) } : {}),
+    ...(normalizePromotionCode(state.promotionCode) ? { promotionCode: normalizePromotionCode(state.promotionCode) } : {}),
   };
 
   return {

@@ -130,3 +130,24 @@ Checks include:
 - required payment/review migrations applied
 - payment tables present
 - public-web webhook proxy removed
+
+## Promotions migration checks
+
+Shared local BarberApp database:
+
+```bash
+cd apps/api
+npx prisma migrate status
+psql postgresql://postgres:postgres@localhost:5432/barberapp -f prisma/migrations/20260716043000_add_promotions_and_coupon_redemptions/preflight.sql
+```
+
+Clean-room proof on isolated `5433` service should use a disposable empty database plus:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/<disposable_db> \
+  npx prisma migrate deploy
+psql postgresql://postgres:postgres@localhost:5433/<disposable_db> \
+  -f prisma/migrations/20260716043000_add_promotions_and_coupon_redemptions/preflight.sql
+```
+
+Do not run promotions validation against `kamikaze_db`.

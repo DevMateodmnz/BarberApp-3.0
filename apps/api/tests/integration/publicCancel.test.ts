@@ -53,6 +53,10 @@ async function createBookingAt(
       clientPhoneNormalized: '+5493815557777',
       serviceName: 'Public Cancel Service',
       servicePriceCents: 2500,
+
+      discountCents: 0,
+
+      finalPriceCents: 2500,
       serviceDurationMinutes: fixtures.service.durationMinutes,
       serviceCurrency: 'ARS',
       startAt,

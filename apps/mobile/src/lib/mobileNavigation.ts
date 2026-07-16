@@ -1,7 +1,7 @@
 import type { UserRole } from '@/lib/types.js';
 
 export type MobilePrimaryDestinationId = 'home' | 'appointments' | 'record' | 'manage';
-export type MobileSecondaryRouteId = 'services' | 'employees' | 'workingHours' | 'notifications';
+export type MobileSecondaryRouteId = 'services' | 'employees' | 'workingHours' | 'notifications' | 'promotions';
 export type TabRouteName =
   | 'index'
   | 'appointments'
@@ -9,6 +9,7 @@ export type TabRouteName =
   | 'manage'
   | 'notifications'
   | 'notification-detail'
+  | 'promotions'
   | 'services'
   | 'employees'
   | 'working-hours';
@@ -33,8 +34,8 @@ export interface MobilePrimaryDestination {
 
 export interface MobileSecondaryRoute {
   id: MobileSecondaryRouteId;
-  tabRouteName: Extract<TabRouteName, 'services' | 'employees' | 'working-hours' | 'notifications'>;
-  route: '/(tabs)/services' | '/(tabs)/employees' | '/(tabs)/working-hours' | '/(tabs)/notifications';
+  tabRouteName: Extract<TabRouteName, 'services' | 'employees' | 'working-hours' | 'notifications' | 'promotions'>;
+  route: '/(tabs)/services' | '/(tabs)/employees' | '/(tabs)/working-hours' | '/(tabs)/notifications' | '/(tabs)/promotions';
   titleKey: string;
   accessibilityLabelKey: string;
   allowedRoles: readonly UserRole[];
@@ -100,6 +101,14 @@ export const MOBILE_SECONDARY_ROUTES: readonly MobileSecondaryRoute[] = [
     route: '/(tabs)/notifications',
     titleKey: 'navigation.notifications',
     accessibilityLabelKey: 'navigation.accessibility.notifications',
+    allowedRoles: ['OWNER'],
+  },
+  {
+    id: 'promotions',
+    tabRouteName: 'promotions',
+    route: '/(tabs)/promotions',
+    titleKey: 'navigation.promotions',
+    accessibilityLabelKey: 'navigation.accessibility.promotions',
     allowedRoles: ['OWNER'],
   },
   {

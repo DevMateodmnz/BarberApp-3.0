@@ -12,6 +12,13 @@ export interface AppointmentNotificationPayload {
   startAt: string;
   publicSlug: string | null;
   publicReference: string | null;
+  currency?: string;
+  servicePriceCents?: number;
+  discountCents?: number;
+  finalPriceCents?: number;
+  depositPaidCents?: number | null;
+  remainingBalanceCents?: number | null;
+  promotionName?: string | null;
   previousStartAt?: string;
   previousEndAt?: string;
   previousServiceName?: string;
@@ -50,6 +57,61 @@ function formatLocalTime(isoString: string, timezone: string): string {
     minute: '2-digit',
     hour12: false,
   }).format(new Date(isoString));
+}
+
+function formatMoney(value: number | null | undefined, currency: string): string {
+  if (!Number.isInteger(value)) {
+    return '—';
+  }
+
+  const cents = value as number;
+
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+function buildPricingLines(payload: AppointmentNotificationPayload): {
+  text: string[];
+  html: string[];
+} {
+  const currency = payload.currency?.trim() || 'ARS';
+  if (!Number.isInteger(payload.servicePriceCents) || !Number.isInteger(payload.finalPriceCents)) {
+    return { text: [], html: [] };
+  }
+
+  const text = [`Precio del servicio: ${formatMoney(payload.servicePriceCents, currency)}`];
+  const html = [
+    `<li><strong>Precio del servicio:</strong> ${escapeHtml(formatMoney(payload.servicePriceCents, currency))}</li>`,
+  ];
+
+  if ((payload.discountCents ?? 0) > 0) {
+    text.push(`Descuento: ${formatMoney(payload.discountCents, currency)}`);
+    html.push(`<li><strong>Descuento:</strong> ${escapeHtml(formatMoney(payload.discountCents, currency))}</li>`);
+  }
+
+  text.push(`Total del turno: ${formatMoney(payload.finalPriceCents, currency)}`);
+  html.push(`<li><strong>Total del turno:</strong> ${escapeHtml(formatMoney(payload.finalPriceCents, currency))}</li>`);
+
+  if (payload.promotionName?.trim()) {
+    text.push(`Promoción aplicada: ${payload.promotionName.trim()}`);
+    html.push(`<li><strong>Promoción aplicada:</strong> ${escapeHtml(payload.promotionName.trim())}</li>`);
+  }
+
+  if (Number.isInteger(payload.depositPaidCents)) {
+    text.push(`Seña pagada: ${formatMoney(payload.depositPaidCents, currency)}`);
+    html.push(`<li><strong>Seña pagada:</strong> ${escapeHtml(formatMoney(payload.depositPaidCents, currency))}</li>`);
+  }
+
+  if (Number.isInteger(payload.remainingBalanceCents)) {
+    text.push(`Saldo en la barbería: ${formatMoney(payload.remainingBalanceCents, currency)}`);
+    html.push(`<li><strong>Saldo en la barbería:</strong> ${escapeHtml(formatMoney(payload.remainingBalanceCents, currency))}</li>`);
+  }
+
+  return { text, html };
 }
 
 function buildPublicCancellationUrl(
@@ -98,6 +160,7 @@ function buildConfirmationCopy(
     ? `Si necesitás cancelar, hacelo desde este enlace: ${publicCancellationUrl}`
     : 'Si necesitás cancelar o reprogramar, comunicate con la barbería cuanto antes.';
   const footer = buildFooter(payload);
+  const pricing = buildPricingLines(payload);
 
   return {
     subject: `Turno confirmado en ${payload.barbershopName}`,
@@ -109,6 +172,7 @@ function buildConfirmationCopy(
       `Barbero: ${payload.employeeName}`,
       `Fecha: ${localDate}`,
       `Hora: ${localTime}`,
+      ...pricing.text,
       referenceLine,
       cancellationLine,
       footer.text,
@@ -123,6 +187,7 @@ function buildConfirmationCopy(
       `<li><strong>Barbero:</strong> ${escapeHtml(payload.employeeName)}</li>`,
       `<li><strong>Fecha:</strong> ${escapeHtml(localDate)}</li>`,
       `<li><strong>Hora:</strong> ${escapeHtml(localTime)}</li>`,
+      ...pricing.html,
       payload.publicReference
         ? `<li><strong>Referencia de reserva:</strong> ${escapeHtml(payload.publicReference)}</li>`
         : '',
@@ -144,6 +209,7 @@ function buildReminderCopy(
   const localDate = formatLocalDate(payload.startAt, payload.timezone);
   const localTime = formatLocalTime(payload.startAt, payload.timezone);
   const footer = buildFooter(payload);
+  const pricing = buildPricingLines(payload);
 
   return {
     subject: `Recordatorio de tu turno en ${payload.barbershopName}`,
@@ -155,6 +221,7 @@ function buildReminderCopy(
       `Barbero: ${payload.employeeName}`,
       `Fecha: ${localDate}`,
       `Hora: ${localTime}`,
+      ...pricing.text,
       publicCancellationUrl
         ? `Si necesitás cancelar, usá este enlace: ${publicCancellationUrl}`
         : 'Si necesitás cancelar o reprogramar, comunicate con la barbería cuanto antes.',
@@ -168,6 +235,7 @@ function buildReminderCopy(
       `<li><strong>Barbero:</strong> ${escapeHtml(payload.employeeName)}</li>`,
       `<li><strong>Fecha:</strong> ${escapeHtml(localDate)}</li>`,
       `<li><strong>Hora:</strong> ${escapeHtml(localTime)}</li>`,
+      ...pricing.html,
       '</ul>',
       publicCancellationUrl
         ? `<p>Si necesitás cancelar, podés hacerlo acá: <a href="${escapeHtml(publicCancellationUrl)}">Cancelar turno</a></p>`
@@ -190,6 +258,7 @@ function buildRescheduledCopy(
     ? formatLocalTime(payload.previousStartAt, payload.timezone)
     : null;
   const footer = buildFooter(payload);
+  const pricing = buildPricingLines(payload);
 
   return {
     subject: `Tu turno fue reprogramado en ${payload.barbershopName}`,
@@ -204,6 +273,7 @@ function buildRescheduledCopy(
       `Nuevo barbero: ${payload.employeeName}`,
       `Nueva fecha: ${localDate}`,
       `Nuevo horario: ${localTime}`,
+      ...pricing.text,
       publicCancellationUrl
         ? `Si necesitás cancelar, usá este enlace: ${publicCancellationUrl}`
         : 'Si necesitás cancelar, comunicate con la barbería cuanto antes.',
@@ -222,6 +292,7 @@ function buildRescheduledCopy(
       `<li><strong>Nuevo barbero:</strong> ${escapeHtml(payload.employeeName)}</li>`,
       `<li><strong>Nueva fecha:</strong> ${escapeHtml(localDate)}</li>`,
       `<li><strong>Nuevo horario:</strong> ${escapeHtml(localTime)}</li>`,
+      ...pricing.html,
       '</ul>',
       publicCancellationUrl
         ? `<p>Si necesitás cancelar, podés hacerlo acá: <a href="${escapeHtml(publicCancellationUrl)}">Cancelar turno</a></p>`

@@ -1322,6 +1322,10 @@ describe('Appointment List Query Correctness', () => {
         clientPhone: null,
         serviceName: input.service.name,
         servicePriceCents: input.service.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: input.service.priceCents,
         serviceDurationMinutes: input.service.durationMinutes,
         serviceCurrency: input.service.currency,
         startAt: input.startAt,
@@ -1575,6 +1579,10 @@ describe('Scoped Employee Appointment Listing', () => {
           clientPhone: null,
           serviceName: fixtures.serviceA1.name,
           servicePriceCents: fixtures.serviceA1.priceCents,
+
+          discountCents: 0,
+
+          finalPriceCents: fixtures.serviceA1.priceCents,
           serviceDurationMinutes: fixtures.serviceA1.durationMinutes,
           serviceCurrency: fixtures.serviceA1.currency,
           startAt: localDateTimeToUtc(monday, '10:00'),
@@ -1589,6 +1597,10 @@ describe('Scoped Employee Appointment Listing', () => {
           clientPhone: null,
           serviceName: fixtures.serviceA1.name,
           servicePriceCents: fixtures.serviceA1.priceCents,
+
+          discountCents: 0,
+
+          finalPriceCents: fixtures.serviceA1.priceCents,
           serviceDurationMinutes: fixtures.serviceA1.durationMinutes,
           serviceCurrency: fixtures.serviceA1.currency,
           startAt: localDateTimeToUtc(tuesday, '10:00'),

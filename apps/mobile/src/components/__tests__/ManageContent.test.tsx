@@ -8,6 +8,7 @@ function renderManageContent(overrides: Partial<Parameters<typeof ManageContent>
     role: 'OWNER',
     onPayments: vi.fn(),
     onNotifications: vi.fn(),
+    onPromotions: vi.fn(),
     onServices: vi.fn(),
     onEmployees: vi.fn(),
     onWorkingHours: vi.fn(),
@@ -20,6 +21,7 @@ function renderManageContent(overrides: Partial<Parameters<typeof ManageContent>
 describe('ManageContent', () => {
   it('renders the owner management destinations and opens each action', () => {
     const onNotifications = vi.fn();
+    const onPromotions = vi.fn();
     const onPayments = vi.fn();
     const onServices = vi.fn();
     const onEmployees = vi.fn();
@@ -28,6 +30,7 @@ describe('ManageContent', () => {
 
     const tree = renderManageContent({
       onNotifications,
+      onPromotions,
       onPayments,
       onServices,
       onEmployees,
@@ -38,6 +41,7 @@ describe('ManageContent', () => {
     expect(findByText(tree, 'Manage')).toBeDefined();
     expect(findByTestId(tree, 'manage-payments')).toBeDefined();
     expect(findByTestId(tree, 'manage-notifications')).toBeDefined();
+    expect(findByTestId(tree, 'manage-promotions')).toBeDefined();
     expect(findByTestId(tree, 'manage-services')).toBeDefined();
     expect(findByTestId(tree, 'manage-employees')).toBeDefined();
     expect(findByTestId(tree, 'manage-working-hours')).toBeDefined();
@@ -46,6 +50,7 @@ describe('ManageContent', () => {
 
     press(findByTestId(tree, 'manage-payments'));
     press(findByTestId(tree, 'manage-notifications'));
+    press(findByTestId(tree, 'manage-promotions'));
     press(findByTestId(tree, 'manage-services'));
     press(findByTestId(tree, 'manage-employees'));
     press(findByTestId(tree, 'manage-working-hours'));
@@ -53,6 +58,7 @@ describe('ManageContent', () => {
 
     expect(onPayments).toHaveBeenCalledTimes(1);
     expect(onNotifications).toHaveBeenCalledTimes(1);
+    expect(onPromotions).toHaveBeenCalledTimes(1);
     expect(onServices).toHaveBeenCalledTimes(1);
     expect(onEmployees).toHaveBeenCalledTimes(1);
     expect(onWorkingHours).toHaveBeenCalledTimes(1);
@@ -65,6 +71,7 @@ describe('ManageContent', () => {
 
     expect(findByTestId(tree, 'manage-own-schedule')).toBeDefined();
     expect(queryByTestId(tree, 'manage-notifications')).toBeNull();
+    expect(queryByTestId(tree, 'manage-promotions')).toBeNull();
     expect(queryByTestId(tree, 'manage-payments')).toBeNull();
     expect(queryByTestId(tree, 'manage-services')).toBeNull();
     expect(queryByTestId(tree, 'manage-employees')).toBeNull();

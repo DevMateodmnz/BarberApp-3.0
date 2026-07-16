@@ -9,6 +9,7 @@ import { cancelAppointmentNotifications, scheduleAppointmentNotificationsForNewA
 import { getOperationalMercadoPagoCredentials } from './paymentConnectionService.js';
 import { createMercadoPagoCheckoutPreference, getMercadoPagoPaymentById } from './providers/mercadoPagoClient.js';
 import { ensurePaymentReviewCase, getOpenPaymentReviewForPayment, getPaymentTimelineForPayment, getProviderEventSummariesForPayment } from './paymentReviewService.js';
+import { consumeReservedPromotionRedemptionForAppointment, releaseReservedPromotionRedemptionForAppointment } from '../promotionService.js';
 
 const runtime = readPaymentRuntimeConfig(process.env);
 const MAX_WEBHOOK_SIGNATURE_HEADER_LENGTH = 512;
@@ -28,6 +29,9 @@ export interface PublicBookingPaymentStateDto {
   paymentStatus: 'NOT_REQUIRED' | 'CREATING' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED' | 'REVIEW_REQUIRED' | 'ERROR';
   amountCents: number | null;
   servicePriceCents: number;
+  discountCents: number;
+  finalPriceCents: number;
+  promotionName: string | null;
   remainingAmountCents: number | null;
   currency: string;
   expiresAt: string | null;
@@ -186,6 +190,11 @@ export async function syncBookingPaymentOnAppointmentCancellation(input: {
         lastErrorCode: null,
       },
     });
+    await releaseReservedPromotionRedemptionForAppointment(db, {
+      appointmentId: input.appointmentId,
+      reason: 'PUBLIC_CANCELLED',
+      now: input.now,
+    });
 
     return {
       latestPaymentStatus: 'CANCELLED' as const,
@@ -220,6 +229,11 @@ export async function loadPublicBookingPaymentStateByReference(input: {
           user: {
             select: { name: true },
           },
+        },
+      },
+      promotionRedemption: {
+        select: {
+          promotionNameSnapshot: true,
         },
       },
       bookingPayments: {
@@ -273,7 +287,10 @@ export async function loadPublicBookingPaymentStateByReference(input: {
     paymentStatus: hasOpenReview ? 'REVIEW_REQUIRED' : mapPaymentStatus(payment?.status),
     amountCents: payment?.amountCents ?? null,
     servicePriceCents: appointment.servicePriceCents,
-    remainingAmountCents: payment ? appointment.servicePriceCents - payment.amountCents : null,
+    discountCents: appointment.discountCents,
+    finalPriceCents: appointment.finalPriceCents,
+    promotionName: appointment.promotionRedemption?.promotionNameSnapshot ?? null,
+    remainingAmountCents: payment ? appointment.finalPriceCents - payment.amountCents : null,
     currency: payment?.currency ?? appointment.serviceCurrency,
     expiresAt: toIso(payment?.expiresAt ?? appointment.paymentHoldExpiresAt),
     checkoutUrl:
@@ -454,6 +471,11 @@ export async function releaseExpiredPaymentHolds(input: {
         appointmentId: appointment.id,
         barbershopId: appointment.barbershopId,
         types: ['BOOKING_CONFIRMATION', 'REMINDER_24H'],
+        now,
+      });
+      await releaseReservedPromotionRedemptionForAppointment(tx, {
+        appointmentId: appointment.id,
+        reason: 'HOLD_EXPIRED',
         now,
       });
 
@@ -902,6 +924,11 @@ export async function reconcileAuthoritativePayment(input: {
         return;
       }
 
+      await consumeReservedPromotionRedemptionForAppointment(tx, {
+        appointmentId: payment.appointmentId,
+        now: approvedAt,
+      });
+
       await scheduleAppointmentNotificationsForNewAppointment(tx, {
         appointmentId: payment.appointmentId,
         now: input.now,
@@ -961,6 +988,11 @@ export async function reconcileAuthoritativePayment(input: {
       appointmentId: payment.appointmentId,
       barbershopId: payment.barbershopId,
       types: ['BOOKING_CONFIRMATION', 'REMINDER_24H'],
+      now: input.now,
+    });
+    await releaseReservedPromotionRedemptionForAppointment(tx, {
+      appointmentId: payment.appointmentId,
+      reason: normalizedStatus === 'REJECTED' ? 'PAYMENT_REJECTED' : 'PAYMENT_CANCELLED',
       now: input.now,
     });
   });

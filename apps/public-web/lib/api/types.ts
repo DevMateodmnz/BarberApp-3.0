@@ -95,6 +95,9 @@ export interface PublicBookingConfirmation {
     | 'ERROR';
   amountCents?: number | null;
   servicePriceCents?: number;
+  discountCents?: number;
+  finalPriceCents?: number;
+  promotionName?: string | null;
   remainingAmountCents?: number | null;
   currency?: string;
   expiresAt?: string | null;
@@ -121,9 +124,20 @@ export interface PublicCreateAppointmentPayload {
   clientName: string;
   clientPhone: string;
   clientEmail?: string;
+  promotionCode?: string;
   notes?: string;
   consentAccepted: true;
   consentVersion: string;
+}
+
+export interface PublicPromotionQuote {
+  promotionName: string;
+  servicePriceCents: number;
+  discountCents: number;
+  finalPriceCents: number;
+  currency: string;
+  depositAmountCents: number | null;
+  remainingAmountCents: number | null;
 }
 
 export interface PublicCancelBookingPayload {

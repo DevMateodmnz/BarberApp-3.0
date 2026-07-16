@@ -60,6 +60,11 @@ export const APPOINTMENT_WITH_NOTIFICATION_SUMMARY_INCLUDE = {
   },
   client: true,
   service: true,
+  promotionRedemption: {
+    select: {
+      promotionNameSnapshot: true,
+    },
+  },
   notifications: {
     select: APPOINTMENT_NOTIFICATION_SUMMARY_SELECT,
     orderBy: [
@@ -180,10 +185,22 @@ interface AppointmentNotificationContext {
   startAt: Date;
   publicReference: string | null;
   serviceName: string;
+  servicePriceCents: number;
+  discountCents: number;
+  finalPriceCents: number;
+  serviceCurrency: string;
   barbershopName: string;
   timezone: string;
   publicSlug: string | null;
   employeeName: string;
+  bookingPayments: Array<{
+    id: string;
+    status: string;
+    amountCents: number;
+  }>;
+  promotionRedemption: {
+    promotionNameSnapshot: string;
+  } | null;
 }
 
 interface RescheduleNotificationPayloadInput {
@@ -307,6 +324,7 @@ function buildNotificationPayload(
   context: AppointmentNotificationContext,
   reschedule?: RescheduleNotificationPayloadInput
 ): Prisma.InputJsonObject & AppointmentNotificationPayload {
+  const latestPayment = context.bookingPayments[0] ?? null;
   return {
     customerName: context.clientName,
     barbershopName: context.barbershopName,
@@ -316,6 +334,15 @@ function buildNotificationPayload(
     startAt: context.startAt.toISOString(),
     publicSlug: context.publicSlug,
     publicReference: context.publicReference,
+    currency: context.serviceCurrency,
+    servicePriceCents: context.servicePriceCents,
+    discountCents: context.discountCents,
+    finalPriceCents: context.finalPriceCents,
+    depositPaidCents: latestPayment?.status === 'APPROVED' ? latestPayment.amountCents : null,
+    remainingBalanceCents: latestPayment?.status === 'APPROVED'
+      ? Math.max(context.finalPriceCents - latestPayment.amountCents, 0)
+      : null,
+    promotionName: context.promotionRedemption?.promotionNameSnapshot ?? null,
     previousStartAt: reschedule?.previousStartAt.toISOString(),
     previousEndAt: reschedule?.previousEndAt.toISOString(),
     previousServiceName: reschedule?.previousServiceName,
@@ -412,6 +439,26 @@ async function loadAppointmentNotificationContext(
       startAt: true,
       publicReference: true,
       serviceName: true,
+      servicePriceCents: true,
+      discountCents: true,
+      finalPriceCents: true,
+      serviceCurrency: true,
+      promotionRedemption: {
+        select: {
+          promotionNameSnapshot: true,
+        },
+      },
+      bookingPayments: {
+        select: {
+          id: true,
+          status: true,
+          amountCents: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 1,
+      },
       barbershop: {
         select: {
           name: true,
@@ -440,12 +487,18 @@ async function loadAppointmentNotificationContext(
     startAt: appointment.startAt,
     publicReference: appointment.publicReference,
     serviceName: appointment.serviceName,
+    servicePriceCents: appointment.servicePriceCents,
+    discountCents: appointment.discountCents,
+    finalPriceCents: appointment.finalPriceCents,
+    serviceCurrency: appointment.serviceCurrency,
     barbershopName: appointment.barbershop.name,
     timezone: appointment.barbershop.timezone,
     publicSlug: appointment.barbershop.publicSlug,
     employeeName:
       appointment.employee.user.name?.trim()
       || appointment.employee.user.email.trim(),
+    bookingPayments: appointment.bookingPayments,
+    promotionRedemption: appointment.promotionRedemption,
   };
 }
 

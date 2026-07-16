@@ -43,6 +43,12 @@ import {
   StaffCreateAppointmentSchema,
 } from '../schemas/appointment.js';
 import {
+  PromotionCreateSchema,
+  PromotionQuoteSchema,
+  PromotionRedemptionListQuerySchema,
+  PromotionUpdateSchema,
+} from '../schemas/promotion.js';
+import {
   NotificationOperationsQuerySchema,
   NotificationRetryBodySchema,
 } from '../schemas/notification.js';
@@ -64,9 +70,11 @@ import {
 } from '../schemas/customer.js';
 import * as customerService from '../services/customerService.js';
 import * as scheduleBoardService from '../services/scheduleBoardService.js';
+import * as promotionService from '../services/promotionService.js';
 import { BadRequestError } from '../lib/errors.js';
 import { ValidationError } from '../lib/errors.js';
 import { normalizeEmail } from '../lib/email.js';
+import { prisma } from '../lib/prisma.js';
 
 /** Extracts barbershopId route param with validation */
 function paramBarbershopId(req: Request): string {
@@ -80,6 +88,25 @@ function paramEmployeeId(req: Request): string {
   const id = req.params.employeeId;
   if (!id) throw new BadRequestError('Employee ID is required');
   return id;
+}
+
+function paramPromotionId(req: Request): string {
+  const id = req.params.promotionId;
+  if (!id) throw new BadRequestError('Promotion ID is required');
+  return id;
+}
+
+function parsePromotionRedemptionListQuery(req: Request) {
+  const parsed = PromotionRedemptionListQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid promotion redemption query parameters',
+      parsed.error.flatten(),
+    );
+  }
+
+  return parsed.data;
 }
 
 /** Extracts serviceId route param with validation */
@@ -490,6 +517,181 @@ router.post(
       next(error);
     }
   }
+);
+
+router.post(
+  '/:barbershopId/promotions/quote',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  validateBody(PromotionQuoteSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const customerPhone = typeof req.body.clientPhone === 'string' ? req.body.clientPhone.trim() : '';
+      const customerId = customerPhone
+        ? await promotionService.findCustomerIdByPhone(paramBarbershopId(req), customerPhone)
+        : null;
+      const service = await prisma.service.findFirstOrThrow({
+        where: {
+          id: req.body.serviceId,
+          barbershopId: paramBarbershopId(req),
+          isActive: true,
+          deletedAt: null,
+        },
+      });
+      const evaluation = await promotionService.evaluatePromotion(prisma, {
+        barbershopId: paramBarbershopId(req),
+        code: req.body.code,
+        serviceId: req.body.serviceId,
+        servicePriceCents: service.priceCents,
+        bookingChannel: 'STAFF',
+        customerId,
+        now: new Date(),
+      });
+      res.json({ success: true, data: evaluation });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/promotions/summary',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const summary = await promotionService.getPromotionSummary(paramBarbershopId(req));
+      res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/promotions',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotions = await promotionService.listBarbershopPromotions(paramBarbershopId(req));
+      res.json({ success: true, data: promotions });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:barbershopId/promotions',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(PromotionCreateSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.createPromotion(
+        paramBarbershopId(req),
+        req.userId,
+        req.body,
+      );
+      res.status(201).json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/promotions/:promotionId',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.getPromotionDetail(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+      );
+      res.json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.patch(
+  '/:barbershopId/promotions/:promotionId',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(PromotionUpdateSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.updatePromotion(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+        req.userId,
+        req.body,
+      );
+      res.json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:barbershopId/promotions/:promotionId/activate',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.setPromotionActive(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+        req.userId,
+        true,
+      );
+      res.json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:barbershopId/promotions/:promotionId/deactivate',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.setPromotionActive(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+        req.userId,
+        false,
+      );
+      res.json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/promotions/:promotionId/redemptions',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const page = await promotionService.listPromotionRedemptions(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+        parsePromotionRedemptionListQuery(req),
+      );
+      res.json({ success: true, data: page });
+    } catch (error) {
+      next(error);
+    }
+  },
 );
 
 // ============================================

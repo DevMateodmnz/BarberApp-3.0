@@ -86,3 +86,16 @@ La barbería debe revisar el pago antes de confirmar el turno.
 
 Internal causes such as seller mismatch, amount mismatch, duplicate payment,
 or staff notes never reach the customer surface.
+
+## Promotions and coupon handling
+
+Public booking now supports an optional coupon code.
+
+Rules:
+
+- code is normalized server-side before evaluation
+- quote failures return only generic safe copy
+- the public client must reapply the coupon after service or customer-phone changes
+- idempotency fingerprints include the normalized promotion code
+- zero-final-price bookings skip the deposit provider and confirm directly
+- coupon codes must not appear in URLs or public confirmation links

@@ -115,6 +115,30 @@ enum PaymentMethod {
   OTHER
 }
 
+enum PromotionDiscountType {
+  FIXED
+  PERCENTAGE
+}
+
+enum PromotionServiceScope {
+  ALL
+  SELECTED
+}
+
+enum PromotionRedemptionStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
+}
+
+enum PromotionRedemptionReleaseReason {
+  HOLD_EXPIRED
+  PAYMENT_REJECTED
+  PAYMENT_CANCELLED
+  PUBLIC_CANCELLED
+  PREFERENCE_CREATION_FAILED
+}
+
 enum EmployeeInvitationStatus {
   PENDING
   ACCEPTED
@@ -202,6 +226,8 @@ model User {
   assignedPaymentReviews                BookingPaymentReview[]    @relation("BookingPaymentReviewAssignedTo")
   resolvedPaymentReviews                BookingPaymentReview[]    @relation("BookingPaymentReviewResolvedBy")
   paymentReviewActions                  BookingPaymentReviewAction[] @relation("BookingPaymentReviewActionActor")
+  createdPromotions                     Promotion[]               @relation("PromotionCreatedBy")
+  updatedPromotions                     Promotion[]               @relation("PromotionUpdatedBy")
 
   @@map("users")
 }
@@ -248,6 +274,10 @@ model Barbershop {
   PaymentOAuthState               PaymentOAuthState[]
   paymentReviews                  BookingPaymentReview[]
   paymentReviewActions            BookingPaymentReviewAction[]
+  promotions                      Promotion[]
+  promotionServices               PromotionService[]
+  promotionRedemptions            PromotionRedemption[]
+  promotionCustomerUsages         PromotionCustomerUsage[]
 
   // Indexes
   @@index([ownerId])
@@ -416,6 +446,7 @@ model Service {
   employeeServices EmployeeService[]
   appointments     Appointment[]
   serviceRecords   ServiceRecord[]
+  promotionServices PromotionService[]
 
   // Indexes
   @@index([barbershopId])
@@ -465,6 +496,8 @@ model Appointment {
   publicConsentVersion    String?                        @map("public_consent_version")
   serviceName             String                         @map("service_name")
   servicePriceCents       Int                            @map("service_price_cents")
+  discountCents           Int                            @default(0) @map("discount_cents")
+  finalPriceCents         Int                            @default(0) @map("final_price_cents")
   serviceDurationMinutes  Int                            @map("service_duration_minutes")
   serviceCurrency         String                         @map("service_currency")
   startAt                 DateTime                       @map("start_at")
@@ -504,6 +537,7 @@ model Appointment {
   changes                         AppointmentChange[]
   serviceRecords                  ServiceRecord[]
   bookingPayments                 BookingPayment[]
+  promotionRedemption             PromotionRedemption?
 
   @@unique([id, barbershopId])
   // Indexes for common queries
@@ -625,6 +659,110 @@ model BookingPayment {
   @@index([barbershopId, createdAt])
   @@index([appointmentId, status])
   @@map("booking_payments")
+}
+
+model Promotion {
+  id                        String                @id @default(cuid())
+  barbershopId              String                @map("barbershop_id")
+  name                      String
+  code                      String
+  codeNormalized            String                @map("code_normalized")
+  discountType              PromotionDiscountType @map("discount_type")
+  fixedDiscountCents        Int?                  @map("fixed_discount_cents")
+  percentageBasisPoints     Int?                  @map("percentage_basis_points")
+  startsAt                  DateTime              @map("starts_at")
+  endsAt                    DateTime              @map("ends_at")
+  isActive                  Boolean               @default(true) @map("is_active")
+  appliesToPublicBookings   Boolean               @default(true) @map("applies_to_public_bookings")
+  appliesToStaffBookings    Boolean               @default(true) @map("applies_to_staff_bookings")
+  maxActiveRedemptions      Int?                  @map("max_active_redemptions")
+  maxRedemptionsPerCustomer Int?                  @default(1) @map("max_redemptions_per_customer")
+  activeRedemptionCount     Int                   @default(0) @map("active_redemption_count")
+  minimumPriceCents         Int?                  @map("minimum_price_cents")
+  serviceScope              PromotionServiceScope @default(ALL) @map("service_scope")
+  createdByUserId           String                @map("created_by_user_id")
+  updatedByUserId           String?               @map("updated_by_user_id")
+  createdAt                 DateTime              @default(now()) @map("created_at")
+  updatedAt                 DateTime              @updatedAt @map("updated_at")
+  deletedAt                 DateTime?             @map("deleted_at")
+
+  barbershop     Barbershop              @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  createdByUser  User                    @relation("PromotionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedByUser  User?                   @relation("PromotionUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  services       PromotionService[]
+  redemptions    PromotionRedemption[]
+  customerUsages PromotionCustomerUsage[]
+
+  @@unique([barbershopId, codeNormalized])
+  @@index([barbershopId, isActive, startsAt, endsAt])
+  @@map("promotions")
+}
+
+model PromotionService {
+  promotionId  String @map("promotion_id")
+  serviceId    String @map("service_id")
+  barbershopId String @map("barbershop_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  promotion  Promotion  @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  service    Service    @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+
+  @@id([promotionId, serviceId])
+  @@index([serviceId])
+  @@index([barbershopId])
+  @@map("promotion_services")
+}
+
+model PromotionCustomerUsage {
+  id                    String   @id @default(cuid())
+  barbershopId          String   @map("barbershop_id")
+  promotionId           String   @map("promotion_id")
+  customerId            String   @map("customer_id")
+  activeRedemptionCount Int      @default(0) @map("active_redemption_count")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  promotion  Promotion  @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  customer    Customer   @relation(fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+
+  @@unique([promotionId, customerId])
+  @@index([barbershopId, promotionId])
+  @@map("promotion_customer_usages")
+}
+
+model PromotionRedemption {
+  id                     String                           @id @default(cuid())
+  barbershopId           String                           @map("barbershop_id")
+  promotionId            String                           @map("promotion_id")
+  appointmentId          String                           @map("appointment_id")
+  customerId             String?                          @map("customer_id")
+  status                 PromotionRedemptionStatus
+  codeSnapshot           String                           @map("code_snapshot")
+  promotionNameSnapshot  String                           @map("promotion_name_snapshot")
+  discountTypeSnapshot   PromotionDiscountType           @map("discount_type_snapshot")
+  policyValueSnapshot    Int                              @map("policy_value_snapshot")
+  servicePriceCents      Int                              @map("service_price_cents")
+  discountCents          Int                              @map("discount_cents")
+  finalPriceCents        Int                              @map("final_price_cents")
+  reservedAt             DateTime                         @map("reserved_at")
+  consumedAt             DateTime?                        @map("consumed_at")
+  releasedAt             DateTime?                        @map("released_at")
+  releaseReason          PromotionRedemptionReleaseReason? @map("release_reason")
+  createdAt              DateTime                         @default(now()) @map("created_at")
+  updatedAt              DateTime                         @updatedAt @map("updated_at")
+
+  barbershop  Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  promotion   Promotion    @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  appointment Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  customer    Customer?    @relation(fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+
+  @@unique([appointmentId])
+  @@index([promotionId, status, createdAt])
+  @@index([customerId, promotionId, status])
+  @@index([barbershopId, status, createdAt])
+  @@map("promotion_redemptions")
 }
 
 model PaymentWebhookEvent {
@@ -973,6 +1111,8 @@ model Customer {
   // Relations
   barbershop   Barbershop    @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   appointments Appointment[] @relation("AppointmentCustomer")
+  promotionRedemptions  PromotionRedemption[]
+  promotionCustomerUsages PromotionCustomerUsage[]
 
   // Indexes
   @@unique([id, barbershopId])

@@ -18,7 +18,7 @@ import {
   type AppointmentCreationValidationKey,
 } from '@/lib/appointmentCreationDomain.js';
 import { formatBusinessDateLabel, getTodayDateString } from '@/lib/format.js';
-import type { CurrentUserContext } from '@/lib/types.js';
+import type { CurrentUserContext, StaffPromotionQuote } from '@/lib/types.js';
 import { tokens } from '@/theme/index.js';
 
 export interface AppointmentEmployeeOption {
@@ -87,6 +87,10 @@ export interface AppointmentCreateScreenViewProps {
   clientPhone: string;
   clientEmail: string;
   notes: string;
+  promotionCode: string;
+  promotionQuote: Extract<StaffPromotionQuote, { eligible: true }> | null;
+  promotionMessage: string | null;
+  isQuotingPromotion: boolean;
   customerWarning: CustomerWarning | null;
   fieldErrors: Partial<Record<AppointmentCreationField, AppointmentCreationValidationKey>>;
   submissionErrorKey: AppointmentCreationErrorKey | null;
@@ -103,6 +107,9 @@ export interface AppointmentCreateScreenViewProps {
   onClientPhoneChange: (value: string) => void;
   onClientEmailChange: (value: string) => void;
   onNotesChange: (value: string) => void;
+  onPromotionCodeChange: (value: string) => void;
+  onApplyPromotion: () => void;
+  onRemovePromotion: () => void;
   onSubmit: () => void;
 }
 
@@ -194,6 +201,10 @@ export function AppointmentCreateScreenView({
   clientPhone,
   clientEmail,
   notes,
+  promotionCode,
+  promotionQuote,
+  promotionMessage,
+  isQuotingPromotion,
   customerWarning,
   fieldErrors,
   submissionErrorKey,
@@ -210,6 +221,9 @@ export function AppointmentCreateScreenView({
   onClientPhoneChange,
   onClientEmailChange,
   onNotesChange,
+  onPromotionCodeChange,
+  onApplyPromotion,
+  onRemovePromotion,
   onSubmit,
 }: AppointmentCreateScreenViewProps) {
   const { t } = useTranslation();
@@ -223,6 +237,7 @@ export function AppointmentCreateScreenView({
   const fieldErrorClientPhone = getValidationMessage(fieldErrors.clientPhone, t);
   const fieldErrorClientEmail = getValidationMessage(fieldErrors.clientEmail, t);
   const fieldErrorNotes = getValidationMessage(fieldErrors.notes, t);
+  const fieldErrorPromotionCode = getValidationMessage(fieldErrors.promotionCode, t);
   const submissionError = getSemanticErrorMessage(submissionErrorKey, t);
   const availabilityError = getSemanticErrorMessage(availabilityErrorKey, t);
   const hasEmployeeResolved = isOwner ? employeeOptions.some((option) => option.selected) : !!context?.employeeId;
@@ -632,6 +647,73 @@ export function AppointmentCreateScreenView({
                     inputStyle={styles.notesInput}
                     error={fieldErrorNotes ?? undefined}
                   />
+
+                  <View style={styles.promotionSection} testID="appointment-create-promotion-section">
+                    <AppTextInput
+                      testID="appointment-create-promotion-code"
+                      label={t('appointmentCreation.labels.promotionCodeOptional')}
+                      value={promotionCode}
+                      onChangeText={onPromotionCodeChange}
+                      placeholder={t('appointmentCreation.labels.promotionCodePlaceholder')}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      error={fieldErrorPromotionCode ?? undefined}
+                    />
+                    <Text style={styles.helperText}>{t('appointmentCreation.helpers.promotion')}</Text>
+                    <View style={styles.promotionActions}>
+                      <AppButton
+                        testID="appointment-create-apply-promotion"
+                        title={t('appointmentCreation.actions.applyPromotion')}
+                        loadingText={t('appointmentCreation.actions.applyingPromotion')}
+                        loading={isQuotingPromotion}
+                        variant="secondary"
+                        onPress={onApplyPromotion}
+                        disabled={isQuotingPromotion}
+                        style={styles.promotionActionButton}
+                      />
+                      <AppButton
+                        testID="appointment-create-remove-promotion"
+                        title={t('appointmentCreation.actions.removePromotion')}
+                        variant="secondary"
+                        onPress={onRemovePromotion}
+                        disabled={isQuotingPromotion && !promotionQuote && !promotionCode}
+                        style={styles.promotionActionButton}
+                      />
+                    </View>
+                    {promotionMessage ? (
+                      <Text
+                        style={promotionQuote ? styles.successText : styles.helperText}
+                        testID="appointment-create-promotion-message"
+                      >
+                        {promotionMessage}
+                      </Text>
+                    ) : null}
+                    {promotionQuote ? (
+                      <View style={styles.promotionQuoteCard} testID="appointment-create-promotion-quote">
+                        <AppointmentSummaryRow
+                          label={t('appointmentCreation.labels.summaryPromotionOriginalPrice')}
+                          value={formatCurrencyMinorUnits(promotionQuote.servicePriceCents, {
+                            currency: 'ARS',
+                            fractionDigits: 0,
+                          })}
+                        />
+                        <AppointmentSummaryRow
+                          label={t('appointmentCreation.labels.summaryPromotionDiscount')}
+                          value={formatCurrencyMinorUnits(promotionQuote.discountCents, {
+                            currency: 'ARS',
+                            fractionDigits: 0,
+                          })}
+                        />
+                        <AppointmentSummaryRow
+                          label={t('appointmentCreation.labels.summaryPromotionFinalPrice')}
+                          value={formatCurrencyMinorUnits(promotionQuote.finalPriceCents, {
+                            currency: 'ARS',
+                            fractionDigits: 0,
+                          })}
+                        />
+                      </View>
+                    ) : null}
+                  </View>
                 </FormSection>
               </AppCard>
 
@@ -788,6 +870,11 @@ const styles = StyleSheet.create({
     color: tokens.colors.textSecondary,
     textAlign: 'center',
   },
+  successText: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.success,
+    textAlign: 'center',
+  },
   errorText: {
     ...tokens.typography.variant.bodySmall,
     color: tokens.colors.error,
@@ -879,6 +966,26 @@ const styles = StyleSheet.create({
     minHeight: 96,
     paddingTop: tokens.spacing[3],
     textAlignVertical: 'top',
+  },
+  promotionSection: {
+    gap: tokens.spacing[3],
+    marginTop: tokens.spacing[2],
+  },
+  promotionActions: {
+    flexDirection: 'row',
+    gap: tokens.spacing[2],
+  },
+  promotionActionButton: {
+    flex: 1,
+  },
+  promotionQuoteCard: {
+    backgroundColor: tokens.colors.surfaceVariant,
+    borderColor: tokens.colors.border,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    gap: tokens.spacing[2],
+    paddingHorizontal: tokens.spacing[4],
+    paddingVertical: tokens.spacing[3],
   },
   customerWarningBanner: {
     backgroundColor: tokens.colors.surfaceVariant,

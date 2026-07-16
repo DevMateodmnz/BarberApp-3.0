@@ -13,6 +13,7 @@ export interface ManageContentProps {
   role: 'OWNER' | 'BARBER' | 'CLIENT';
   onPayments: () => void;
   onNotifications: () => void;
+  onPromotions: () => void;
   onServices: () => void;
   onEmployees: () => void;
   onWorkingHours: () => void;
@@ -24,6 +25,7 @@ export function ManageContent({
   role,
   onPayments,
   onNotifications,
+  onPromotions,
   onServices,
   onEmployees,
   onWorkingHours,
@@ -88,6 +90,15 @@ export function ManageContent({
                       iconName="mail-open-outline"
                       accessibilityLabel={t('navigation.accessibility.notifications')}
                       onPress={onNotifications}
+                      showChevron
+                    />
+                    <NavigationTile
+                      testID="manage-promotions"
+                      title={t('navigation.promotions')}
+                      description={t('manage.items.promotions.description')}
+                      iconName="pricetags-outline"
+                      accessibilityLabel={t('navigation.accessibility.promotions')}
+                      onPress={onPromotions}
                       showChevron
                     />
                     <NavigationTile

@@ -4,6 +4,7 @@ import {
   applyAppointmentCreationDateChange,
   applyAppointmentCreationCustomerPrefill,
   applyAppointmentCreationEmployeeChange,
+  applyAppointmentCreationPromotionCodeChange,
   applyAppointmentCreationServiceChange,
   appointmentMatchesContext,
   beginAppointmentCreationAvailabilityRequest,
@@ -229,6 +230,48 @@ describe('appointment creation validation and payload building', () => {
       });
       expect(result.effectiveEmployeeId).toBe('emp-barber');
     }
+  });
+
+  it('normalizes an optional promotion code into the final booking payload', () => {
+    let state = createInitialAppointmentCreationState(OWNER_CONTEXT);
+    state = applyAppointmentCreationEmployeeChange(state, 'emp-1');
+    state = applyAppointmentCreationServiceChange(state, 'svc-1');
+    state = applyAppointmentCreationDateChange(state, '2026-06-29');
+    state = applyAppointmentCreationPromotionCodeChange(state, ' bienvenida 25 ');
+    state = {
+      ...state,
+      clientName: 'Promo Guest',
+      availability: makeAvailability(),
+      availabilityStatus: 'success',
+      selectedSlotStartAt: '2026-06-29T13:00:00.000Z',
+    };
+
+    const result = buildCreateStaffAppointmentPayload(state);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload).toEqual(expect.objectContaining({
+        promotionCode: 'BIENVENIDA25',
+      }));
+    }
+  });
+
+  it('flags malformed promotion codes without blocking empty-code bookings', () => {
+    let state = createInitialAppointmentCreationState(OWNER_CONTEXT);
+    state = applyAppointmentCreationEmployeeChange(state, 'emp-1');
+    state = applyAppointmentCreationServiceChange(state, 'svc-1');
+    state = applyAppointmentCreationDateChange(state, '2026-06-29');
+    state = {
+      ...state,
+      clientName: 'Walk In',
+      availability: makeAvailability(),
+      availabilityStatus: 'success',
+      selectedSlotStartAt: '2026-06-29T13:00:00.000Z',
+    };
+
+    expect(validateAppointmentCreationDraft(state).fieldErrors.promotionCode).toBeUndefined();
+
+    const invalidState = applyAppointmentCreationPromotionCodeChange(state, '***');
+    expect(validateAppointmentCreationDraft(invalidState).fieldErrors.promotionCode).toBe('promotionCodeInvalid');
   });
 });
 

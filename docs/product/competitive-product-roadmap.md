@@ -338,3 +338,18 @@ to rebuild reminder plumbing" — the platform already has a
 durable notification foundation, so future work can focus on the
 next channel or business capability instead of redoing delivery
 reliability.
+
+## Phase 6 milestone (this commit)
+
+> **feat(promotions): add coupon rules and redemption audit**
+
+This milestone ships the first safe promotions foundation instead of jumping directly to loyalty:
+
+- owner-managed coupon rules
+- fixed and percentage discounts with deterministic integer rounding
+- public and staff channel eligibility
+- service scoping and customer/global active-usage limits
+- redemption audit with reserved / consumed / released lifecycle
+- discounted deposits and zero-price public bookings
+
+Loyalty remains deferred until this coupon stack is pushed, physically QA'd, and validated against real operator workflows.

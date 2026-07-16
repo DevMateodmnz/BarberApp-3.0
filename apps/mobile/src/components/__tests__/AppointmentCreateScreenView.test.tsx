@@ -114,6 +114,10 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
     clientPhone: '+54 381 555 1234',
     clientEmail: 'mateo@example.com',
     notes: 'Walk-in guest',
+    promotionCode: '',
+    promotionQuote: null,
+    promotionMessage: null,
+    isQuotingPromotion: false,
     customerWarning: null,
     fieldErrors: {},
     submissionErrorKey: null,
@@ -130,6 +134,9 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
     onClientPhoneChange: vi.fn(),
     onClientEmailChange: vi.fn(),
     onNotesChange: vi.fn(),
+    onPromotionCodeChange: vi.fn(),
+    onApplyPromotion: vi.fn(),
+    onRemovePromotion: vi.fn(),
     onSubmit: vi.fn(),
     ...overrides,
   });
@@ -305,5 +312,58 @@ describe('AppointmentCreateScreenView customer history warning', () => {
     const banner = findByTestId(tree, 'appointment-create-customer-warning');
     expect(banner).toBeDefined();
     expect(findByText(tree, expectedWarningBody(2, null))).toBeDefined();
+  });
+});
+
+describe('AppointmentCreateScreenView promotion section', () => {
+  it('renders the promotion quote breakdown and fires apply/remove callbacks', () => {
+    const onApplyPromotion = vi.fn();
+    const onRemovePromotion = vi.fn();
+    const tree = renderView({
+      promotionCode: 'BIENVENIDA25',
+      promotionQuote: {
+        eligible: true,
+        servicePriceCents: 3200,
+        discountCents: 800,
+        finalPriceCents: 2400,
+        policyValueSnapshot: 2500,
+        promotion: {
+          id: 'promo-1',
+          name: 'Bienvenida 25%',
+          code: 'bienvenida 25',
+          codeNormalized: 'BIENVENIDA25',
+          discountType: 'PERCENTAGE',
+          fixedDiscountCents: null,
+          percentageBasisPoints: 2500,
+          maxRedemptionsPerCustomer: 1,
+        },
+      },
+      promotionMessage: 'Promotion applied: Bienvenida 25%',
+      onApplyPromotion,
+      onRemovePromotion,
+    });
+
+    expect(findByTestId(tree, 'appointment-create-promotion-section')).toBeDefined();
+    expect(findByTestId(tree, 'appointment-create-promotion-quote')).toBeDefined();
+    expect(findByText(tree, 'Promotion applied: Bienvenida 25%')).toBeDefined();
+
+    press(findByTestId(tree, 'appointment-create-apply-promotion'));
+    press(findByTestId(tree, 'appointment-create-remove-promotion'));
+
+    expect(onApplyPromotion).toHaveBeenCalledTimes(1);
+    expect(onRemovePromotion).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a promotion validation error without hiding the ordinary booking flow', () => {
+    const tree = renderView({
+      fieldErrors: {
+        promotionCode: 'promotionCodeInvalid',
+      },
+      promotionCode: '***',
+    });
+
+    expect(findByTestId(tree, 'appointment-create-promotion-code')).toBeDefined();
+    expect(findByText(tree, 'Use 3 to 32 characters: letters, numbers, hyphen, or underscore.')).toBeDefined();
+    expect(findByTestId(tree, 'appointment-create-summary-section')).toBeDefined();
   });
 });

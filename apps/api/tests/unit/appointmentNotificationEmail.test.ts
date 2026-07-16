@@ -34,6 +34,31 @@ describe('buildAppointmentNotificationEmail', () => {
     expect(email.messageId).not.toContain('appt_1');
   });
 
+  it('renders immutable promotion pricing snapshots when present', () => {
+    const email = buildAppointmentNotificationEmail({
+      type: 'BOOKING_CONFIRMATION',
+      channel: 'EMAIL',
+      idempotencyKey: 'appointment:appt_2:BOOKING_CONFIRMATION:EMAIL',
+      recipientEmail: 'cliente@example.com',
+      payload: {
+        ...basePayload,
+        servicePriceCents: 4000,
+        discountCents: 1000,
+        finalPriceCents: 3000,
+        depositPaidCents: 1500,
+        remainingBalanceCents: 1500,
+        currency: 'ARS',
+        promotionName: 'Bienvenida 25%',
+      },
+    });
+
+    expect(email.text).toContain('Promoción aplicada: Bienvenida 25%');
+    expect(email.text).toContain('Seña pagada:');
+    expect(email.text).toContain('Saldo en la barbería:');
+    expect(email.html).toContain('Total del turno');
+    expect(email.html).toContain('Bienvenida 25%');
+  });
+
   it('renders a Spanish 24-hour reminder without leaking internal identifiers', () => {
     const email = buildAppointmentNotificationEmail({
       type: 'REMINDER_24H',

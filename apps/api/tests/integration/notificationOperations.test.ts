@@ -56,6 +56,10 @@ async function createAppointmentWithNotification(overrides: {
       clientEmail: overrides.recipientEmail ?? `client${appointmentCounter}@example.com`,
       serviceName: fixtures.service.name,
       servicePriceCents: 3200,
+
+      discountCents: 0,
+
+      finalPriceCents: 3200,
       serviceDurationMinutes: fixtures.service.durationMinutes,
       serviceCurrency: 'ARS',
       startAt,

@@ -336,6 +336,9 @@ export async function createStaffAppointment(
       ? { clientEmail: trimOptionalText(input.clientEmail) }
       : {}),
     ...(trimOptionalText(input.notes) ? { notes: trimOptionalText(input.notes) } : {}),
+    ...(trimOptionalText(input.promotionCode)
+      ? { promotionCode: trimOptionalText(input.promotionCode)?.toUpperCase().replace(/\s+/gu, '') }
+      : {}),
     ...(input.employeeId ? { employeeId: input.employeeId } : {}),
   };
 

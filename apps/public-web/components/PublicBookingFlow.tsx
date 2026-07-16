@@ -6,6 +6,7 @@ import {
   BrowserApiError,
   loadAvailabilityForSelection,
   loadBarbersForService,
+  quotePublicPromotion,
   submitPublicBooking,
 } from '@/lib/api/browser';
 import {
@@ -20,6 +21,7 @@ import type {
   PublicBookingConfig,
   PublicBookingConfirmation,
   PublicCreateAppointmentPayload,
+  PublicPromotionQuote,
   PublicService,
   PublicShop,
 } from '@/lib/api/types';
@@ -34,6 +36,11 @@ interface PublicBookingFlowProps {
     localDate: string;
     serviceId: string;
   }) => Promise<PublicAvailability>;
+  quotePromotion?: (input: {
+    serviceId: string;
+    code: string;
+    clientPhone?: string;
+  }) => Promise<PublicPromotionQuote>;
   submitBooking?: (input: {
     idempotencyKey: string;
     payload: PublicCreateAppointmentPayload;
@@ -81,6 +88,10 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value.trim());
 }
 
+function normalizePromotionCode(value: string) {
+  return value.trim().toUpperCase().replace(/\s+/gu, '');
+}
+
 export function PublicBookingFlow({
   shop,
   services,
@@ -92,6 +103,13 @@ export function PublicBookingFlow({
       serviceId: input.serviceId,
       barberId: input.barberId,
       localDate: input.localDate,
+    }),
+  quotePromotion: quotePromotionRequest = (input) =>
+    quotePublicPromotion({
+      slug: shop.slug,
+      serviceId: input.serviceId,
+      code: input.code,
+      clientPhone: input.clientPhone,
     }),
   submitBooking = (input) =>
     submitPublicBooking({
@@ -114,11 +132,16 @@ export function PublicBookingFlow({
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [clientEmail, setClientEmail] = useState('');
+  const [promotionCode, setPromotionCode] = useState('');
+  const [promotionQuote, setPromotionQuote] = useState<PublicPromotionQuote | null>(null);
+  const [promotionMessage, setPromotionMessage] = useState('');
+  const [isQuotingPromotion, setIsQuotingPromotion] = useState(false);
   const [notes, setNotes] = useState('');
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submitMessageRef = useRef<HTMLParagraphElement | null>(null);
+  const promotionRequestIdRef = useRef(0);
 
   const selectedService = useMemo(
     () => services.find((service) => service.serviceId === selectedServiceId) ?? null,
@@ -135,6 +158,28 @@ export function PublicBookingFlow({
     [availability, selectedSlotStartAt]
   );
 
+  const pricingPreview = promotionQuote
+    ? {
+        servicePriceCents: promotionQuote.servicePriceCents,
+        discountCents: promotionQuote.discountCents,
+        finalPriceCents: promotionQuote.finalPriceCents,
+        depositAmountCents: promotionQuote.depositAmountCents,
+        remainingAmountCents: promotionQuote.remainingAmountCents,
+        currency: promotionQuote.currency,
+        promotionName: promotionQuote.promotionName,
+      }
+    : selectedService
+      ? {
+          servicePriceCents: selectedService.priceCents,
+          discountCents: 0,
+          finalPriceCents: selectedService.priceCents,
+          depositAmountCents: selectedService.depositAmountCents ?? null,
+          remainingAmountCents: selectedService.remainingAmountCents ?? null,
+          currency: selectedService.currency,
+          promotionName: null,
+        }
+      : null;
+
   const shouldShowBookingForm = Boolean(
     selectedService &&
       selectedBarber &&
@@ -143,6 +188,7 @@ export function PublicBookingFlow({
         clientName ||
         clientPhone ||
         clientEmail ||
+        promotionCode ||
         notes ||
         consentAccepted)
   );
@@ -170,6 +216,14 @@ export function PublicBookingFlow({
   function clearAttemptState() {
     clearPendingBookingAttempt(shop.slug);
     setSubmitMessage('');
+  }
+
+  function clearPromotionState(options?: { preserveCode?: boolean }) {
+    setPromotionQuote(null);
+    setPromotionMessage('');
+    if (!options?.preserveCode) {
+      setPromotionCode('');
+    }
   }
 
   function buildBookingPayload(): PublicCreateAppointmentPayload | null {
@@ -207,6 +261,8 @@ export function PublicBookingFlow({
       return null;
     }
 
+    const normalizedPromotionCode = normalizePromotionCode(promotionCode);
+
     return {
       serviceId: selectedService.serviceId,
       barberId: selectedBarber.barberId,
@@ -214,6 +270,7 @@ export function PublicBookingFlow({
       clientName: normalizedClientName,
       clientPhone: normalizedClientPhone,
       ...(normalizedClientEmail ? { clientEmail: normalizedClientEmail } : {}),
+      ...(normalizedPromotionCode ? { promotionCode: normalizedPromotionCode } : {}),
       notes: notes.trim() ? notes.trim() : undefined,
       consentAccepted: true,
       consentVersion: bookingConfig.consent.version,
@@ -222,6 +279,7 @@ export function PublicBookingFlow({
 
   async function handleServiceChange(serviceId: string) {
     clearAttemptState();
+    clearPromotionState();
     setSelectedServiceId(serviceId);
     setSelectedBarberId('');
     setLocalDate('');
@@ -273,6 +331,61 @@ export function PublicBookingFlow({
     }
   }
 
+  async function handleApplyPromotion() {
+    if (!selectedService) {
+      setPromotionMessage('Primero seleccioná un servicio.');
+      return;
+    }
+
+    const normalizedCode = normalizePromotionCode(promotionCode);
+    if (!normalizedCode) {
+      setPromotionMessage('Ingresá un código de promoción.');
+      return;
+    }
+
+    const trimmedPhone = clientPhone.trim();
+    if (trimmedPhone && !isValidE164Phone(trimmedPhone)) {
+      setPromotionMessage('Para validar límites por cliente, usá un teléfono válido en formato internacional.');
+      return;
+    }
+
+    const requestId = promotionRequestIdRef.current + 1;
+    promotionRequestIdRef.current = requestId;
+    setIsQuotingPromotion(true);
+    setPromotionMessage('');
+
+    try {
+      const quote = await quotePromotionRequest({
+        serviceId: selectedService.serviceId,
+        code: normalizedCode,
+        clientPhone: trimmedPhone || undefined,
+      });
+
+      if (promotionRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setPromotionCode(normalizedCode);
+      setPromotionQuote(quote);
+      setPromotionMessage('');
+    } catch (error) {
+      if (promotionRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setPromotionQuote(null);
+      if (error instanceof BrowserApiError && error.code === 'PUBLIC_BOOKING_WRITE_RATE_LIMITED') {
+        setPromotionMessage('Llegaste al límite de intentos. Esperá unos minutos antes de volver a probar.');
+      } else {
+        setPromotionMessage('El código no está disponible para este turno.');
+      }
+    } finally {
+      if (promotionRequestIdRef.current === requestId) {
+        setIsQuotingPromotion(false);
+      }
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -319,6 +432,12 @@ export function PublicBookingFlow({
         setSubmitMessage(
           'Llegaste al límite de intentos. Esperá unos minutos antes de volver a reservar.'
         );
+      } else if (
+        error instanceof BrowserApiError
+        && error.code === 'PROMOTION_NOT_AVAILABLE'
+      ) {
+        setSubmitMessage('El código no está disponible para este turno. Revisalo o probá sin promoción.');
+        setPromotionQuote(null);
       } else if (error instanceof BrowserApiError && error.status) {
         setSubmitMessage(mapBrowserError(error));
       } else {
@@ -367,26 +486,41 @@ export function PublicBookingFlow({
             <p className={styles.infoBody}>
               Duración estimada: {selectedService.durationMinutes} minutos.
             </p>
-            {selectedService.depositRequired ? (
+            {pricingPreview ? (
               <div className={styles.depositPanel}>
-                <p className={styles.infoTitle}>Seña para confirmar el turno</p>
+                {pricingPreview.promotionName ? (
+                  <p className={styles.successMessage}>Promoción aplicada: {pricingPreview.promotionName}</p>
+                ) : null}
                 <p className={styles.infoBody}>
-                  Total del servicio: {formatPrice(selectedService.priceCents, selectedService.currency)}.
+                  Precio original: {formatPrice(pricingPreview.servicePriceCents, pricingPreview.currency)}.
                 </p>
+                {pricingPreview.discountCents > 0 ? (
+                  <p className={styles.infoBody}>
+                    Descuento: {formatPrice(pricingPreview.discountCents, pricingPreview.currency)}.
+                  </p>
+                ) : null}
                 <p className={styles.infoBody}>
-                  Seña requerida: {formatPrice(selectedService.depositAmountCents, selectedService.currency)}.
+                  Total del turno: {formatPrice(pricingPreview.finalPriceCents, pricingPreview.currency)}.
                 </p>
-                <p className={styles.infoBody}>
-                  Saldo en barbería: {formatPrice(selectedService.remainingAmountCents, selectedService.currency)}.
-                </p>
-                <p className={styles.infoBody}>
-                  El horario quedará reservado durante {bookingConfig.depositPolicy?.holdDurationMinutes ?? 15} minutos mientras realizás el pago.
-                </p>
-                <p className={styles.infoBody}>
-                  Tu turno se confirmará cuando Mercado Pago apruebe la operación.
-                </p>
-                {bookingConfig.depositPolicy?.publicTerms ? (
-                  <p className={styles.infoBody}>{bookingConfig.depositPolicy.publicTerms}</p>
+                {selectedService.depositRequired ? (
+                  <>
+                    <p className={styles.infoTitle}>Seña para confirmar el turno</p>
+                    <p className={styles.infoBody}>
+                      Seña requerida: {formatPrice(pricingPreview.depositAmountCents, pricingPreview.currency)}.
+                    </p>
+                    <p className={styles.infoBody}>
+                      Saldo en barbería: {formatPrice(pricingPreview.remainingAmountCents, pricingPreview.currency)}.
+                    </p>
+                    <p className={styles.infoBody}>
+                      El horario quedará reservado durante {bookingConfig.depositPolicy?.holdDurationMinutes ?? 15} minutos mientras realizás el pago.
+                    </p>
+                    <p className={styles.infoBody}>
+                      Tu turno se confirmará cuando Mercado Pago apruebe la operación.
+                    </p>
+                    {bookingConfig.depositPolicy?.publicTerms ? (
+                      <p className={styles.infoBody}>{bookingConfig.depositPolicy.publicTerms}</p>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             ) : null}
@@ -487,10 +621,71 @@ export function PublicBookingFlow({
             <input id="client-name" className={styles.input} value={clientName} onChange={(event) => setClientName(event.target.value)} />
 
             <label className={styles.label} htmlFor="client-phone">Teléfono</label>
-            <input id="client-phone" className={styles.input} value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} placeholder="+543811234567" />
+            <input
+              id="client-phone"
+              className={styles.input}
+              value={clientPhone}
+              onChange={(event) => {
+                setClientPhone(event.target.value);
+                if (promotionQuote) {
+                  setPromotionQuote(null);
+                  setPromotionMessage('Reaplicá la promoción si cambiaste el teléfono.');
+                }
+              }}
+              placeholder="+543811234567"
+            />
 
             <label className={styles.label} htmlFor="client-email">Email (opcional)</label>
             <input id="client-email" className={styles.input} value={clientEmail} onChange={(event) => setClientEmail(event.target.value)} />
+
+            <div className={styles.section}>
+              <p className={styles.label}>¿Tenés un código de promoción?</p>
+              <div className={styles.inlineRow}>
+                <input
+                  id="promotion-code"
+                  className={styles.input}
+                  value={promotionCode}
+                  maxLength={32}
+                  onChange={(event) => {
+                    setPromotionCode(event.target.value);
+                    setPromotionQuote(null);
+                    setPromotionMessage('');
+                  }}
+                  placeholder="Ej: BIENVENIDA10"
+                />
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={() => void handleApplyPromotion()}
+                  disabled={!selectedService || isQuotingPromotion}
+                >
+                  {isQuotingPromotion ? 'Aplicando…' : 'Aplicar'}
+                </button>
+                <button
+                  type="button"
+                  className={styles.ghostButton}
+                  onClick={() => clearPromotionState()}
+                  disabled={!promotionCode && !promotionQuote}
+                >
+                  Quitar
+                </button>
+              </div>
+
+              {promotionQuote ? (
+                <div className={styles.quotePanel}>
+                  <p className={styles.successMessage}>Promoción aplicada</p>
+                  <p className={styles.infoBody}>Precio original: {formatPrice(promotionQuote.servicePriceCents, promotionQuote.currency)}</p>
+                  <p className={styles.infoBody}>Descuento: {formatPrice(promotionQuote.discountCents, promotionQuote.currency)}</p>
+                  <p className={styles.infoBody}>Total del turno: {formatPrice(promotionQuote.finalPriceCents, promotionQuote.currency)}</p>
+                  <p className={styles.infoBody}>Seña requerida: {formatPrice(promotionQuote.depositAmountCents, promotionQuote.currency)}</p>
+                  <p className={styles.infoBody}>Saldo en la barbería: {formatPrice(promotionQuote.remainingAmountCents, promotionQuote.currency)}</p>
+                </div>
+              ) : null}
+
+              {promotionMessage ? (
+                <p className={promotionQuote ? styles.successMessage : styles.message}>{promotionMessage}</p>
+              ) : null}
+            </div>
 
             <label className={styles.label} htmlFor="client-notes">Notas (opcional)</label>
             <textarea id="client-notes" className={styles.textarea} value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} />
@@ -507,7 +702,13 @@ export function PublicBookingFlow({
             ) : null}
 
             <button type="submit" className={styles.primaryButton} disabled={isSubmitting}>
-              {isSubmitting ? 'Procesando…' : selectedService?.depositRequired ? 'Reservar y pagar seña' : 'Confirmar turno'}
+              {isSubmitting
+                ? 'Procesando…'
+                : pricingPreview && pricingPreview.finalPriceCents === 0
+                  ? 'Confirmar turno gratis'
+                  : selectedService?.depositRequired
+                    ? 'Reservar y pagar seña'
+                    : 'Confirmar turno'}
             </button>
           </form>
         ) : null}

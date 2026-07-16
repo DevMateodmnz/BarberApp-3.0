@@ -113,6 +113,10 @@ async function createAppointmentAt(
       clientPhoneNormalized,
       serviceName: 'Customer Test Service',
       servicePriceCents: 2500,
+
+      discountCents: 0,
+
+      finalPriceCents: 2500,
       serviceDurationMinutes: durationMinutes,
       serviceCurrency: 'ARS',
       startAt,

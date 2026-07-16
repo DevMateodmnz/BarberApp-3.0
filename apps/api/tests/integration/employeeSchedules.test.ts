@@ -206,6 +206,10 @@ describe('employee schedules API', () => {
         clientEmail: 'future@example.com',
         serviceName: 'Employee Schedule Cut',
         servicePriceCents: 3000,
+
+        discountCents: 0,
+
+        finalPriceCents: 3000,
         serviceDurationMinutes: 30,
         serviceCurrency: 'ARS',
         startAt: new Date(startAt),
@@ -362,6 +366,10 @@ describe('employee schedules API', () => {
         clientEmail: 'reschedule@example.com',
         serviceName: 'Employee Schedule Cut',
         servicePriceCents: 3000,
+
+        discountCents: 0,
+
+        finalPriceCents: 3000,
         serviceDurationMinutes: 30,
         serviceCurrency: 'ARS',
         startAt: localDateTimeToUtc(localDate, '10:00', TIMEZONE),

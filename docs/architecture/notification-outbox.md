@@ -164,3 +164,13 @@ The outbox now participates in staff rescheduling:
   append-only `appointment_change.id`, so a later legitimate
   reschedule creates a new confirmation while the same change event
   cannot duplicate it.
+
+## Promotion pricing snapshots
+
+Notification payloads now include the immutable discounted appointment pricing snapshot when present.
+
+This guarantees that reminder and confirmation copy remains stable even if:
+
+- the promotion is later edited or deactivated
+- the service price changes
+- future bookings no longer qualify for the same discount

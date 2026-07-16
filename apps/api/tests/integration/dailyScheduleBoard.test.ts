@@ -106,6 +106,10 @@ async function createAppointment(input: {
       clientEmail: input.clientEmail ?? null,
       serviceName: input.service.name,
       servicePriceCents: input.service.priceCents,
+
+      discountCents: 0,
+
+      finalPriceCents: input.service.priceCents,
       serviceDurationMinutes: input.service.durationMinutes,
       serviceCurrency: input.service.currency,
       startAt,

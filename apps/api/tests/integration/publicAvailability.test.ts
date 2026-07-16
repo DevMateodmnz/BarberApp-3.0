@@ -764,6 +764,10 @@ describe('public availability domain behavior', () => {
         clientName: 'Blocking Guest',
         serviceName: 'Availability Cut',
         servicePriceCents: 3000,
+
+        discountCents: 0,
+
+        finalPriceCents: 3000,
         serviceDurationMinutes: 30,
         serviceCurrency: 'ARS',
         startAt: localDateTimeToUtc(monday, '09:30', fixtures.publishedShop.timezone),
@@ -781,6 +785,10 @@ describe('public availability domain behavior', () => {
         clientName: 'Cancelled Guest',
         serviceName: 'Availability Cut',
         servicePriceCents: 3000,
+
+        discountCents: 0,
+
+        finalPriceCents: 3000,
         serviceDurationMinutes: 30,
         serviceCurrency: 'ARS',
         startAt: localDateTimeToUtc(monday, '10:00', fixtures.publishedShop.timezone),

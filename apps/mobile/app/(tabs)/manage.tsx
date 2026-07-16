@@ -74,6 +74,7 @@ export default function ManageScreen() {
         role={context.role}
         onPayments={() => router.push('/(tabs)/payments')}
         onNotifications={() => router.push('/(tabs)/notifications')}
+        onPromotions={() => router.push('/(tabs)/promotions')}
         onServices={() => router.push('/(tabs)/services')}
         onEmployees={() => router.push('/(tabs)/employees')}
         onWorkingHours={() => router.push('/(tabs)/working-hours')}

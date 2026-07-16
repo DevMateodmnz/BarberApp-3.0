@@ -56,6 +56,10 @@ async function createFutureAppointment(status: 'PENDING' | 'CONFIRMED' | 'IN_PRO
       clientPhoneNormalized: '+5493815551234',
       serviceName: 'Lifecycle Service',
       servicePriceCents: 2500,
+
+      discountCents: 0,
+
+      finalPriceCents: 2500,
       serviceDurationMinutes: fixtures.service.durationMinutes,
       serviceCurrency: 'ARS',
       startAt,

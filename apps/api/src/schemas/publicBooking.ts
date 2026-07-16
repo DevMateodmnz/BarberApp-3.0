@@ -38,11 +38,20 @@ export const PublicCreateAppointmentSchema = z
       .max(PUBLIC_BOOKING_CLIENT_NAME_MAX_LENGTH),
     clientPhone: z.string().trim().min(1, 'clientPhone is required').max(16),
     clientEmail: OptionalPublicBookingEmailSchema,
+    promotionCode: z.string().trim().max(32).optional(),
     notes: z.string().trim().max(PUBLIC_BOOKING_NOTES_MAX_LENGTH).optional(),
     consentAccepted: z
       .boolean()
       .refine((value) => value === true, 'consentAccepted must be true'),
     consentVersion: z.string().trim().min(1, 'consentVersion is required'),
+  })
+  .strict();
+
+export const PublicPromotionQuoteSchema = z
+  .object({
+    serviceId: z.string().trim().min(1, 'serviceId is required'),
+    code: z.string().trim().min(1, 'code is required').max(32),
+    clientPhone: z.string().trim().max(20).optional(),
   })
   .strict();
 
@@ -65,3 +74,4 @@ export type PublicCreateAppointmentInput = z.infer<
   typeof PublicCreateAppointmentSchema
 >;
 export type PublicCancelBookingInput = z.infer<typeof PublicCancelBookingSchema>;
+export type PublicPromotionQuoteInput = z.infer<typeof PublicPromotionQuoteSchema>;

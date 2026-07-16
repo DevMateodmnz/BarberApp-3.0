@@ -55,6 +55,12 @@ import {
   releaseExpiredPaymentHolds,
   syncBookingPaymentOnAppointmentCancellation,
 } from './payments/bookingPaymentService.js';
+import {
+  createPromotionRedemption,
+  evaluatePromotion,
+  getPromotionRedemptionForAppointment,
+  PAID_APPOINTMENT_REPRICE_NOT_SUPPORTED_CODE,
+} from './promotionService.js';
 import type {
   AppointmentStatus,
   PrismaClient,
@@ -105,6 +111,8 @@ interface AppointmentSnapshotInput {
   clientEmail: string | null;
   serviceName: string;
   servicePriceCents: number;
+  discountCents: number;
+  finalPriceCents: number;
   serviceDurationMinutes: number;
   serviceCurrency: string;
   notes: string | null;
@@ -355,17 +363,26 @@ function buildGuestClientSnapshot(input: {
 }
 
 export function buildServiceSnapshot(
-  service: Service
+  service: Service,
+  pricing?: {
+    discountCents?: number;
+    finalPriceCents?: number;
+  }
 ): Pick<
   AppointmentSnapshotInput,
   | 'serviceName'
   | 'servicePriceCents'
+  | 'discountCents'
+  | 'finalPriceCents'
   | 'serviceDurationMinutes'
   | 'serviceCurrency'
 > {
+  const discountCents = pricing?.discountCents ?? 0;
   return {
     serviceName: service.name,
     servicePriceCents: service.priceCents,
+    discountCents,
+    finalPriceCents: pricing?.finalPriceCents ?? service.priceCents - discountCents,
     serviceDurationMinutes: service.durationMinutes,
     serviceCurrency: service.currency,
   };
@@ -634,6 +651,8 @@ async function createAppointmentRecord(input: {
         publicConsentVersion: options?.publicConsentVersion ?? null,
         serviceName: snapshot.serviceName,
         servicePriceCents: snapshot.servicePriceCents,
+        discountCents: snapshot.discountCents,
+        finalPriceCents: snapshot.finalPriceCents,
         serviceDurationMinutes: snapshot.serviceDurationMinutes,
         serviceCurrency: snapshot.serviceCurrency,
         notes: snapshot.notes,
@@ -814,7 +833,7 @@ export async function createStaffAppointment(
     throw new ConflictError('This time slot is already booked');
   }
 
-  const snapshot: AppointmentSnapshotInput = {
+  const baseSnapshot: AppointmentSnapshotInput = {
     ...buildGuestClientSnapshot(input),
     ...buildServiceSnapshot(bookingContext.service),
   };
@@ -825,19 +844,19 @@ export async function createStaffAppointment(
       const customer = await customerService.linkAppointmentToExistingCustomer({
         barbershopId,
         customerId: input.customerId,
-        name: snapshot.clientName,
-        email: snapshot.clientEmail,
+        name: baseSnapshot.clientName,
+        email: baseSnapshot.clientEmail,
         appointmentAt: startAt,
         db: tx,
       });
       customerId = customer.id;
-    } else if (snapshot.clientPhone) {
+    } else if (baseSnapshot.clientPhone) {
       try {
         const result = await customerService.upsertCustomerByPhone({
           barbershopId,
-          phone: snapshot.clientPhone,
-          name: snapshot.clientName,
-          email: snapshot.clientEmail,
+          phone: baseSnapshot.clientPhone,
+          name: baseSnapshot.clientName,
+          email: baseSnapshot.clientEmail,
           appointmentAt: startAt,
           db: tx,
         });
@@ -852,6 +871,38 @@ export async function createStaffAppointment(
       }
     }
 
+    const promotionEvaluation = input.promotionCode?.trim()
+      ? await evaluatePromotion(tx, {
+          barbershopId,
+          code: input.promotionCode,
+          serviceId: bookingContext.service.id,
+          servicePriceCents: bookingContext.service.priceCents,
+          bookingChannel: 'STAFF',
+          customerId,
+          now: notificationNow,
+        })
+      : null;
+
+    if (promotionEvaluation && !promotionEvaluation.eligible) {
+      throw new AppError(
+        409,
+        promotionEvaluation.safeFailureCode,
+        'Promotion not available for this appointment',
+      );
+    }
+
+    const snapshot: AppointmentSnapshotInput = promotionEvaluation && promotionEvaluation.eligible
+      ? {
+          ...baseSnapshot,
+          discountCents: promotionEvaluation.discountCents,
+          finalPriceCents: promotionEvaluation.finalPriceCents,
+        }
+      : {
+          ...baseSnapshot,
+          discountCents: 0,
+          finalPriceCents: bookingContext.service.priceCents,
+        };
+
     const appointment = await createAppointmentRecord({
       barbershopId,
       employeeId,
@@ -863,6 +914,17 @@ export async function createStaffAppointment(
       snapshot,
       db: tx,
     });
+
+    if (promotionEvaluation && promotionEvaluation.eligible) {
+      await createPromotionRedemption(tx, {
+        promotionEvaluation,
+        barbershopId,
+        appointmentId: appointment.id,
+        customerId,
+        status: 'CONSUMED',
+        now: notificationNow,
+      });
+    }
 
     await scheduleAppointmentNotificationsForNewAppointment(tx, {
       appointmentId: appointment.id,
@@ -1370,6 +1432,53 @@ export async function rescheduleAppointment(
         );
       }
 
+      const existingPromotionRedemption = await getPromotionRedemptionForAppointment(
+        tx,
+        appointment.id,
+      );
+
+      let nextDiscountCents = targetServiceId === appointment.serviceId
+        ? appointment.discountCents
+        : 0;
+      let nextFinalPriceCents = targetServiceId === appointment.serviceId
+        ? appointment.finalPriceCents
+        : targetService.priceCents;
+
+      if (
+        targetServiceId !== appointment.serviceId
+        && appointment.bookingPayments?.some((payment) => payment.status === 'APPROVED')
+        && targetService.priceCents !== appointment.servicePriceCents
+      ) {
+        throw new AppError(
+          409,
+          PAID_APPOINTMENT_REPRICE_NOT_SUPPORTED_CODE,
+          'Paid appointment repricing is not supported for service-changing reschedules',
+        );
+      }
+
+      if (existingPromotionRedemption && targetServiceId !== appointment.serviceId) {
+        const reevaluation = await evaluatePromotion(tx, {
+          barbershopId: appointment.barbershopId,
+          code: existingPromotionRedemption.codeSnapshot,
+          serviceId: targetServiceId,
+          servicePriceCents: targetService.priceCents,
+          bookingChannel: 'STAFF',
+          customerId: appointment.customerId,
+          now,
+        });
+
+        if (!reevaluation.eligible) {
+          throw new AppError(
+            409,
+            reevaluation.safeFailureCode,
+            'The existing promotion is not eligible for the new service',
+          );
+        }
+
+        nextDiscountCents = reevaluation.discountCents;
+        nextFinalPriceCents = reevaluation.finalPriceCents;
+      }
+
       const updateResult = await tx.appointment.updateMany({
         where: {
           id: appointment.id,
@@ -1385,6 +1494,8 @@ export async function rescheduleAppointment(
           serviceId: targetServiceId,
           serviceName: targetService.name,
           servicePriceCents: targetService.priceCents,
+          discountCents: nextDiscountCents,
+          finalPriceCents: nextFinalPriceCents,
           serviceDurationMinutes: targetService.durationMinutes,
           serviceCurrency: targetService.currency,
           startAt: nextStartAt,
@@ -1398,6 +1509,17 @@ export async function rescheduleAppointment(
           'APPOINTMENT_RESCHEDULE_CONFLICT',
           'The appointment was changed by another operation. Refresh and try again.'
         );
+      }
+
+      if (existingPromotionRedemption && targetServiceId !== appointment.serviceId) {
+        await tx.promotionRedemption.update({
+          where: { appointmentId: appointment.id },
+          data: {
+            servicePriceCents: targetService.priceCents,
+            discountCents: nextDiscountCents,
+            finalPriceCents: nextFinalPriceCents,
+          },
+        });
       }
 
       const change = await tx.appointmentChange.create({

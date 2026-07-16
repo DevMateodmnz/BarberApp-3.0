@@ -163,3 +163,12 @@ Compatibility changes are narrow:
 - broader cross-employee BARBER rescheduling policy
 - automatic bulk repair of appointments that fall outside a newly
   narrowed employee schedule
+
+## Promotions and repricing rules
+
+Rescheduling now respects immutable pricing snapshots:
+
+- same-service reschedules preserve the existing promotion redemption and discounted totals
+- unpaid service-changing reschedules may re-evaluate the promotion against the new service
+- when no promotion is preserved, service-changing unpaid reschedules reset to full service price
+- approved paid repricing remains blocked with `PAID_APPOINTMENT_REPRICE_NOT_SUPPORTED`

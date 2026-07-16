@@ -245,6 +245,95 @@ describe('PublicBookingFlow', () => {
     );
   });
 
+  it('applies a promotion quote and submits the normalized promotion code', async () => {
+    const user = userEvent.setup();
+    const submitBooking = vi.fn().mockResolvedValue({
+      bookingReference: 'pb_PROMO1234567890',
+      barbershopName: 'Mateo Barber',
+      serviceName: 'Corte clásico',
+      barberName: 'Mateo',
+      timezone: shop.timezone,
+      localDate: '2026-07-20',
+      localStartTime: '10:00',
+      startAt: '2026-07-20T13:00:00.000Z',
+      endAt: '2026-07-20T13:30:00.000Z',
+      status: 'CONFIRMED',
+    });
+    const quotePromotion = vi.fn().mockResolvedValue({
+      promotionName: 'Bienvenida 25%',
+      servicePriceCents: 3200,
+      discountCents: 800,
+      finalPriceCents: 2400,
+      currency: 'ARS',
+      depositAmountCents: null,
+      remainingAmountCents: 0,
+    });
+
+    render(
+      <PublicBookingFlow
+        shop={shop}
+        services={services}
+        bookingConfig={bookingConfig}
+        loadBarbers={vi.fn().mockResolvedValue([
+          { barberId: 'barber_1', displayName: 'Mateo' },
+        ])}
+        loadAvailability={vi.fn().mockResolvedValue({
+          slug: shop.slug,
+          serviceId: 'svc_1',
+          barberId: 'barber_1',
+          localDate: '2026-07-20',
+          timezone: shop.timezone,
+          slotIntervalMinutes: 30,
+          serviceDurationMinutes: 30,
+          slots: [
+            {
+              startAt: '2026-07-20T13:00:00.000Z',
+              endAt: '2026-07-20T13:30:00.000Z',
+            },
+          ],
+        })}
+        quotePromotion={quotePromotion}
+        submitBooking={submitBooking}
+      />
+    );
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /servicio/i }), 'svc_1');
+    await user.selectOptions(await screen.findByRole('combobox', { name: /profesional/i }), 'barber_1');
+    await user.type(screen.getByLabelText(/^fecha$/i), '2026-07-20');
+    await user.click(screen.getByRole('button', { name: /ver horarios disponibles/i }));
+    await user.click(await screen.findByRole('button', { name: /10:00/i }));
+
+    await user.type(screen.getByLabelText(/teléfono/i), '+543811234567');
+    await user.type(screen.getByPlaceholderText(/bienvenida10/i), ' bienvenida 25 ');
+    await user.click(screen.getByRole('button', { name: /^aplicar$/i }));
+
+    await waitFor(() => {
+      expect(quotePromotion).toHaveBeenCalledWith({
+        serviceId: 'svc_1',
+        code: 'BIENVENIDA25',
+        clientPhone: '+543811234567',
+      });
+    });
+
+    expect(await screen.findByText(/promoción aplicada: bienvenida 25%/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/precio original/i)[0]).toHaveTextContent(/32/);
+    expect(screen.getAllByText(/total del turno/i)[0]).toHaveTextContent(/24/);
+
+    await user.type(screen.getByLabelText(/nombre y apellido/i), 'Mateo');
+    await user.type(screen.getByLabelText(/email \(opcional\)/i), 'mateo@example.com');
+    await user.click(screen.getByRole('checkbox', { name: /acepto compartir mis datos/i }));
+    await user.click(screen.getByRole('button', { name: /confirmar turno/i }));
+
+    await waitFor(() => {
+      expect(submitBooking).toHaveBeenCalledWith({
+        idempotencyKey: expect.any(String),
+        payload: expect.objectContaining({
+          promotionCode: 'BIENVENIDA25',
+        }),
+      });
+    });
+  });
+
   it('shows the server-calculated deposit disclosure before confirming when the service requires a deposit', async () => {
     const user = userEvent.setup();
 
@@ -308,6 +397,182 @@ describe('PublicBookingFlow', () => {
     expect(screen.getByText(/saldo en barbería/i)).toHaveTextContent(/17/);
     expect(screen.getByText(/reservado durante 15 minutos/i)).toBeInTheDocument();
     expect(screen.getByText(/la reserva se confirma con la seña/i)).toBeInTheDocument();
+  });
+
+  it('clears an applied promotion when the selected service changes', async () => {
+    const user = userEvent.setup();
+    const quotePromotion = vi.fn().mockResolvedValue({
+      promotionName: 'Bienvenida 25%',
+      servicePriceCents: 3200,
+      discountCents: 800,
+      finalPriceCents: 2400,
+      currency: 'ARS',
+      depositAmountCents: null,
+      remainingAmountCents: 0,
+    });
+
+    render(
+      <PublicBookingFlow
+        shop={shop}
+        services={services}
+        bookingConfig={bookingConfig}
+        loadBarbers={vi.fn().mockResolvedValue([
+          { barberId: 'barber_1', displayName: 'Mateo' },
+        ])}
+        loadAvailability={vi.fn().mockResolvedValue({
+          slug: shop.slug,
+          serviceId: 'svc_1',
+          barberId: 'barber_1',
+          localDate: '2026-07-20',
+          timezone: shop.timezone,
+          slotIntervalMinutes: 30,
+          serviceDurationMinutes: 30,
+          slots: [
+            {
+              startAt: '2026-07-20T13:00:00.000Z',
+              endAt: '2026-07-20T13:30:00.000Z',
+            },
+          ],
+        })}
+        quotePromotion={quotePromotion}
+        submitBooking={vi.fn()}
+      />
+    );
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /servicio/i }), 'svc_1');
+    await user.selectOptions(await screen.findByRole('combobox', { name: /profesional/i }), 'barber_1');
+    await user.type(screen.getByLabelText(/^fecha$/i), '2026-07-20');
+    await user.click(screen.getByRole('button', { name: /ver horarios disponibles/i }));
+    await user.click(await screen.findByRole('button', { name: /10:00/i }));
+    await user.type(screen.getByPlaceholderText(/bienvenida10/i), 'bienvenida25');
+    await user.click(screen.getByRole('button', { name: /^aplicar$/i }));
+
+    expect(await screen.findByText(/promoción aplicada:\s*bienvenida 25%/i)).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /servicio/i }), 'svc_2');
+
+    await waitFor(() => {
+      expect(screen.queryByText(/promoción aplicada:\s*bienvenida 25%/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('asks the customer to reapply the promotion when the phone changes after quoting', async () => {
+    const user = userEvent.setup();
+    const quotePromotion = vi.fn().mockResolvedValue({
+      promotionName: 'Bienvenida 25%',
+      servicePriceCents: 3200,
+      discountCents: 800,
+      finalPriceCents: 2400,
+      currency: 'ARS',
+      depositAmountCents: null,
+      remainingAmountCents: 0,
+    });
+
+    render(
+      <PublicBookingFlow
+        shop={shop}
+        services={services}
+        bookingConfig={bookingConfig}
+        loadBarbers={vi.fn().mockResolvedValue([
+          { barberId: 'barber_1', displayName: 'Mateo' },
+        ])}
+        loadAvailability={vi.fn().mockResolvedValue({
+          slug: shop.slug,
+          serviceId: 'svc_1',
+          barberId: 'barber_1',
+          localDate: '2026-07-20',
+          timezone: shop.timezone,
+          slotIntervalMinutes: 30,
+          serviceDurationMinutes: 30,
+          slots: [
+            {
+              startAt: '2026-07-20T13:00:00.000Z',
+              endAt: '2026-07-20T13:30:00.000Z',
+            },
+          ],
+        })}
+        quotePromotion={quotePromotion}
+        submitBooking={vi.fn()}
+      />
+    );
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /servicio/i }), 'svc_1');
+    await user.selectOptions(await screen.findByRole('combobox', { name: /profesional/i }), 'barber_1');
+    await user.type(screen.getByLabelText(/^fecha$/i), '2026-07-20');
+    await user.click(screen.getByRole('button', { name: /ver horarios disponibles/i }));
+    await user.click(await screen.findByRole('button', { name: /10:00/i }));
+    await user.type(screen.getByLabelText(/teléfono/i), '+543811234567');
+    await user.type(screen.getByPlaceholderText(/bienvenida10/i), 'bienvenida25');
+    await user.click(screen.getByRole('button', { name: /^aplicar$/i }));
+    expect(await screen.findByText(/promoción aplicada:\s*bienvenida 25%/i)).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText(/teléfono/i));
+    await user.type(screen.getByLabelText(/teléfono/i), '+543811234568');
+
+    expect(await screen.findByText(/reaplicá la promoción si cambiaste el teléfono/i)).toBeInTheDocument();
+    expect(screen.queryByText(/promoción aplicada:\s*bienvenida 25%/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps generic promotion-unavailable copy and shows the zero-price booking CTA without Mercado Pago', async () => {
+    const user = userEvent.setup();
+    const quotePromotion = vi.fn().mockRejectedValue(
+      new BrowserApiError('Internal detail should not leak', 409, 'PROMOTION_NOT_AVAILABLE')
+    );
+
+    render(
+      <PublicBookingFlow
+        shop={shop}
+        services={[services[0]!]}
+        bookingConfig={bookingConfig}
+        loadBarbers={vi.fn().mockResolvedValue([
+          { barberId: 'barber_1', displayName: 'Mateo' },
+        ])}
+        loadAvailability={vi.fn().mockResolvedValue({
+          slug: shop.slug,
+          serviceId: 'svc_1',
+          barberId: 'barber_1',
+          localDate: '2026-07-20',
+          timezone: shop.timezone,
+          slotIntervalMinutes: 30,
+          serviceDurationMinutes: 30,
+          slots: [
+            {
+              startAt: '2026-07-20T13:00:00.000Z',
+              endAt: '2026-07-20T13:30:00.000Z',
+            },
+          ],
+        })}
+        quotePromotion={quotePromotion}
+        submitBooking={vi.fn()}
+      />
+    );
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /servicio/i }), 'svc_1');
+    await user.selectOptions(await screen.findByRole('combobox', { name: /profesional/i }), 'barber_1');
+    await user.type(screen.getByLabelText(/^fecha$/i), '2026-07-20');
+    await user.click(screen.getByRole('button', { name: /ver horarios disponibles/i }));
+    await user.click(await screen.findByRole('button', { name: /10:00/i }));
+    await user.type(screen.getByPlaceholderText(/bienvenida10/i), 'gratis100');
+    await user.click(screen.getByRole('button', { name: /^aplicar$/i }));
+
+    expect(await screen.findByText(/el código no está disponible para este turno/i)).toBeInTheDocument();
+    expect(screen.queryByText(/internal detail should not leak/i)).not.toBeInTheDocument();
+
+    quotePromotion.mockResolvedValueOnce({
+      promotionName: 'Gratis',
+      servicePriceCents: 3200,
+      discountCents: 3200,
+      finalPriceCents: 0,
+      currency: 'ARS',
+      depositAmountCents: 0,
+      remainingAmountCents: 0,
+    });
+
+    await user.clear(screen.getByPlaceholderText(/bienvenida10/i));
+    await user.type(screen.getByPlaceholderText(/bienvenida10/i), 'gratis100');
+    await user.click(screen.getByRole('button', { name: /^aplicar$/i }));
+
+    expect(await screen.findByRole('button', { name: /confirmar turno gratis/i })).toBeInTheDocument();
   });
 
   it('shows a validation error when the optional email is malformed', async () => {

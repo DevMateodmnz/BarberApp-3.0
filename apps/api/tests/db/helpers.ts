@@ -183,6 +183,10 @@ export async function createTestAppointment(data: {
       publicConsentVersion: data.publicConsentVersion ?? null,
       serviceName: data.serviceName ?? service.name,
       servicePriceCents: data.servicePriceCents ?? service.priceCents,
+
+      discountCents: 0,
+
+      finalPriceCents: data.servicePriceCents ?? service.priceCents,
       serviceDurationMinutes: durationMinutes,
       serviceCurrency: data.serviceCurrency ?? service.currency,
       startAt,

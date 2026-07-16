@@ -72,6 +72,10 @@ describe('DB Double-Booking Constraint', () => {
       clientPhone: null,
       serviceName: 'Test Service',
       servicePriceCents: 2500,
+
+      discountCents: 0,
+
+      finalPriceCents: 2500,
       serviceDurationMinutes: 30,
       serviceCurrency: 'ARS',
       startAt,

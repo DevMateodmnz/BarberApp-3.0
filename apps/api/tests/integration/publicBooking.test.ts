@@ -140,6 +140,10 @@ beforeAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.publicBookingIdempotency.deleteMany();
   await prisma.appointmentNotification.deleteMany();
+  await prisma.promotionRedemption.deleteMany();
+  await prisma.promotionCustomerUsage.deleteMany();
+  await prisma.promotionService.deleteMany();
+  await prisma.promotion.deleteMany();
 
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
@@ -291,6 +295,10 @@ afterAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.publicBookingIdempotency.deleteMany();
   await prisma.appointmentNotification.deleteMany();
+  await prisma.promotionRedemption.deleteMany();
+  await prisma.promotionCustomerUsage.deleteMany();
+  await prisma.promotionService.deleteMany();
+  await prisma.promotion.deleteMany();
 
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
@@ -561,5 +569,45 @@ describe('POST /api/v1/public/barbershops/:slug/appointments', () => {
     expect(first.status).toBe(201);
     expect(second.status).toBe(429);
     expect(second.body.error.code).toBe('PUBLIC_BOOKING_WRITE_RATE_LIMITED');
+  });
+
+  it('returns a safe public promotion quote without leaking internal identifiers', async () => {
+    await prisma.promotion.create({
+      data: {
+        barbershopId: fixtures.publishedShop.id,
+        name: 'Bienvenida 25%',
+        code: 'bienvenida 25',
+        codeNormalized: 'BIENVENIDA25',
+        discountType: 'PERCENTAGE',
+        percentageBasisPoints: 2500,
+        startsAt: new Date('2026-07-01T00:00:00.000Z'),
+        endsAt: new Date('2026-08-01T00:00:00.000Z'),
+        appliesToPublicBookings: true,
+        appliesToStaffBookings: true,
+        serviceScope: 'ALL',
+        createdByUserId: fixtures.owner.id,
+        updatedByUserId: fixtures.owner.id,
+      },
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/public/barbershops/${fixtures.publishedShop.slug}/promotions/quote`)
+      .send({
+        serviceId: fixtures.service30.id,
+        code: ' bienvenida 25 ',
+        clientPhone: '+543811234567',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      promotionName: 'Bienvenida 25%',
+      servicePriceCents: 3200,
+      discountCents: 800,
+      finalPriceCents: 2400,
+      currency: 'ARS',
+    });
+    expect(response.body.data).not.toHaveProperty('promotionId');
+    expect(response.body.data).not.toHaveProperty('customerId');
+    expect(response.body.data).not.toHaveProperty('remainingUsage');
   });
 });

@@ -794,7 +794,141 @@ export interface CreateStaffAppointmentInput {
   clientPhone?: string;
   clientEmail?: string;
   notes?: string;
+  promotionCode?: string;
 }
+
+export type PromotionDiscountType = 'FIXED' | 'PERCENTAGE';
+export type PromotionServiceScope = 'ALL' | 'SELECTED';
+export type PromotionStatus = 'ACTIVE' | 'UPCOMING' | 'EXPIRED' | 'INACTIVE' | 'DELETED';
+export type PromotionRedemptionStatus = 'RESERVED' | 'CONSUMED' | 'RELEASED';
+
+export interface PromotionServiceRef {
+  id: string;
+  name: string;
+}
+
+export interface PromotionListItem {
+  id: string;
+  name: string;
+  code: string;
+  codeNormalized: string;
+  discountType: PromotionDiscountType;
+  fixedDiscountCents: number | null;
+  percentageBasisPoints: number | null;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
+  appliesToPublicBookings: boolean;
+  appliesToStaffBookings: boolean;
+  maxActiveRedemptions: number | null;
+  maxRedemptionsPerCustomer: number | null;
+  activeRedemptionCount: number;
+  minimumPriceCents: number | null;
+  serviceScope: PromotionServiceScope;
+  usageCount: number;
+  status: PromotionStatus;
+  services: PromotionServiceRef[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PromotionSummary {
+  activePromotions: number;
+  upcomingPromotions: number;
+  totalConsumedRedemptions: number;
+  totalDiscountCents: number;
+  reservedRedemptions: number;
+  releasedRedemptions: number;
+}
+
+export interface PromotionDetail extends PromotionListItem {
+  _count?: {
+    redemptions: number;
+  };
+}
+
+export interface PromotionRedemptionListItem {
+  appointmentId: string;
+  customerDisplayName: string;
+  serviceName: string;
+  status: PromotionRedemptionStatus;
+  servicePriceCents: number;
+  discountCents: number;
+  finalPriceCents: number;
+  reservedAt: string;
+  consumedAt: string | null;
+  releasedAt: string | null;
+  safeReleaseReason: string | null;
+}
+
+export interface PromotionRedemptionPage {
+  items: PromotionRedemptionListItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface CreatePromotionInput {
+  name: string;
+  code: string;
+  discountType: PromotionDiscountType;
+  fixedDiscountCents?: number | null;
+  percentageBasisPoints?: number | null;
+  startsAt: string;
+  endsAt: string;
+  appliesToPublicBookings: boolean;
+  appliesToStaffBookings: boolean;
+  maxActiveRedemptions?: number | null;
+  maxRedemptionsPerCustomer?: number | null;
+  minimumPriceCents?: number | null;
+  serviceScope: PromotionServiceScope;
+  serviceIds?: string[];
+}
+
+export interface UpdatePromotionInput {
+  name?: string;
+  startsAt?: string;
+  endsAt?: string;
+  appliesToPublicBookings?: boolean;
+  appliesToStaffBookings?: boolean;
+  isActive?: boolean;
+}
+
+export type StaffPromotionQuote =
+  | {
+      eligible: true;
+      servicePriceCents: number;
+      discountCents: number;
+      finalPriceCents: number;
+      promotion: {
+        id: string;
+        name: string;
+        code: string;
+        codeNormalized: string;
+        discountType: PromotionDiscountType;
+        fixedDiscountCents: number | null;
+        percentageBasisPoints: number | null;
+        maxRedemptionsPerCustomer: number | null;
+      };
+      policyValueSnapshot: number;
+    }
+  | {
+      eligible: false;
+      safeFailureCode: string;
+      reason:
+        | 'NOT_FOUND'
+        | 'INACTIVE'
+        | 'DELETED'
+        | 'UPCOMING'
+        | 'EXPIRED'
+        | 'WRONG_CHANNEL'
+        | 'WRONG_SERVICE'
+        | 'MINIMUM_PRICE'
+        | 'TOTAL_LIMIT'
+        | 'PER_CUSTOMER_LIMIT'
+        | 'CUSTOMER_IDENTITY_REQUIRED'
+        | 'INVALID_POLICY';
+    };
 
 export interface RescheduleAppointmentInput {
   employeeId?: string;

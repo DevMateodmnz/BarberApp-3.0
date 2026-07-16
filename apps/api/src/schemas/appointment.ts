@@ -51,6 +51,7 @@ export const StaffCreateAppointmentSchema = z
     clientName: z.string().trim().min(1, 'Client name is required').max(200),
     clientPhone: z.string().trim().max(50).optional(),
     clientEmail: OptionalAppointmentEmailSchema,
+    promotionCode: z.string().trim().max(32).optional(),
     notes: z.string().trim().max(500).optional(),
   })
   .strict();

@@ -46,6 +46,13 @@ import {
 } from './payments/bookingPaymentService.js';
 import { getDepositPolicyPreviewForService } from './payments/depositPolicyService.js';
 import { generatePaymentExternalReference } from '../lib/payments/references.js';
+import {
+  createPromotionRedemption,
+  evaluatePromotion,
+  findCustomerIdByPhone,
+  PUBLIC_PROMOTION_UNAVAILABLE_CODE,
+  releaseReservedPromotionRedemptionForAppointment,
+} from './promotionService.js';
 
 type PublicBookingConfirmationDto = Awaited<
   ReturnType<typeof loadPublicBookingPaymentStateByReference>
@@ -189,6 +196,7 @@ export async function createPublicBookingBySlug(
     clientName,
     clientPhone,
     clientEmail,
+    promotionCode: input.body.promotionCode?.trim().toUpperCase() ?? '',
     notes,
     consentVersion: input.body.consentVersion,
   });
@@ -287,11 +295,6 @@ export async function createPublicBookingBySlug(
         throw createPublicSlotUnavailableError();
       }
 
-      const depositPreview = await getDepositPolicyPreviewForService({
-        barbershopId: barbershop.id,
-        servicePriceCents: service.priceCents,
-      });
-
       // Link the appointment to a first-class Customer record.
       // Public booking input is already E.164, so the phone is
       // directly usable. The upsert is idempotent; two concurrent
@@ -308,8 +311,40 @@ export async function createPublicBookingBySlug(
         }
       );
 
+      const promotionEvaluation = input.body.promotionCode?.trim()
+        ? await evaluatePromotion(tx, {
+            barbershopId: barbershop.id,
+            code: input.body.promotionCode,
+            serviceId: service.id,
+            servicePriceCents: service.priceCents,
+            bookingChannel: 'PUBLIC',
+            customerId: customerRow.id,
+            now,
+            publicSafe: true,
+          })
+        : null;
+
+      if (promotionEvaluation && !promotionEvaluation.eligible) {
+        throw new AppError(409, PUBLIC_PROMOTION_UNAVAILABLE_CODE, 'Promotion not available');
+      }
+
+      const pricing = promotionEvaluation && promotionEvaluation.eligible
+        ? promotionEvaluation
+        : {
+            servicePriceCents: service.priceCents,
+            discountCents: 0,
+            finalPriceCents: service.priceCents,
+          };
+
+      const depositPreview = await getDepositPolicyPreviewForService({
+        barbershopId: barbershop.id,
+        servicePriceCents: pricing.finalPriceCents,
+      });
+
+      const requiresDeposit = depositPreview.enabled && pricing.finalPriceCents > 0;
+
       const publicReference = generatePublicBookingReference();
-      const holdExpiresAt = depositPreview.enabled
+      const holdExpiresAt = requiresDeposit
         ? new Date(now.getTime() + depositPreview.holdDurationMinutes * 60_000)
         : null;
 
@@ -322,7 +357,7 @@ export async function createPublicBookingBySlug(
           serviceId: service.id,
           startAt,
           endAt,
-          status: depositPreview.enabled ? 'PENDING' : 'CONFIRMED',
+          status: requiresDeposit ? 'PENDING' : 'CONFIRMED',
           paymentHoldExpiresAt: holdExpiresAt,
           clientName,
           clientPhone,
@@ -332,18 +367,29 @@ export async function createPublicBookingBySlug(
           publicConsentAcceptedAt: now,
           publicConsentVersion: consent.version,
           notes,
-          ...buildServiceSnapshot(service),
+          ...buildServiceSnapshot(service, pricing),
         },
       });
 
-      if (!depositPreview.enabled) {
+      if (promotionEvaluation && promotionEvaluation.eligible) {
+        await createPromotionRedemption(tx, {
+          promotionEvaluation,
+          barbershopId: barbershop.id,
+          appointmentId: appointment.id,
+          customerId: customerRow.id,
+          status: requiresDeposit ? 'RESERVED' : 'CONSUMED',
+          now,
+        });
+      }
+
+      if (!requiresDeposit) {
         await scheduleAppointmentNotificationsForNewAppointment(tx, {
           appointmentId: appointment.id,
           now,
         });
       }
 
-      const bookingPayment = depositPreview.enabled
+      const bookingPayment = requiresDeposit
         ? await tx.bookingPayment.create({
             data: {
               barbershopId: barbershop.id,
@@ -357,7 +403,7 @@ export async function createPublicBookingBySlug(
               policyValueSnapshot:
                 depositPreview.mode === 'FIXED'
                   ? depositPreview.amountCents!
-                  : Math.round((depositPreview.amountCents! * 10_000) / service.priceCents),
+                  : Math.round((depositPreview.amountCents! * 10_000) / pricing.finalPriceCents),
               externalReference: generatePaymentExternalReference(),
               expiresAt: holdExpiresAt!,
             },
@@ -415,6 +461,11 @@ export async function createPublicBookingBySlug(
               }),
             },
           });
+          await releaseReservedPromotionRedemptionForAppointment(tx, {
+            appointmentId: result.appointmentId,
+            reason: 'PREFERENCE_CREATION_FAILED',
+            now,
+          });
         });
         throw error;
       }
@@ -471,6 +522,59 @@ export async function createPublicBookingBySlug(
 
     throw error;
   }
+}
+
+export async function quotePublicPromotionBySlug(input: {
+  slug: string;
+  serviceId: string;
+  code: string;
+  clientPhone?: string;
+}) {
+  const barbershop = await resolvePublishedPublicBarbershop(input.slug);
+  const service = await prisma.service.findFirst({
+    where: {
+      id: input.serviceId,
+      barbershopId: barbershop.id,
+      isActive: true,
+      deletedAt: null,
+    },
+  });
+  if (!service) {
+    throw createPublicNotFoundError();
+  }
+  const normalizedPhone = input.clientPhone?.trim()
+    ? normalizePublicBookingPhone(input.clientPhone)
+    : null;
+  const customerId = await findCustomerIdByPhone(barbershop.id, normalizedPhone);
+  const evaluation = await evaluatePromotion(prisma, {
+    barbershopId: barbershop.id,
+    code: input.code,
+    serviceId: service.id,
+    servicePriceCents: service.priceCents,
+    bookingChannel: 'PUBLIC',
+    customerId,
+    now: new Date(),
+    publicSafe: true,
+  });
+
+  if (!evaluation.eligible) {
+    throw new AppError(409, PUBLIC_PROMOTION_UNAVAILABLE_CODE, 'Promotion not available');
+  }
+
+  const depositPreview = await getDepositPolicyPreviewForService({
+    barbershopId: barbershop.id,
+    servicePriceCents: evaluation.finalPriceCents,
+  });
+
+  return {
+    promotionName: evaluation.promotion.name,
+    servicePriceCents: evaluation.servicePriceCents,
+    discountCents: evaluation.discountCents,
+    finalPriceCents: evaluation.finalPriceCents,
+    currency: service.currency,
+    depositAmountCents: evaluation.finalPriceCents > 0 ? depositPreview.amountCents : null,
+    remainingAmountCents: evaluation.finalPriceCents > 0 ? depositPreview.remainingAmountCents : 0,
+  };
 }
 
 // ============================================

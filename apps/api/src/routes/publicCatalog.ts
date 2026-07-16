@@ -14,11 +14,13 @@ import {
 import {
   PublicCancelBookingSchema,
   PublicCreateAppointmentSchema,
+  PublicPromotionQuoteSchema,
 } from '../schemas/publicBooking.js';
 import {
   cancelPublicBookingByReference,
   createPublicBookingBySlug,
   getPublicBookingConfirmationByReference,
+  quotePublicPromotionBySlug,
 } from '../services/publicBookingService.js';
 import { loadPublicBookingPaymentStateByReference } from '../services/payments/bookingPaymentService.js';
 import {
@@ -175,6 +177,25 @@ export function createPublicCatalogRouter(
           localDate: query.localDate,
         });
         res.json({ success: true, data: availability });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.post(
+    '/barbershops/:slug/promotions/quote',
+    bookingWriteRateLimit,
+    validateBody(PublicPromotionQuoteSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const quote = await quotePublicPromotionBySlug({
+          slug: paramSlug(req),
+          serviceId: req.body.serviceId,
+          code: req.body.code,
+          clientPhone: req.body.clientPhone,
+        });
+        res.json({ success: true, data: quote });
       } catch (error) {
         next(error);
       }
