@@ -146,8 +146,20 @@ export default function PromotionsScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(buildEmptyForm);
+  const loadRequestIdRef = useRef(0);
+
+  const applyLoyaltyProgram = useCallback((program: LoyaltyProgramSettings) => {
+    setLoyaltyProgram(program);
+    setLoyaltyEnabled(program.isEnabled);
+    setLoyaltyVisitsRequired(String(program.visitsRequired));
+    setLoyaltyRewardValidityDays(program.rewardValidityDays ? String(program.rewardValidityDays) : '');
+    setLoyaltyRewardPromotionId(program.rewardPromotion?.id ?? null);
+  }, []);
 
   const load = useCallback(async (options?: { refresh?: boolean }) => {
+    const requestId = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestId;
+
     if (!context?.barbershopId || !getTokenRef.current) {
       setLoading(false);
       setRefreshing(false);
@@ -169,22 +181,27 @@ export default function PromotionsScreen() {
         fetchPromotions(getTokenRef.current, context.barbershopId),
         fetchBarbershopServices(getTokenRef.current, context.barbershopId, { includeInactive: true }),
       ]);
+
+      if (loadRequestIdRef.current !== requestId) {
+        return;
+      }
+
       setSummary(nextSummary);
-      setLoyaltyProgram(nextLoyaltyProgram);
+      applyLoyaltyProgram(nextLoyaltyProgram);
       setLoyaltyLedger(nextLoyaltyLedger.items);
-      setLoyaltyEnabled(nextLoyaltyProgram.isEnabled);
-      setLoyaltyVisitsRequired(String(nextLoyaltyProgram.visitsRequired));
-      setLoyaltyRewardValidityDays(nextLoyaltyProgram.rewardValidityDays ? String(nextLoyaltyProgram.rewardValidityDays) : '');
-      setLoyaltyRewardPromotionId(nextLoyaltyProgram.rewardPromotion?.id ?? null);
       setPromotions(nextPromotions);
       setServices(nextServices.filter((service) => service.isActive));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : t('errors.unknownApi'));
+      if (loadRequestIdRef.current === requestId) {
+        setError(nextError instanceof Error ? nextError.message : t('errors.unknownApi'));
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (loadRequestIdRef.current === requestId) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [context?.barbershopId, t]);
+  }, [applyLoyaltyProgram, context?.barbershopId, t]);
 
   const loadPromotionDetailState = useCallback(async (promotionId: string) => {
     if (!context?.barbershopId || !getTokenRef.current) return;
@@ -295,6 +312,10 @@ export default function PromotionsScreen() {
   const handleSaveLoyalty = useCallback(async () => {
     if (!context?.barbershopId || !getTokenRef.current) return;
 
+    // A load started before Save may contain older server state. Invalidate it
+    // before issuing the mutation so it cannot overwrite the authoritative
+    // mutation response while the success message is visible.
+    loadRequestIdRef.current += 1;
     setSavingLoyalty(true);
     setError(null);
     setMessage(null);
@@ -305,7 +326,7 @@ export default function PromotionsScreen() {
         rewardPromotionId: loyaltyRewardPromotionId,
         rewardValidityDays: loyaltyRewardValidityDays.trim() ? Number(loyaltyRewardValidityDays) : null,
       });
-      setLoyaltyProgram(nextProgram);
+      applyLoyaltyProgram(nextProgram);
       setMessage(t('promotions.loyalty.saved'));
       await load();
     } catch (nextError) {
@@ -313,7 +334,7 @@ export default function PromotionsScreen() {
     } finally {
       setSavingLoyalty(false);
     }
-  }, [context?.barbershopId, load, loyaltyEnabled, loyaltyRewardPromotionId, loyaltyRewardValidityDays, loyaltyVisitsRequired, t]);
+  }, [applyLoyaltyProgram, context?.barbershopId, load, loyaltyEnabled, loyaltyRewardPromotionId, loyaltyRewardValidityDays, loyaltyVisitsRequired, t]);
 
   if (!isLoaded || !isSignedIn) return null;
 

@@ -208,6 +208,42 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+describe('loyalty program settings', () => {
+  it('persists an OWNER threshold update and returns it from the next GET', async () => {
+    await upsertLoyaltyProgram(fixtures.shop.id, fixtures.owner.id, {
+      isEnabled: true,
+      visitsRequired: 5,
+      rewardPromotionId: fixtures.templatePromotion.id,
+      rewardValidityDays: 30,
+    });
+
+    const updated = await request(app)
+      .put(`/api/v1/barbershops/${fixtures.shop.id}/loyalty-program`)
+      .set(authHeader(fixtures.owner.clerkUserId))
+      .send({
+        isEnabled: true,
+        visitsRequired: 2,
+        rewardPromotionId: fixtures.templatePromotion.id,
+        rewardValidityDays: 30,
+      });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.data.visitsRequired).toBe(2);
+
+    const stored = await prisma.barbershopLoyaltyProgram.findUniqueOrThrow({
+      where: { barbershopId: fixtures.shop.id },
+    });
+    expect(stored.visitsRequired).toBe(2);
+
+    const reloaded = await request(app)
+      .get(`/api/v1/barbershops/${fixtures.shop.id}/loyalty-program`)
+      .set(authHeader(fixtures.owner.clerkUserId));
+
+    expect(reloaded.status).toBe(200);
+    expect(reloaded.body.data.visitsRequired).toBe(2);
+  });
+});
+
 describe('loyalty earning and redemption', () => {
   it('issues one reward when the visit threshold is reached on completed appointments', async () => {
     const first = await createInProgressAppointment('2026-07-20', '10:00');
