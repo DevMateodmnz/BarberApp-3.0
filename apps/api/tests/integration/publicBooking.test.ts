@@ -572,6 +572,26 @@ describe('POST /api/v1/public/barbershops/:slug/appointments', () => {
   });
 
   it('returns a safe public promotion quote without leaking internal identifiers', async () => {
+    await prisma.customer.upsert({
+      where: {
+        barbershopId_phoneNormalized: {
+          barbershopId: fixtures.publishedShop.id,
+          phoneNormalized: '+543811234567',
+        },
+      },
+      create: {
+        barbershopId: fixtures.publishedShop.id,
+        name: 'Public Promotion Customer',
+        phone: '+543811234567',
+        phoneNormalized: '+543811234567',
+        firstSeenAt: new Date('2026-07-01T12:00:00.000Z'),
+        lastSeenAt: new Date('2026-07-01T12:00:00.000Z'),
+      },
+      update: {
+        name: 'Public Promotion Customer',
+      },
+    });
+
     await prisma.promotion.create({
       data: {
         barbershopId: fixtures.publishedShop.id,
