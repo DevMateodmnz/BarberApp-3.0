@@ -200,6 +200,25 @@ describe('useAppointmentsStore', () => {
     expect(useAppointmentsStore.getState().appointments).toEqual(updatedAppts);
   });
 
+  it('keeps authoritative appointment state and exposes the error when a completion fails', async () => {
+    const { useAppointmentsStore } = await importStore();
+    const initialAppts = [makeAppointment({ id: 'appt-1', status: 'IN_PROGRESS' })];
+    mockFetchAppointments.mockResolvedValueOnce(initialAppts);
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, selectedDate);
+
+    mockTransitionStatus.mockRejectedValueOnce(new Error('Completion was not persisted'));
+
+    await expect(
+      useAppointmentsStore.getState().transitionStatus(getToken, 'appt-1', 'COMPLETED'),
+    ).rejects.toThrow('Completion was not persisted');
+
+    const state = useAppointmentsStore.getState();
+    expect(state.appointments).toEqual(initialAppts);
+    expect(state.appointmentsError).toBe('Completion was not persisted');
+    expect(mockFetchAppointments).toHaveBeenCalledTimes(1);
+  });
+
   it('cancelAppointment calls API and refetches list', async () => {
     const { useAppointmentsStore } = await importStore();
 
@@ -241,6 +260,25 @@ describe('useAppointmentsStore', () => {
     expect(mockCancelAppointment).toHaveBeenCalledWith(getToken, 'appt-1', {
       reason: 'Cliente no respondió',
     });
+  });
+
+  it('keeps authoritative appointment state and exposes the error when cancellation fails', async () => {
+    const { useAppointmentsStore } = await importStore();
+    const initialAppts = [makeAppointment({ id: 'appt-1', status: 'PENDING' })];
+    mockFetchAppointments.mockResolvedValueOnce(initialAppts);
+    const getToken = vi.fn().mockResolvedValue('token');
+    await useAppointmentsStore.getState().loadAppointments(getToken, ownerContext, selectedDate);
+
+    mockCancelAppointment.mockRejectedValueOnce(new Error('Cancellation was not persisted'));
+
+    await expect(
+      useAppointmentsStore.getState().cancelAppointment(getToken, 'appt-1'),
+    ).rejects.toThrow('Cancellation was not persisted');
+
+    const state = useAppointmentsStore.getState();
+    expect(state.appointments).toEqual(initialAppts);
+    expect(state.appointmentsError).toBe('Cancellation was not persisted');
+    expect(mockFetchAppointments).toHaveBeenCalledTimes(1);
   });
 
   it('reloading with a different selected date triggers a date-scoped fetch for the new day', async () => {

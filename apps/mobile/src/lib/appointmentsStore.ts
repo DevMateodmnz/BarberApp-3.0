@@ -123,20 +123,36 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
   },
 
   transitionStatus: async (getToken, appointmentId, newStatus) => {
-    await transitionAppointmentStatus(getToken, appointmentId, newStatus);
-    // Refetch the full list after status change
-    if (_lastContext && _lastSelectedDate) {
-      const { loadAppointments } = get();
-      await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+    set({ appointmentsError: null });
+
+    try {
+      await transitionAppointmentStatus(getToken, appointmentId, newStatus);
+      // Refetch the full list after status change
+      if (_lastContext && _lastSelectedDate) {
+        const { loadAppointments } = get();
+        await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
+      set({ appointmentsError: message });
+      throw err;
     }
   },
 
   cancelAppointment: async (getToken, appointmentId, options) => {
-    await cancelAppointmentApi(getToken, appointmentId, options);
-    // Refetch the full list — cancel endpoint doesn't return nested includes
-    if (_lastContext && _lastSelectedDate) {
-      const { loadAppointments } = get();
-      await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+    set({ appointmentsError: null });
+
+    try {
+      await cancelAppointmentApi(getToken, appointmentId, options);
+      // Refetch the full list — cancel endpoint doesn't return nested includes
+      if (_lastContext && _lastSelectedDate) {
+        const { loadAppointments } = get();
+        await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
+      set({ appointmentsError: message });
+      throw err;
     }
   },
 
