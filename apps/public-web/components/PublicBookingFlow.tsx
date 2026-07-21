@@ -489,7 +489,7 @@ export function PublicBookingFlow({
             {pricingPreview ? (
               <div className={styles.depositPanel}>
                 {pricingPreview.promotionName ? (
-                  <p className={styles.successMessage}>Promoción aplicada: {pricingPreview.promotionName}</p>
+                  <p className={styles.successMessage}>Vista previa con promoción: {pricingPreview.promotionName}</p>
                 ) : null}
                 <p className={styles.infoBody}>
                   Precio original: {formatPrice(pricingPreview.servicePriceCents, pricingPreview.currency)}.
@@ -673,7 +673,8 @@ export function PublicBookingFlow({
 
               {promotionQuote ? (
                 <div className={styles.quotePanel}>
-                  <p className={styles.successMessage}>Promoción aplicada</p>
+                  <p className={styles.successMessage}>Vista previa de promoción</p>
+                  <p className={styles.infoBody}>El descuento se confirma recién cuando reservás el turno.</p>
                   <p className={styles.infoBody}>Precio original: {formatPrice(promotionQuote.servicePriceCents, promotionQuote.currency)}</p>
                   <p className={styles.infoBody}>Descuento: {formatPrice(promotionQuote.discountCents, promotionQuote.currency)}</p>
                   <p className={styles.infoBody}>Total del turno: {formatPrice(promotionQuote.finalPriceCents, promotionQuote.currency)}</p>

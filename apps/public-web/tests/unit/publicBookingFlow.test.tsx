@@ -294,6 +294,7 @@ describe('PublicBookingFlow', () => {
         })}
         quotePromotion={quotePromotion}
         submitBooking={submitBooking}
+        onBookingConfirmed={vi.fn()}
       />
     );
 
@@ -315,7 +316,9 @@ describe('PublicBookingFlow', () => {
       });
     });
 
-    expect(await screen.findByText(/promoción aplicada: bienvenida 25%/i)).toBeInTheDocument();
+    expect(await screen.findByText(/vista previa con promoción: bienvenida 25%/i)).toBeInTheDocument();
+    expect(screen.getByText(/el descuento se confirma recién cuando reservás el turno/i)).toBeInTheDocument();
+    expect(submitBooking).not.toHaveBeenCalled();
     expect(screen.getAllByText(/precio original/i)[0]).toHaveTextContent(/32/);
     expect(screen.getAllByText(/total del turno/i)[0]).toHaveTextContent(/24/);
 
@@ -447,12 +450,12 @@ describe('PublicBookingFlow', () => {
     await user.type(screen.getByPlaceholderText(/bienvenida10/i), 'bienvenida25');
     await user.click(screen.getByRole('button', { name: /^aplicar$/i }));
 
-    expect(await screen.findByText(/promoción aplicada:\s*bienvenida 25%/i)).toBeInTheDocument();
+    expect(await screen.findByText(/vista previa con promoción:\s*bienvenida 25%/i)).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole('combobox', { name: /servicio/i }), 'svc_2');
 
     await waitFor(() => {
-      expect(screen.queryByText(/promoción aplicada:\s*bienvenida 25%/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/vista previa con promoción:\s*bienvenida 25%/i)).not.toBeInTheDocument();
     });
   });
 
@@ -504,13 +507,13 @@ describe('PublicBookingFlow', () => {
     await user.type(screen.getByLabelText(/teléfono/i), '+543811234567');
     await user.type(screen.getByPlaceholderText(/bienvenida10/i), 'bienvenida25');
     await user.click(screen.getByRole('button', { name: /^aplicar$/i }));
-    expect(await screen.findByText(/promoción aplicada:\s*bienvenida 25%/i)).toBeInTheDocument();
+    expect(await screen.findByText(/vista previa con promoción:\s*bienvenida 25%/i)).toBeInTheDocument();
 
     await user.clear(screen.getByLabelText(/teléfono/i));
     await user.type(screen.getByLabelText(/teléfono/i), '+543811234568');
 
     expect(await screen.findByText(/reaplicá la promoción si cambiaste el teléfono/i)).toBeInTheDocument();
-    expect(screen.queryByText(/promoción aplicada:\s*bienvenida 25%/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/vista previa con promoción:\s*bienvenida 25%/i)).not.toBeInTheDocument();
   });
 
   it('keeps generic promotion-unavailable copy and shows the zero-price booking CTA without Mercado Pago', async () => {
