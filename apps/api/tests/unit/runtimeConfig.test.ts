@@ -132,6 +132,21 @@ describe('readApiRuntimeConfig', () => {
     expect(
       resolveCorsOrigin(config.corsPolicy, 'http://localhost:8081')
     ).toBe(false);
+    expect(config.physicalQaRequestTracing).toBe(false);
+  });
+
+  it('enables physical-QA request tracing only in development with an explicit flag', () => {
+    expect(readApiRuntimeConfig({
+      NODE_ENV: 'development',
+      PHYSICAL_QA_REQUEST_TRACE: 'true',
+    }).physicalQaRequestTracing).toBe(true);
+    expect(readApiRuntimeConfig({
+      NODE_ENV: 'test',
+      PHYSICAL_QA_REQUEST_TRACE: 'true',
+    }).physicalQaRequestTracing).toBe(false);
+    expect(readApiRuntimeConfig(createProductionEnv({
+      PHYSICAL_QA_REQUEST_TRACE: 'true',
+    })).physicalQaRequestTracing).toBe(false);
   });
 
   it('honors an explicit non-production allowlist when provided', () => {

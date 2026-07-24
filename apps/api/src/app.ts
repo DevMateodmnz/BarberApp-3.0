@@ -5,6 +5,7 @@ import { applyProxyConfig } from './config/proxy.js';
 import { createCorsOptions, readApiRuntimeConfig } from './config/runtime.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { createRateLimiter } from './middleware/rateLimit.js';
+import { createPhysicalQaRequestTrace } from './middleware/physicalQaRequestTrace.js';
 import appointmentRoutes from './routes/appointments.js';
 import barbershopRoutes from './routes/barbershops.js';
 import meRoutes from './routes/me.js';
@@ -19,6 +20,9 @@ export function createApp(config: ApiRuntimeConfig): express.Express {
 
   applyProxyConfig(app, config.nodeEnv);
 
+  app.use(createPhysicalQaRequestTrace({
+    enabled: config.physicalQaRequestTracing,
+  }));
   app.use(cors(createCorsOptions(config.corsPolicy)));
 
   // Webhook route — MUST be before express.json() for raw body capture

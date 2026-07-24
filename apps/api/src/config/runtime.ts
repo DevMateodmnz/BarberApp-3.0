@@ -16,6 +16,7 @@ export interface CorsPolicy {
 export interface ApiRuntimeConfig {
   nodeEnv: NodeEnv;
   port: number;
+  physicalQaRequestTracing: boolean;
   databaseUrl?: string;
   clerkSecretKey?: string;
   clerkWebhookSecret?: string;
@@ -272,7 +273,9 @@ export function createCorsOptions(policy: CorsPolicy): CorsOptions {
       'Authorization',
       'Content-Type',
       'Idempotency-Key',
+      'X-Request-Id',
     ],
+    exposedHeaders: ['X-Request-Id'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     optionsSuccessStatus: 204,
@@ -290,6 +293,9 @@ export function readApiRuntimeConfig(
   return {
     nodeEnv,
     port: readPort(env),
+    physicalQaRequestTracing:
+      nodeEnv === 'development'
+      && readBoolean(env, 'PHYSICAL_QA_REQUEST_TRACE', false),
     databaseUrl: readRequiredInProduction(env, nodeEnv, 'DATABASE_URL'),
     clerkSecretKey: readRequiredInProduction(
       env,
