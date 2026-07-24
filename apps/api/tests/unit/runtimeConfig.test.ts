@@ -133,6 +133,49 @@ describe('readApiRuntimeConfig', () => {
       resolveCorsOrigin(config.corsPolicy, 'http://localhost:8081')
     ).toBe(false);
     expect(config.physicalQaRequestTracing).toBe(false);
+    expect(config.physicalQa).toBeUndefined();
+  });
+
+  it('loads a complete physical-QA identity only in development', () => {
+    const env = {
+      NODE_ENV: 'development',
+      PHYSICAL_QA_MODE: 'true',
+      BARBERAPP_QA_RUNTIME_ID: 'a'.repeat(32),
+      BARBERAPP_QA_RUNTIME_FINGERPRINT: 'AAAAAAAA',
+      BARBERAPP_QA_RUNTIME_HEAD: 'b'.repeat(40),
+      BARBERAPP_QA_RUNTIME_STARTED_AT: '2026-07-24T10:00:00.000Z',
+      BARBERAPP_QA_MOBILE_EVENTS_PATH: '/tmp/runtime.ndjson',
+    };
+
+    expect(readApiRuntimeConfig(env).physicalQa).toEqual({
+      runtimeId: 'a'.repeat(32),
+      fingerprint: 'AAAAAAAA',
+      repositoryHead: 'b'.repeat(40),
+      apiStartedAt: '2026-07-24T10:00:00.000Z',
+      mobileEventsPath: '/tmp/runtime.ndjson',
+    });
+    expect(readApiRuntimeConfig({
+      ...createProductionEnv(),
+      ...env,
+      NODE_ENV: 'production',
+    }).physicalQa).toBeUndefined();
+  });
+
+  it('rejects incomplete or inconsistent physical-QA identity', () => {
+    expect(() => readApiRuntimeConfig({
+      NODE_ENV: 'development',
+      PHYSICAL_QA_MODE: 'true',
+    })).toThrow('BARBERAPP_QA_RUNTIME_ID');
+
+    expect(() => readApiRuntimeConfig({
+      NODE_ENV: 'development',
+      PHYSICAL_QA_MODE: 'true',
+      BARBERAPP_QA_RUNTIME_ID: 'a'.repeat(32),
+      BARBERAPP_QA_RUNTIME_FINGERPRINT: 'BBBBBBBB',
+      BARBERAPP_QA_RUNTIME_HEAD: 'b'.repeat(40),
+      BARBERAPP_QA_RUNTIME_STARTED_AT: '2026-07-24T10:00:00.000Z',
+      BARBERAPP_QA_MOBILE_EVENTS_PATH: '/tmp/runtime.ndjson',
+    })).toThrow('must match the runtime ID prefix');
   });
 
   it('enables physical-QA request tracing only in development with an explicit flag', () => {

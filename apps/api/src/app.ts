@@ -6,12 +6,14 @@ import { createCorsOptions, readApiRuntimeConfig } from './config/runtime.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { createRateLimiter } from './middleware/rateLimit.js';
 import { createPhysicalQaRequestTrace } from './middleware/physicalQaRequestTrace.js';
+import { createPhysicalQaRuntimeGuard } from './middleware/physicalQaRuntime.js';
 import appointmentRoutes from './routes/appointments.js';
 import barbershopRoutes from './routes/barbershops.js';
 import meRoutes from './routes/me.js';
 import onboardingRoutes from './routes/onboarding.js';
 import paymentsRoutes from './routes/payments.js';
 import { createPublicCatalogRouter } from './routes/publicCatalog.js';
+import { createPhysicalQaRouter } from './routes/physicalQa.js';
 import webhookRoutes from './routes/webhooks.js';
 
 export function createApp(config: ApiRuntimeConfig): express.Express {
@@ -43,6 +45,10 @@ export function createApp(config: ApiRuntimeConfig): express.Express {
   });
 
   app.use('/api/v1/public', createPublicCatalogRouter(config));
+  if (config.physicalQa) {
+    app.use('/api/v1/qa', createPhysicalQaRouter(config.physicalQa));
+    app.use('/api/v1', createPhysicalQaRuntimeGuard(config.physicalQa));
+  }
   app.use('/api/v1', paymentsRoutes);
   app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
   app.use('/api/v1/barbershops', barbershopRoutes);
