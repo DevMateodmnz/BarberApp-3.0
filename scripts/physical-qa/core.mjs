@@ -201,6 +201,8 @@ export function sanitizeEnvironmentForMetadata(env) {
     if (value === undefined || SECRET_NAME_PATTERN.test(name)) continue;
     if (
       name === 'EXPO_PUBLIC_API_URL' ||
+      name === 'EXPO_PUBLIC_PHYSICAL_QA_TRACE' ||
+      name === 'PHYSICAL_QA_REQUEST_TRACE' ||
       name === 'PUBLIC_WEB_API_URL' ||
       name === 'NODE_ENV'
     ) {
@@ -351,6 +353,128 @@ export function summarizeRuntimeReadiness(serviceResults) {
     ready: Object.values(services).every((service) => service.ready),
     services,
   };
+}
+
+export function parseMobileQaEvents(source, action) {
+  return parseStructuredLogLines(source, 'qa.mobile.event')
+    .filter((event) => event.action === action)
+    .slice(-200);
+}
+
+export function parseApiQaRequests(source) {
+  return parseStructuredLogLines(source, 'qa.api.request').slice(-200);
+}
+
+export function summarizeMobileActionEvidence({
+  action,
+  mobileEvents,
+  apiRequests,
+  loyaltyProgram,
+}) {
+  const presses = mobileEvents.filter(
+    (event) => event.action === action && event.stage === 'press_received',
+  );
+  const press = presses.at(-1) ?? null;
+
+  if (!press || typeof press.attemptId !== 'string') {
+    return {
+      classification: 'PRESS_NOT_OBSERVED',
+      attemptId: null,
+      mobileEvents: [],
+      apiRequest: null,
+      expectedVisitsRequired: null,
+      loyaltyProgram,
+    };
+  }
+
+  const attemptEvents = mobileEvents.filter(
+    (event) => event.attemptId === press.attemptId,
+  );
+  const stages = new Set(attemptEvents.map((event) => event.stage));
+  const apiRequest = apiRequests
+    .filter((event) => event.correlationId === press.attemptId)
+    .at(-1) ?? null;
+  const expectedVisitsRequired = [...attemptEvents]
+    .reverse()
+    .find((event) =>
+      Number.isInteger(event.visitsRequired)
+      && (
+        event.stage === 'authoritative_state_applied'
+        || event.stage === 'mutation_started'
+      )
+    )?.visitsRequired ?? null;
+
+  let classification = 'TRACE_INCOMPLETE';
+  if (stages.has('validation_failed')) {
+    classification = 'VALIDATION_BLOCKED';
+  } else if (!stages.has('validation_started') || !stages.has('mutation_started')) {
+    classification = 'MUTATION_NOT_STARTED';
+  } else if (!stages.has('request_started')) {
+    classification = 'REQUEST_NOT_STARTED';
+  } else if (
+    (typeof apiRequest?.status === 'number' && apiRequest.status >= 400)
+    || attemptEvents.some(
+      (event) =>
+        event.stage === 'response_received'
+        && typeof event.status === 'number'
+        && event.status >= 400,
+    )
+  ) {
+    classification = 'API_REJECTED';
+  } else if (stages.has('mutation_failed')) {
+    classification = 'REQUEST_FAILED';
+  } else if (
+    stages.has('mutation_succeeded')
+    && stages.has('authoritative_state_applied')
+    && apiRequest
+    && typeof apiRequest.status === 'number'
+    && apiRequest.status >= 200
+    && apiRequest.status < 300
+  ) {
+    classification =
+      expectedVisitsRequired !== null
+      && loyaltyProgram?.visitsRequired === expectedVisitsRequired
+        ? 'AUTHORITATIVE_SUCCESS'
+        : 'PERSISTENCE_MISMATCH';
+  } else if (
+    apiRequest
+    && typeof apiRequest.status === 'number'
+    && apiRequest.status >= 200
+    && apiRequest.status < 300
+    && expectedVisitsRequired !== null
+    && loyaltyProgram?.visitsRequired !== expectedVisitsRequired
+  ) {
+    classification = 'PERSISTENCE_MISMATCH';
+  }
+
+  return {
+    classification,
+    attemptId: press.attemptId,
+    mobileEvents: attemptEvents,
+    apiRequest,
+    expectedVisitsRequired,
+    loyaltyProgram,
+  };
+}
+
+function parseStructuredLogLines(source, prefix) {
+  const events = [];
+  for (const line of String(source).split(/\r?\n/u)) {
+    const markerIndex = line.indexOf(`${prefix} `);
+    if (markerIndex < 0) continue;
+    const payload = line.slice(markerIndex + prefix.length + 1).trim();
+    const endIndex = payload.lastIndexOf('}');
+    if (!payload.startsWith('{') || endIndex < 0) continue;
+    try {
+      const parsed = JSON.parse(payload.slice(0, endIndex + 1));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        events.push(parsed);
+      }
+    } catch {
+      // Ignore malformed or partial log lines; evidence will classify gaps.
+    }
+  }
+  return events;
 }
 
 export function createRuntimeMetadata({

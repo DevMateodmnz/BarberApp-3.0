@@ -10,13 +10,16 @@ import {
   createRuntimeMetadata,
   isRuntimeMetadataStale,
   maskPhone,
+  parseApiQaRequests,
   parseAndValidateDatabaseTarget,
   parseLanRouteSource,
+  parseMobileQaEvents,
   planSafeProcessStops,
   redactSecrets,
   sanitizeEnvironmentForMetadata,
   selectLanIpv4,
   summarizeRuntimeReadiness,
+  summarizeMobileActionEvidence,
   validatePaymentEncryptionKey,
 } from './core.mjs';
 
@@ -243,4 +246,83 @@ test('runtime and snapshot output directories are ignored by Git', () => {
   const gitignore = readFileSync(path.join(repoRoot, '.gitignore'), 'utf8');
   assert.match(gitignore, /^\.qa-runtime\/$/mu);
   assert.match(gitignore, /apps\/api\/\.env\.physical-qa\.local/u);
+});
+
+test('parses prefixed mobile and API trace lines without depending on surrounding log text', () => {
+  const mobile = parseMobileQaEvents(
+    [
+      'LOG qa.mobile.event {"timestamp":"2026-07-24T10:00:00.000Z","action":"loyalty-program-save","stage":"press_received","attemptId":"qa-1"}',
+      'qa.mobile.event malformed',
+      'qa.mobile.event {"action":"other","stage":"press_received","attemptId":"qa-2"}',
+    ].join('\n'),
+    'loyalty-program-save',
+  );
+  const api = parseApiQaRequests(
+    'qa.api.request {"method":"PUT","route":"/api/v1/barbershops/:value/loyalty-program","status":200,"correlationId":"qa-1"}',
+  );
+
+  assert.equal(mobile.length, 1);
+  assert.equal(mobile[0].attemptId, 'qa-1');
+  assert.equal(api.length, 1);
+  assert.equal(api[0].status, 200);
+});
+
+test('classifies empty, validation, pre-request, rejected, mismatch, and authoritative mobile evidence', () => {
+  const loyaltyProgram = { visitsRequired: 2, updatedAt: '2026-07-24T10:00:01Z' };
+  const event = (stage, extra = {}) => ({
+    action: 'loyalty-program-save',
+    attemptId: 'qa-1',
+    stage,
+    ...extra,
+  });
+  const summarize = (mobileEvents, apiRequests = [], program = loyaltyProgram) =>
+    summarizeMobileActionEvidence({
+      action: 'loyalty-program-save',
+      mobileEvents,
+      apiRequests,
+      loyaltyProgram: program,
+    }).classification;
+
+  assert.equal(summarize([]), 'PRESS_NOT_OBSERVED');
+  assert.equal(summarize([
+    event('press_received'),
+    event('validation_started'),
+    event('validation_failed'),
+  ]), 'VALIDATION_BLOCKED');
+  assert.equal(summarize([
+    event('press_received'),
+    event('validation_started'),
+    event('mutation_started', { visitsRequired: 2 }),
+  ]), 'REQUEST_NOT_STARTED');
+  assert.equal(summarize([
+    event('press_received'),
+    event('validation_started'),
+    event('mutation_started', { visitsRequired: 2 }),
+    event('request_started'),
+    event('response_received', { status: 403 }),
+    event('mutation_failed'),
+  ]), 'API_REJECTED');
+
+  const successfulEvents = [
+    event('press_received'),
+    event('validation_started'),
+    event('mutation_started', { visitsRequired: 2 }),
+    event('request_started'),
+    event('response_received', { status: 200 }),
+    event('mutation_succeeded', { visitsRequired: 2 }),
+    event('authoritative_state_applied', { visitsRequired: 2 }),
+  ];
+  const successfulApi = [{
+    correlationId: 'qa-1',
+    method: 'PUT',
+    status: 200,
+  }];
+  assert.equal(
+    summarize(successfulEvents, successfulApi),
+    'AUTHORITATIVE_SUCCESS',
+  );
+  assert.equal(
+    summarize(successfulEvents, successfulApi, { visitsRequired: 5 }),
+    'PERSISTENCE_MISMATCH',
+  );
 });

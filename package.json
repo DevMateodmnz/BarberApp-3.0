@@ -23,6 +23,7 @@
     "qa:physical:status": "node scripts/physical-qa.mjs status",
     "qa:physical:stop": "node scripts/physical-qa.mjs stop",
     "qa:physical:snapshot": "node scripts/physical-qa.mjs snapshot",
+    "qa:physical:evidence": "node scripts/physical-qa.mjs evidence",
     "qa:physical:test": "node --test scripts/physical-qa/*.test.mjs",
     "dev": "npm run dev --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",

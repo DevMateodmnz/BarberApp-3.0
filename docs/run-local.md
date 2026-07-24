@@ -37,6 +37,7 @@ No real key, token, personal credential, or machine IP belongs in Git.
 ```bash
 npm run qa:physical:start
 npm run qa:physical:status
+npm run qa:physical:evidence -- mobile-action loyalty-program-save
 npm run qa:physical:snapshot -- loyalty --barbershop qa-barbershop
 tail -f .qa-runtime/logs/*.log
 npm run qa:physical:stop
@@ -54,10 +55,12 @@ npm run qa:physical:stop
    `8081`;
 6. discovers the active LAN IPv4 address rather than hardcoding one;
 7. starts the API, public web, and Expo/Metro with one consistent LAN API URL;
-8. waits for API health and ping, the QA public page, Metro, and their LAN
+8. explicitly enables sanitized development-only mobile mutation and API
+   request tracing;
+9. waits for API health and ping, the QA public page, Metro, and their LAN
    equivalents;
-9. cleans up the partial process groups if any startup boundary fails; and
-10. prints exact local/LAN URLs and inspection commands.
+10. cleans up the partial process groups if any startup boundary fails; and
+11. prints exact local/LAN URLs and inspection commands.
 
 Runtime artifacts are ignored under `.qa-runtime/`:
 
@@ -118,6 +121,41 @@ IDs, public references, and phones are masked; customer names and reward codes
 are omitted; records are capped at 100; and the database URL contains no
 credentials. Visual UI success is provisional until request/runtime logs and
 the authoritative post-action snapshot agree.
+
+### Correlated mobile-action evidence
+
+For the loyalty settings Save action, run:
+
+```bash
+npm run qa:physical:evidence -- mobile-action loyalty-program-save
+```
+
+The read-only command checks the current runtime HEAD/readiness, finds the
+latest structured mobile attempt in the harness-managed Metro log, correlates
+its safe `X-Request-Id` with the global API request trace, and reads the current
+authoritative loyalty row. It returns one bounded classification:
+
+- `PRESS_NOT_OBSERVED`
+- `VALIDATION_BLOCKED`
+- `MUTATION_NOT_STARTED`
+- `REQUEST_NOT_STARTED`
+- `REQUEST_FAILED`
+- `API_REJECTED`
+- `PERSISTENCE_MISMATCH`
+- `AUTHORITATIVE_SUCCESS`
+- `TRACE_INCOMPLETE`
+
+Mobile stages include press receipt, validation, mutation start, token/request
+boundaries, response, success/failure, and authoritative-state application.
+The traces are enabled only in development by explicit harness flags. They
+contain no tokens, request bodies, Clerk IDs, customer data, phone numbers,
+reward codes, secrets, or complete database identifiers. API request tracing
+logs only method, normalized route, status, duration, and correlation ID.
+
+A visible edited value or success message is not persistence proof. For a
+text-input action, verify that one tap while the keyboard is open produces
+`press_received`, `mutation_started`, a successful API request, an
+`authoritative_state_applied` event, and a matching database row.
 
 ### What survives another session
 

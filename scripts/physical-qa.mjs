@@ -24,12 +24,15 @@ import {
   isRuntimeMetadataStale,
   maskIdentifier,
   maskPhone,
+  parseApiQaRequests,
   parseDotEnv,
   parseLanRouteSource,
+  parseMobileQaEvents,
   redactSecrets,
   sanitizeEnvironmentForMetadata,
   selectLanIpv4,
   summarizeRuntimeReadiness,
+  summarizeMobileActionEvidence,
   validatePhysicalQaEnvironment,
   verifyRecordedProcess,
 } from './physical-qa/core.mjs';
@@ -586,11 +589,19 @@ async function collectStatus(metadata) {
       (name === 'publicWeb'
         ? environment.PUBLIC_WEB_API_URL === expectedApiUrl
         : environment.EXPO_PUBLIC_API_URL === expectedApiUrl);
+    const effectiveTraceMatches =
+      name === 'publicWeb'
+      || (
+        name === 'api'
+          ? environment.PHYSICAL_QA_REQUEST_TRACE === 'true'
+          : environment.EXPO_PUBLIC_PHYSICAL_QA_TRACE === 'true'
+      );
     serviceResults[name] = {
       identity: identity.ok,
       port: identity.ok,
       health: identity.ok ? await healthChecks[name]() : false,
       effectiveApiMatches,
+      effectiveTraceMatches,
       detail: identity.reason,
     };
   }
@@ -598,7 +609,9 @@ async function collectStatus(metadata) {
   const summary = summarizeRuntimeReadiness(serviceResults);
   if (
     !Object.values(summary.services).every(
-      (service) => service.effectiveApiMatches,
+      (service) =>
+        service.effectiveApiMatches
+        && service.effectiveTraceMatches,
     )
   ) {
     summary.ready = false;
@@ -704,6 +717,7 @@ async function start() {
     const apiEnv = {
       ...env,
       NODE_ENV: 'development',
+      PHYSICAL_QA_REQUEST_TRACE: 'true',
       PORT: String(REQUIRED_PORTS.api),
       PUBLIC_WEB_BASE_URL: `http://${lanIp}:${REQUIRED_PORTS.publicWeb}`,
     };
@@ -754,6 +768,7 @@ async function start() {
       ...env,
       NODE_ENV: 'development',
       EXPO_PUBLIC_API_URL: apiBaseLan,
+      EXPO_PUBLIC_PHYSICAL_QA_TRACE: 'true',
     };
     spawnService({
       name: 'metro',
@@ -866,6 +881,9 @@ async function status() {
         result.health ? 'ok' : 'failed'
       } | API target ${result.effectiveApiMatches ? 'current' : 'wrong'}`,
     );
+    if (!result.effectiveTraceMatches) {
+      print('  required physical-QA tracing is disabled');
+    }
     if (!result.ready) {
       if (result.detail) print(`  ${result.detail}`);
       if (record?.logPath) {
@@ -874,6 +892,20 @@ async function status() {
     }
   }
   printUrls(metadata);
+  print(
+    `Mobile mutation trace: ${
+      metadata.services.metro?.publicEnvironment?.EXPO_PUBLIC_PHYSICAL_QA_TRACE === 'true'
+        ? 'enabled'
+        : 'disabled'
+    }`,
+  );
+  print(
+    `API request trace: ${
+      metadata.services.api?.publicEnvironment?.PHYSICAL_QA_REQUEST_TRACE === 'true'
+        ? 'enabled'
+        : 'disabled'
+    }`,
+  );
 
   if (!summary.ready || stale) process.exitCode = 1;
 }
@@ -1198,6 +1230,109 @@ async function snapshot(args) {
   }
 }
 
+async function evidence(domain, args) {
+  ensureRepoRoot();
+  if (domain !== 'mobile-action') {
+    fail('Only `evidence mobile-action <action>` is supported.');
+  }
+
+  const [action, ...optionArgs] = args;
+  if (action !== 'loyalty-program-save') {
+    fail('Only the `loyalty-program-save` mobile action is supported.');
+  }
+
+  const metadata = readMetadata();
+  if (!metadata) fail('Start the physical-QA runtime before collecting evidence.');
+  const ready = await collectStatus(metadata);
+  const truth = currentGitTruth();
+  if (!ready.ready || metadata.head !== truth.head) {
+    fail('Physical-QA runtime is not current and READY; evidence refused.');
+  }
+
+  const options = parseSnapshotOptions(optionArgs);
+  const env = loadRuntimeEnvironment();
+  const { database } = validatePhysicalQaEnvironment(env);
+  if (database.sanitized !== metadata.database) {
+    fail('Runtime and evidence database targets do not match.');
+  }
+
+  process.env.DATABASE_URL = env.DATABASE_URL;
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient({
+    datasources: { db: { url: env.DATABASE_URL } },
+  });
+
+  try {
+    const shop = await prisma.barbershop.findUnique({
+      where: { publicSlug: options.barbershop },
+      select: {
+        loyaltyProgram: {
+          select: {
+            isEnabled: true,
+            visitsRequired: true,
+            rewardValidityDays: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+    if (!shop) fail(`Barbershop slug "${options.barbershop}" was not found.`);
+
+    const metroLog = readFileSync(
+      path.join(repoRoot, metadata.services.metro.logPath),
+      'utf8',
+    );
+    const apiLog = readFileSync(
+      path.join(repoRoot, metadata.services.api.logPath),
+      'utf8',
+    );
+    const mobileEvents = parseMobileQaEvents(metroLog, action);
+    const apiRequests = parseApiQaRequests(apiLog);
+    const result = summarizeMobileActionEvidence({
+      action,
+      mobileEvents,
+      apiRequests,
+      loyaltyProgram: shop.loyaltyProgram,
+    });
+
+    print(`Physical-QA evidence: ${result.classification}`);
+    print(`Action: ${action}`);
+    print(`Runtime: ${metadata.branch} @ ${metadata.head.slice(0, 7)} (READY)`);
+    print(`Captured: ${new Date().toISOString()}`);
+    print(`Attempt: ${result.attemptId ?? '(none)'}`);
+    print(
+      `Mobile stages: ${
+        result.mobileEvents.length
+          ? result.mobileEvents.map((event) => event.stage).join(' -> ')
+          : '(none)'
+      }`,
+    );
+    print(
+      `API request: ${
+        result.apiRequest
+          ? `${result.apiRequest.method} ${result.apiRequest.route} -> ${result.apiRequest.status}`
+          : '(none)'
+      }`,
+    );
+    print(
+      `Authoritative loyalty: threshold ${
+        shop.loyaltyProgram?.visitsRequired ?? '(not configured)'
+      } | updated ${
+        shop.loyaltyProgram?.updatedAt?.toISOString?.()
+          ?? shop.loyaltyProgram?.updatedAt
+          ?? '(not configured)'
+      }`,
+    );
+    print(
+      `Expected traced threshold: ${
+        result.expectedVisitsRequired ?? '(none)'
+      }`,
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 function usage() {
   print(`Usage: node scripts/physical-qa.mjs <command>
 
@@ -1207,6 +1342,8 @@ Commands:
   status                 Prove recorded processes, ports, health, and targets
   stop                   Stop only identity-verified recorded process groups
   snapshot loyalty [...] Capture bounded read-only loyalty evidence
+  evidence mobile-action loyalty-program-save [...]
+                         Correlate mobile, API, runtime, and database evidence
 `);
 }
 
@@ -1228,6 +1365,9 @@ async function main() {
     case 'snapshot':
       if (domain !== 'loyalty') fail('Only `snapshot loyalty` is supported.');
       await snapshot(args);
+      break;
+    case 'evidence':
+      await evidence(domain, args);
       break;
     default:
       usage();

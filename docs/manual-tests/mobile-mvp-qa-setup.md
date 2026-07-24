@@ -27,12 +27,21 @@ npm run qa:physical:configure
 # Every QA session:
 npm run qa:physical:start
 npm run qa:physical:status
+npm run qa:physical:evidence -- mobile-action loyalty-program-save
 ```
 
 The physical-QA harness starts API, public web, and Expo/Metro together, keeps
 their API target consistent, persists logs and PIDs, and proves live readiness.
 Do not replace these commands with old terminal notes. See `docs/run-local.md`
 for architecture, evidence snapshots, and safe cleanup.
+
+`qa:physical:status` must also report mobile mutation tracing and API request
+tracing enabled. For a form action performed immediately after editing text,
+leave the keyboard open and tap the uniquely labeled action once. The button
+must visibly enter loading state; a first tap that only dismisses the keyboard
+is a failure. Verify `press_received`, `mutation_started`, the correlated API
+status, and the authoritative database snapshot. Visual input text and quote
+previews are never persistence or booking confirmation.
 
 ---
 
