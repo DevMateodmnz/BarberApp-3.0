@@ -7,17 +7,21 @@ Verify the visit-based loyalty flow added on Thursday, July 16, 2026.
 ## Preconditions
 
 - `npm run qa:physical:status` reports the current runtime `READY`
-- a timestamped pre-action snapshot exists:
-  `npm run qa:physical:snapshot -- loyalty --barbershop qa-barbershop`
+- the phone badge matches the harness runtime fingerprint and short HEAD
+- `npm run qa:physical:device` reports `DEVICE_READY`
+- `npm run qa:physical:ready` reports `QA_READY`
+- `npm run qa:physical:arm -- loyalty-program-save` succeeds and captures the
+  timestamped pre-action snapshot
 - OWNER account and BARBER account available
 - loyalty template promotion created
 - customer exists in the target barbershop
 
-Do not treat old PID notes, a visible Expo screen, or a success toast as
+Do not treat old PID notes, Metro listening, a historical device IP, a visible
+Expo screen, or a success toast as
 authoritative. The runtime must prove current PIDs, listeners, working
-directories, API URL, shared database target, Metro process, and current
-readiness timestamp. Capture another snapshot immediately after each manual
-checkpoint and compare it with the persisted API/Metro logs.
+directories, API URL/identity, shared database target, Metro process, current
+readiness timestamp, matching app HEAD, successful handshake, and recent
+heartbeat. Database snapshots remain authoritative for persisted product state.
 
 ## OWNER program setup
 
@@ -27,18 +31,21 @@ checkpoint and compare it with the persisted API/Metro logs.
 4. Set visits required to `2`.
 5. Select a reward promotion template.
 6. Optionally set reward validity days.
-7. Leave the numeric keyboard open and tap **Save loyalty program** exactly
+7. Without pressing Save, have the verifier arm the checkpoint:
+   `npm run qa:physical:arm -- loyalty-program-save`.
+8. Follow only the one concise human action printed by the arm command: leave
+   the numeric keyboard open and tap **Save loyalty program** exactly
    once. The same tap must reach the button; dismissing the keyboard must not
    require a second tap.
-8. Confirm the button visibly enters its loading state. Success must appear
+9. Confirm the button visibly enters its loading state. Success must appear
    only after the API response, and the unsaved-state indicator must clear only
    after the authoritative returned values are applied.
-9. Run:
+10. Run:
    `npm run qa:physical:evidence -- mobile-action loyalty-program-save`
-10. Require `press_received`, `mutation_started`, a correlated successful API
+11. Require `press_received`, `mutation_started`, a correlated successful API
     request, and `authoritative_state_applied`. A value still visible in the
     input is not evidence that Save ran.
-11. Capture a post-action loyalty snapshot and verify the authoritative
+12. Capture a post-action loyalty snapshot and verify the authoritative
    `visitsRequired` and `updatedAt` changed exactly once.
 
 If validation or the request fails, require a visible inline error, no success
@@ -46,10 +53,13 @@ state, the entered values to remain available for correction, and a safe trace
 classification. Do not infer a request from Metro silence unless the current
 runtime has both mobile and API tracing enabled.
 
-Historical Checkpoints C–H recorded before the corrected program-setup
-checkpoint remain invalid. Re-execute them only after this OWNER setup action
-is classified `AUTHORITATIVE_SUCCESS`; do not retroactively treat old visual
-states or quote previews as persisted actions.
+The prior Checkpoint A attempt on July 24, 2026 remains invalid: evidence was
+`PRESS_NOT_OBSERVED`, no mobile event or API request existed, and the database
+stayed at threshold `5`. It occurred before device identity/heartbeat proof and
+must not be credited. Historical Checkpoints C–H also remain invalid.
+Re-execute them only after a newly armed OWNER setup action is classified
+`AUTHORITATIVE_SUCCESS`; never retroactively credit old visual states or quote
+previews.
 
 ## Stamp earning
 

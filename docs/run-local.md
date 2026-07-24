@@ -37,6 +37,10 @@ No real key, token, personal credential, or machine IP belongs in Git.
 ```bash
 npm run qa:physical:start
 npm run qa:physical:status
+npm run qa:physical:device
+npm run qa:physical:ready
+npm run qa:physical:arm -- loyalty-program-save
+# Perform exactly the one printed human action, then:
 npm run qa:physical:evidence -- mobile-action loyalty-program-save
 npm run qa:physical:snapshot -- loyalty --barbershop qa-barbershop
 tail -f .qa-runtime/logs/*.log
@@ -55,28 +59,54 @@ npm run qa:physical:stop
    `8081`;
 6. discovers the active LAN IPv4 address rather than hardcoding one;
 7. starts the API, public web, and Expo/Metro with one consistent LAN API URL;
-8. explicitly enables sanitized development-only mobile mutation and API
-   request tracing;
-9. waits for API health and ping, the QA public page, Metro, and their LAN
+8. creates one random, non-secret runtime ID and short fingerprint for this
+   start, then injects the same ID and HEAD into API, mobile, and public web;
+9. enables the development-only runtime handshake, strict mobile runtime
+   header, sanitized event transport, and API request tracing;
+10. clears Metro's bundle cache so changed runtime environment markers cannot
+   silently reuse an older bundle;
+11. waits for API health, the QA handshake, the QA public page, Metro, and LAN
    equivalents;
-10. cleans up the partial process groups if any startup boundary fails; and
-11. prints exact local/LAN URLs and inspection commands.
+12. cleans up partial process groups if any startup boundary fails; and
+13. prints exact local/LAN URLs, a new Expo QR, the fingerprint/HEAD badge to
+    expect, and device-readiness commands.
 
 Runtime artifacts are ignored under `.qa-runtime/`:
 
 - `runtime.json`: non-secret branch, HEAD, start/readiness times, LAN IP,
-  sanitized database target, URLs, PIDs, process groups, start identities, and
-  log paths
+  ephemeral runtime ID/fingerprint, sanitized database target, URLs, PIDs,
+  process groups, start identities, and log paths
 - `logs/api.log`, `logs/publicWeb.log`, `logs/metro.log`: timestamped persistent
   output
+- `mobile-events/<runtime-id>.ndjson`: strict, bounded, runtime-scoped device
+  handshakes, heartbeats, focus events, and mutation stages
+- `checkpoints/<runtime-id>/`: armed checkpoint boundaries and their
+  before-state snapshot paths
+- `evidence/*.json`: timestamped device/action/API/database correlation reports
 - `snapshots/*.json`: timestamped, bounded, read-only QA evidence
 
-`qa:physical:status` exits nonzero unless every recorded process still has the
+`qa:physical:status` proves only the **server runtime**. It exits nonzero unless
+every recorded process still has the
 same start identity and working directory, owns its expected listener, passes
-readiness, uses the recorded API URL, and belongs to the current repository
-HEAD. Old metadata alone never proves readiness. If a terminal, machine, or
-process died between sessions, run `status` first and then `start`; never infer
-that services survived from yesterday's notes.
+readiness, uses the recorded API URL/runtime ID, and belongs to the current
+repository HEAD. It does **not** prove that a phone is connected.
+
+`qa:physical:device` exits nonzero unless one current ephemeral app session has
+a successful API handshake, matching runtime fingerprint and full HEAD,
+matching API target, working trace transport, and a heartbeat no older than 45
+seconds. Its classifications are:
+
+- `DEVICE_NOT_CONNECTED`
+- `DEVICE_STALE`
+- `DEVICE_RUNTIME_MISMATCH`
+- `DEVICE_HEAD_MISMATCH`
+- `DEVICE_HANDSHAKE_FAILED`
+- `DEVICE_READY`
+
+`qa:physical:ready` requires both `RUNTIME_READY` and `DEVICE_READY`; only its
+`QA_READY` result permits a manual product checkpoint. Metro listening, an old
+IP address, a historical bundle request, or a visible stale screen is not
+device proof.
 
 `qa:physical:stop` verifies PID start time, command marker, and working
 directory before signaling a recorded process group. It never kills an
@@ -87,8 +117,31 @@ any unexpected listener left on `3000`, `3001`, or `8081`.
 
 Keep the phone and development machine on the same LAN. The harness passes the
 printed `http://<LAN-IP>:3000/api/v1` target directly to Expo, overriding any
-stale machine-specific value for that process. Open Expo Go with the printed
-`exp://<LAN-IP>:8081` URL (or scan the QR shown by Expo when available).
+stale machine-specific value for that process.
+
+Every clean start creates a new Expo QR and visible badge:
+
+```text
+QA <short-HEAD> · <runtime-fingerprint>
+```
+
+Fully close the previously open BarberApp project inside Expo Go, scan the new
+QR, wait for the blocking runtime check to clear, and compare the badge with
+the harness output. Tapping the badge opens a development-only panel with app
+HEAD, API HEAD/target, handshake, heartbeat, and trace status. A mismatch or
+transport failure blocks the app and instructs the tester to reopen the current
+project. Owners can inspect the same safe fields from **Manage → Physical QA
+runtime**. The badge, management entry, and endpoints are absent outside
+explicit development physical-QA mode.
+
+Then run:
+
+```bash
+npm run qa:physical:device
+npm run qa:physical:ready
+```
+
+Do not begin a checkpoint until both return `DEVICE_READY` / `QA_READY`.
 
 The public booking page is printed in both forms:
 
@@ -124,17 +177,35 @@ the authoritative post-action snapshot agree.
 
 ### Correlated mobile-action evidence
 
-For the loyalty settings Save action, run:
+Arm the loyalty Save checkpoint only after `QA_READY`:
+
+```bash
+npm run qa:physical:arm -- loyalty-program-save
+```
+
+Arming refuses every non-ready device, captures the authoritative before-state
+snapshot, records an arm timestamp and current app session, and prints exactly
+one human action. It does not mutate product data. After performing that action
+once, run:
 
 ```bash
 npm run qa:physical:evidence -- mobile-action loyalty-program-save
 ```
 
-The read-only command checks the current runtime HEAD/readiness, finds the
-latest structured mobile attempt in the harness-managed Metro log, correlates
-its safe `X-Request-Id` with the global API request trace, and reads the current
-authoritative loyalty row. It returns one bounded classification:
+The read-only command checks server and device readiness first, reads only
+strict API-persisted mobile events from the current runtime/session after the
+arm timestamp, correlates the safe `X-Request-Id` with the API trace, reads the
+authoritative loyalty row, and writes a timestamped ignored report. Device
+classifications take precedence; `PRESS_NOT_OBSERVED` is used only when a
+current verified device session exists but no post-arm press exists.
 
+Device/action classifications include:
+
+- `DEVICE_NOT_CONNECTED`
+- `DEVICE_STALE`
+- `DEVICE_RUNTIME_MISMATCH`
+- `DEVICE_HEAD_MISMATCH`
+- `DEVICE_HANDSHAKE_FAILED`
 - `PRESS_NOT_OBSERVED`
 - `VALIDATION_BLOCKED`
 - `MUTATION_NOT_STARTED`
@@ -147,10 +218,18 @@ authoritative loyalty row. It returns one bounded classification:
 
 Mobile stages include press receipt, validation, mutation start, token/request
 boundaries, response, success/failure, and authoritative-state application.
-The traces are enabled only in development by explicit harness flags. They
+The app sends them to a strict, rate-limited development-only endpoint and the
+API stores bounded runtime-specific NDJSON; Metro console forwarding is only
+secondary diagnostics. The traces
 contain no tokens, request bodies, Clerk IDs, customer data, phone numbers,
 reward codes, secrets, or complete database identifiers. API request tracing
 logs only method, normalized route, status, duration, and correlation ID.
+
+In physical-QA mode, private mobile API requests must carry the matching
+runtime ID and HEAD. A stale bundle receives HTTP `409` with
+`QA_RUNTIME_MISMATCH` or `QA_HEAD_MISMATCH`; it cannot mutate the current QA
+database. Health, ping, public booking, and webhooks retain their normal
+behavior.
 
 A visible edited value or success message is not persistence proof. For a
 text-input action, verify that one tap while the keyboard is open produces

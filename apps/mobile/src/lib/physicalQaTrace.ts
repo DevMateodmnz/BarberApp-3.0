@@ -1,4 +1,5 @@
 import { ApiError } from './api.js';
+import { emitPhysicalQaMutationStage } from './physicalQaRuntime.js';
 
 const TRACE_PREFIX = 'qa.mobile.event';
 const MAX_SAFE_TEXT_LENGTH = 80;
@@ -23,6 +24,7 @@ export type MobileQaSafeErrorCode =
   | 'API_400'
   | 'API_401'
   | 'API_403'
+  | 'API_409'
   | 'API_500'
   | 'API_ERROR'
   | 'AUTH_TOKEN_ERROR'
@@ -96,6 +98,22 @@ export function traceMobileQaEvent(event: MobileQaEvent): void {
   // Expo forwards development console output to the harness-managed Metro log.
   // eslint-disable-next-line no-console
   console.info(`${TRACE_PREFIX} ${JSON.stringify(safeEvent)}`);
+  emitPhysicalQaMutationStage({
+    action: event.action,
+    attemptId: event.attemptId,
+    screen: event.screen,
+    stage: event.stage,
+    ...(event.status !== undefined ? { status: event.status } : {}),
+    ...(event.safeErrorCode
+      ? { safeErrorCategory: event.safeErrorCode }
+      : {}),
+    ...(event.visitsRequired !== undefined
+      ? { visitsRequired: event.visitsRequired }
+      : {}),
+    ...(event.templateSelected !== undefined
+      ? { templateSelected: event.templateSelected }
+      : {}),
+  });
 }
 
 export function classifyMobileMutationError(
@@ -109,6 +127,7 @@ export function classifyMobileMutationError(
     if (error.status === 400) return 'API_400';
     if (error.status === 401) return 'API_401';
     if (error.status === 403) return 'API_403';
+    if (error.status === 409) return 'API_409';
     if (error.status !== undefined && error.status >= 500) return 'API_500';
     return 'API_ERROR';
   }

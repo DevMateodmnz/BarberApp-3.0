@@ -19,6 +19,8 @@ export interface ManageContentProps {
   onWorkingHours: () => void;
   onOwnSchedule: () => void;
   onOpenLanguageSettings: () => void;
+  onOpenPhysicalQaRuntime?: () => void;
+  showPhysicalQaRuntime?: boolean;
 }
 
 export function ManageContent({
@@ -31,6 +33,8 @@ export function ManageContent({
   onWorkingHours,
   onOwnSchedule,
   onOpenLanguageSettings,
+  onOpenPhysicalQaRuntime,
+  showPhysicalQaRuntime = false,
 }: ManageContentProps) {
   const { t } = useTranslation();
   const isOwner = role === 'OWNER';
@@ -145,6 +149,19 @@ export function ManageContent({
                   onPress={onOpenLanguageSettings}
                   showChevron
                 />
+                {showPhysicalQaRuntime && onOpenPhysicalQaRuntime ? (
+                  <NavigationTile
+                    testID="manage-physical-qa-runtime"
+                    title={t('runtime.physicalQa.panelTitle')}
+                    description={t('runtime.physicalQa.openDescription')}
+                    iconName="pulse-outline"
+                    accessibilityLabel={t(
+                      'runtime.physicalQa.openAccessibility',
+                    )}
+                    onPress={onOpenPhysicalQaRuntime}
+                    showChevron
+                  />
+                ) : null}
               </View>
             </View>
           </>

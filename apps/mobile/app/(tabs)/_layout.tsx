@@ -222,6 +222,16 @@ export default function TabLayout() {
             tabBarAccessibilityLabel: t('paymentsSettings.reviews.detailTitle'),
           }}
         />
+        <Tabs.Screen
+          name="qa-runtime"
+          options={{
+            title: t('runtime.physicalQa.panelTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t(
+              'runtime.physicalQa.openAccessibility',
+            ),
+          }}
+        />
         {MOBILE_SECONDARY_ROUTES.map((route) => ({ route, title: t(route.titleKey), a11y: t(route.accessibilityLabelKey) })).map(({ route, title, a11y }) => (
           <Tabs.Screen
             key={route.tabRouteName}

@@ -11,6 +11,15 @@ export interface MobilePublicRuntime {
   appEnv: MobileAppEnvironment;
   apiBaseUrl: string;
   clerkPublishableKey: string;
+  physicalQa?: MobilePhysicalQaRuntime;
+}
+
+export interface MobilePhysicalQaRuntime {
+  runtimeId: string;
+  fingerprint: string;
+  repositoryHead: string;
+  startedAt: string;
+  traceEnabled: true;
 }
 
 export type MobilePublicRuntimeResult =
@@ -28,11 +37,14 @@ export function readMobilePublicRuntime(env: NodeJS.ProcessEnv): MobilePublicRun
   const appEnv = readMobileAppEnvironment(env);
 
   assertNoForbiddenPublicClerkSecrets(env);
+  const apiBaseUrl = readApiBaseUrl(env, appEnv);
+  const physicalQa = readPhysicalQaRuntime(env, appEnv);
 
   return {
     appEnv,
-    apiBaseUrl: readApiBaseUrl(env, appEnv),
+    apiBaseUrl,
     clerkPublishableKey: readClerkPublishableKey(env, appEnv),
+    ...(physicalQa ? { physicalQa } : {}),
   };
 }
 
@@ -215,6 +227,74 @@ function readClerkPublishableKey(
   }
 
   return value;
+}
+
+function readPhysicalQaRuntime(
+  env: NodeJS.ProcessEnv,
+  appEnv: MobileAppEnvironment,
+): MobilePhysicalQaRuntime | undefined {
+  const rawMode = env.EXPO_PUBLIC_PHYSICAL_QA_MODE;
+  if (rawMode === undefined || rawMode === 'false') {
+    return undefined;
+  }
+  if (rawMode !== 'true') {
+    throw new PublicRuntimeConfigError(
+      'EXPO_PUBLIC_PHYSICAL_QA_MODE must be true or false.',
+    );
+  }
+  if (appEnv !== 'development') {
+    throw new PublicRuntimeConfigError(
+      'Physical-QA mode is only available in development builds.',
+    );
+  }
+  if (env.EXPO_PUBLIC_PHYSICAL_QA_TRACE !== 'true') {
+    throw new PublicRuntimeConfigError(
+      'EXPO_PUBLIC_PHYSICAL_QA_TRACE must be true in physical-QA mode.',
+    );
+  }
+
+  const runtimeId = env.EXPO_PUBLIC_QA_RUNTIME_ID?.trim();
+  const fingerprint = env.EXPO_PUBLIC_QA_RUNTIME_FINGERPRINT?.trim();
+  const repositoryHead = env.EXPO_PUBLIC_QA_RUNTIME_HEAD?.trim();
+  const startedAt = env.EXPO_PUBLIC_QA_RUNTIME_STARTED_AT?.trim();
+
+  if (!runtimeId || !/^[a-f0-9]{32}$/u.test(runtimeId)) {
+    throw new PublicRuntimeConfigError(
+      'EXPO_PUBLIC_QA_RUNTIME_ID must be a 32-character lowercase hexadecimal value.',
+    );
+  }
+  if (!fingerprint || !/^[A-F0-9]{8}$/u.test(fingerprint)) {
+    throw new PublicRuntimeConfigError(
+      'EXPO_PUBLIC_QA_RUNTIME_FINGERPRINT must be 8 uppercase hexadecimal characters.',
+    );
+  }
+  if (fingerprint !== runtimeId.slice(0, 8).toUpperCase()) {
+    throw new PublicRuntimeConfigError(
+      'EXPO_PUBLIC_QA_RUNTIME_FINGERPRINT must match the runtime ID prefix.',
+    );
+  }
+  if (!repositoryHead || !/^[a-f0-9]{40}$/u.test(repositoryHead)) {
+    throw new PublicRuntimeConfigError(
+      'EXPO_PUBLIC_QA_RUNTIME_HEAD must be a full Git commit hash.',
+    );
+  }
+  if (
+    !startedAt
+    || !Number.isFinite(Date.parse(startedAt))
+    || new Date(startedAt).toISOString() !== startedAt
+  ) {
+    throw new PublicRuntimeConfigError(
+      'EXPO_PUBLIC_QA_RUNTIME_STARTED_AT must be an ISO-8601 timestamp.',
+    );
+  }
+
+  return {
+    runtimeId,
+    fingerprint,
+    repositoryHead,
+    startedAt,
+    traceEnabled: true,
+  };
 }
 
 function createDefaultDevelopmentApiUrl(): string {

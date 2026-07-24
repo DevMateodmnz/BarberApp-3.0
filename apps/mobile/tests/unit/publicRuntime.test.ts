@@ -50,6 +50,40 @@ describe('readMobilePublicRuntime', () => {
     expect(runtime.apiBaseUrl).toBe('http://192.168.1.25:3000/api/v1');
   });
 
+  it('loads a complete development-only physical-QA identity', () => {
+    const runtime = readMobilePublicRuntime(createEnv({
+      EXPO_PUBLIC_API_URL: 'http://192.168.1.25:3000/api/v1',
+      EXPO_PUBLIC_PHYSICAL_QA_MODE: 'true',
+      EXPO_PUBLIC_PHYSICAL_QA_TRACE: 'true',
+      EXPO_PUBLIC_QA_RUNTIME_ID: 'a'.repeat(32),
+      EXPO_PUBLIC_QA_RUNTIME_FINGERPRINT: 'AAAAAAAA',
+      EXPO_PUBLIC_QA_RUNTIME_HEAD: 'b'.repeat(40),
+      EXPO_PUBLIC_QA_RUNTIME_STARTED_AT: '2026-07-24T10:00:00.000Z',
+    }));
+
+    expect(runtime.physicalQa).toEqual({
+      runtimeId: 'a'.repeat(32),
+      fingerprint: 'AAAAAAAA',
+      repositoryHead: 'b'.repeat(40),
+      startedAt: '2026-07-24T10:00:00.000Z',
+      traceEnabled: true,
+    });
+  });
+
+  it('rejects incomplete QA config and QA mode outside development', () => {
+    expect(() => readMobilePublicRuntime(createEnv({
+      EXPO_PUBLIC_PHYSICAL_QA_MODE: 'true',
+      EXPO_PUBLIC_PHYSICAL_QA_TRACE: 'true',
+    }))).toThrow('EXPO_PUBLIC_QA_RUNTIME_ID');
+
+    expect(() => readMobilePublicRuntime(createEnv({
+      EXPO_PUBLIC_APP_ENV: 'preview',
+      EXPO_PUBLIC_API_URL: 'https://preview.example.com/api/v1',
+      EXPO_PUBLIC_PHYSICAL_QA_MODE: 'true',
+      EXPO_PUBLIC_PHYSICAL_QA_TRACE: 'true',
+    }))).toThrow('only available in development');
+  });
+
   it('fails preview when EXPO_PUBLIC_API_URL is missing', () => {
     expect(() =>
       readMobilePublicRuntime(

@@ -270,6 +270,41 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Runtime configuration error classifier name, not interface copy.',
   },
   {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'application/json',
+    reason: 'HTTP media type for the development-only QA evidence transport, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'Content-Type',
+    reason: 'HTTP protocol header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'X-BarberApp-QA-Client',
+    reason: 'Development-only runtime identity header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'X-BarberApp-QA-Head',
+    reason: 'Development-only runtime identity header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'X-BarberApp-QA-Runtime',
+    reason: 'Development-only runtime identity header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'X-BarberApp-QA-Session',
+    reason: 'Development-only ephemeral session header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'Physical-QA transport request failed',
+    reason: 'Internal transport error detail; the blocking UI renders translated safe copy.',
+  },
+  {
     file: 'src/lib/promotions.ts',
     literal: 'Authentication token retrieval failed',
     reason: 'Internal pre-request error detail; the screen maps its safe code to translated interface copy.',

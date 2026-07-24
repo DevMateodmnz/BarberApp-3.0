@@ -82,6 +82,19 @@ describe('ManageContent', () => {
     expect(onOwnSchedule).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the runtime panel entry only in explicit physical-QA mode', () => {
+    const onOpenPhysicalQaRuntime = vi.fn();
+    const normal = renderManageContent();
+    expect(queryByTestId(normal, 'manage-physical-qa-runtime')).toBeNull();
+
+    const physicalQa = renderManageContent({
+      showPhysicalQaRuntime: true,
+      onOpenPhysicalQaRuntime,
+    });
+    press(findByTestId(physicalQa, 'manage-physical-qa-runtime'));
+    expect(onOpenPhysicalQaRuntime).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a blocked state for client users', () => {
     const tree = renderManageContent({ role: 'CLIENT' });
 

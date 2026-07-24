@@ -27,16 +27,19 @@ npm run qa:physical:configure
 # Every QA session:
 npm run qa:physical:start
 npm run qa:physical:status
-npm run qa:physical:evidence -- mobile-action loyalty-program-save
+npm run qa:physical:device
+npm run qa:physical:ready
 ```
 
-The physical-QA harness starts API, public web, and Expo/Metro together, keeps
-their API target consistent, persists logs and PIDs, and proves live readiness.
+The physical-QA harness starts API, public web, and Expo/Metro together, creates
+one new runtime fingerprint per clean start, keeps their API target/HEAD
+consistent, and persists logs, device heartbeats, and PIDs.
 Do not replace these commands with old terminal notes. See `docs/run-local.md`
 for architecture, evidence snapshots, and safe cleanup.
 
-`qa:physical:status` must also report mobile mutation tracing and API request
-tracing enabled. For a form action performed immediately after editing text,
+`qa:physical:status` proves server readiness only. The phone must separately
+report `DEVICE_READY`, and `qa:physical:ready` must report `QA_READY`, before a
+manual checkpoint can be armed. For a form action performed immediately after editing text,
 leave the keyboard open and tap the uniquely labeled action once. The button
 must visibly enter loading state; a first tap that only dismisses the keyboard
 is a failure. Verify `press_received`, `mutation_started`, the correlated API
@@ -217,8 +220,31 @@ EXPO_PUBLIC_API_URL=http://10.0.2.2:3000/api/v1
 1. Make sure the phone and development machine are on the same Wi-Fi network.
 2. Run `npm run qa:physical:start`.
 3. Confirm `npm run qa:physical:status` reports `READY`.
-4. Open the printed `exp://<LAN-IP>:8081` URL in Expo Go, or scan Expo's QR
-   code.
+4. Fully close any BarberApp project already open inside Expo Go.
+5. Scan the newly printed Expo LAN QR.
+6. Wait for the blocking runtime check to clear.
+7. Confirm the visible `QA <HEAD> · <fingerprint>` badge exactly matches the
+   harness output.
+8. Run `npm run qa:physical:device` and require `DEVICE_READY`.
+9. Run `npm run qa:physical:ready` and require `QA_READY`.
+
+Do not infer connectivity because Metro listens on `8081` or once served a
+bundle. Expo Go can keep an old app session visible after the original Metro
+relationship is stale. The API-backed handshake and recent heartbeat are the
+authoritative device proof.
+
+Before any one-action checkpoint:
+
+```bash
+npm run qa:physical:arm -- loyalty-program-save
+```
+
+The command refuses to print a human action unless the device is ready. After
+the one printed action, collect the persisted correlation report:
+
+```bash
+npm run qa:physical:evidence -- mobile-action loyalty-program-save
+```
 
 To resume on another day, always run `npm run qa:physical:status`. If it is not
 ready, run `npm run qa:physical:start`; the harness removes only stale,
