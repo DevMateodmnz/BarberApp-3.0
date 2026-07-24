@@ -13,13 +13,16 @@ import {
 } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { networkInterfaces } from 'node:os';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import {
   REQUIRED_PORTS,
   boundRecords,
+  buildPhysicalQaCheckpoint,
   classifyPortOccupant,
+  createPhysicalQaRuntimeIdentity,
   createRuntimeMetadata,
   isRuntimeMetadataStale,
   maskIdentifier,
@@ -27,17 +30,21 @@ import {
   parseApiQaRequests,
   parseDotEnv,
   parseLanRouteSource,
-  parseMobileQaEvents,
+  parseNdjsonRecords,
+  parsePhysicalQaRuntimeMismatches,
   redactSecrets,
   sanitizeEnvironmentForMetadata,
   selectLanIpv4,
   summarizeRuntimeReadiness,
+  summarizeDeviceReadiness,
   summarizeMobileActionEvidence,
   validatePhysicalQaEnvironment,
   verifyRecordedProcess,
 } from './physical-qa/core.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const qrcode = require('qrcode-terminal');
 const repoRoot = path.resolve(scriptDir, '..');
 const apiRoot = path.join(repoRoot, 'apps', 'api');
 const publicWebRoot = path.join(repoRoot, 'apps', 'public-web');
@@ -45,6 +52,9 @@ const mobileRoot = path.join(repoRoot, 'apps', 'mobile');
 const runtimeDir = path.join(repoRoot, '.qa-runtime');
 const logsDir = path.join(runtimeDir, 'logs');
 const snapshotsDir = path.join(runtimeDir, 'snapshots');
+const mobileEventsDir = path.join(runtimeDir, 'mobile-events');
+const checkpointsDir = path.join(runtimeDir, 'checkpoints');
+const evidenceDir = path.join(runtimeDir, 'evidence');
 const metadataPath = path.join(runtimeDir, 'runtime.json');
 const paymentEnvPath = path.join(apiRoot, '.env.physical-qa.local');
 const runnerPath = path.join(scriptDir, 'physical-qa', 'log-runner.mjs');
@@ -485,6 +495,31 @@ async function httpReady(url, expectedText) {
   }
 }
 
+async function physicalQaHandshakeReady(metadata) {
+  try {
+    const response = await fetch(`${metadata.urls.apiLocal}/api/v1/qa/runtime`, {
+      signal: AbortSignal.timeout(3_000),
+      headers: {
+        Accept: 'application/json',
+        'X-BarberApp-QA-Client': 'harness',
+        'X-BarberApp-QA-Head': metadata.head,
+        'X-BarberApp-QA-Runtime': metadata.runtime.id,
+        'X-BarberApp-QA-Session': 'harness-status',
+      },
+    });
+    const body = await response.json();
+    return (
+      response.ok
+      && body?.data?.runtimeId === metadata.runtime.id
+      && body?.data?.runtimeFingerprint === metadata.runtime.fingerprint
+      && body?.data?.repositoryHead === metadata.head
+      && body?.data?.physicalQaMode === true
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function waitFor(label, check, timeoutMs = 120_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -596,12 +631,26 @@ async function collectStatus(metadata) {
           ? environment.PHYSICAL_QA_REQUEST_TRACE === 'true'
           : environment.EXPO_PUBLIC_PHYSICAL_QA_TRACE === 'true'
       );
+    const effectiveRuntimeMatches =
+      metadata.runtime?.id
+      && (
+        name === 'api'
+          ? environment.PHYSICAL_QA_MODE === 'true'
+            && environment.BARBERAPP_QA_RUNTIME_ID === metadata.runtime.id
+            && environment.BARBERAPP_QA_RUNTIME_HEAD === metadata.head
+          : name === 'publicWeb'
+            ? environment.NEXT_PUBLIC_QA_RUNTIME_ID === metadata.runtime.id
+            : environment.EXPO_PUBLIC_PHYSICAL_QA_MODE === 'true'
+              && environment.EXPO_PUBLIC_QA_RUNTIME_ID === metadata.runtime.id
+              && environment.EXPO_PUBLIC_QA_RUNTIME_HEAD === metadata.head
+      );
     serviceResults[name] = {
       identity: identity.ok,
       port: identity.ok,
       health: identity.ok ? await healthChecks[name]() : false,
       effectiveApiMatches,
       effectiveTraceMatches,
+      effectiveRuntimeMatches: Boolean(effectiveRuntimeMatches),
       detail: identity.reason,
     };
   }
@@ -611,7 +660,8 @@ async function collectStatus(metadata) {
     !Object.values(summary.services).every(
       (service) =>
         service.effectiveApiMatches
-        && service.effectiveTraceMatches,
+        && service.effectiveTraceMatches
+        && service.effectiveRuntimeMatches,
     )
   ) {
     summary.ready = false;
@@ -702,6 +752,11 @@ async function start() {
   const lanIp = resolveLanIp();
   const apiBaseLan = `http://${lanIp}:${REQUIRED_PORTS.api}/api/v1`;
   const startedAt = new Date().toISOString();
+  const runtimeIdentity = createPhysicalQaRuntimeIdentity();
+  const mobileEventsPath = path.join(
+    mobileEventsDir,
+    `${runtimeIdentity.id}.ndjson`,
+  );
   const metadata = createRuntimeMetadata({
     repositoryPath: repoRoot,
     branch: truth.branch,
@@ -710,14 +765,24 @@ async function start() {
     database,
     services: {},
     startedAt,
+    runtimeIdentity,
+    mobileEventsPath: path.relative(repoRoot, mobileEventsPath),
   });
 
   mkdirSync(logsDir, { recursive: true });
+  mkdirSync(mobileEventsDir, { recursive: true, mode: 0o700 });
+  writeFileSync(mobileEventsPath, '', { mode: 0o600, flag: 'wx' });
   try {
     const apiEnv = {
       ...env,
       NODE_ENV: 'development',
+      PHYSICAL_QA_MODE: 'true',
       PHYSICAL_QA_REQUEST_TRACE: 'true',
+      BARBERAPP_QA_RUNTIME_ID: runtimeIdentity.id,
+      BARBERAPP_QA_RUNTIME_FINGERPRINT: runtimeIdentity.fingerprint,
+      BARBERAPP_QA_RUNTIME_HEAD: truth.head,
+      BARBERAPP_QA_RUNTIME_STARTED_AT: startedAt,
+      BARBERAPP_QA_MOBILE_EVENTS_PATH: mobileEventsPath,
       PORT: String(REQUIRED_PORTS.api),
       PUBLIC_WEB_BASE_URL: `http://${lanIp}:${REQUIRED_PORTS.publicWeb}`,
     };
@@ -745,6 +810,7 @@ async function start() {
       NODE_ENV: 'development',
       PORT: String(REQUIRED_PORTS.publicWeb),
       PUBLIC_WEB_API_URL: apiBaseLan,
+      NEXT_PUBLIC_QA_RUNTIME_ID: runtimeIdentity.id,
     };
     spawnService({
       name: 'publicWeb',
@@ -768,13 +834,25 @@ async function start() {
       ...env,
       NODE_ENV: 'development',
       EXPO_PUBLIC_API_URL: apiBaseLan,
+      EXPO_PUBLIC_PHYSICAL_QA_MODE: 'true',
       EXPO_PUBLIC_PHYSICAL_QA_TRACE: 'true',
+      EXPO_PUBLIC_QA_RUNTIME_ID: runtimeIdentity.id,
+      EXPO_PUBLIC_QA_RUNTIME_FINGERPRINT: runtimeIdentity.fingerprint,
+      EXPO_PUBLIC_QA_RUNTIME_HEAD: truth.head,
+      EXPO_PUBLIC_QA_RUNTIME_STARTED_AT: startedAt,
     };
     spawnService({
       name: 'metro',
       cwd: mobileRoot,
       command: 'npx',
-      args: ['expo', 'start', '--lan', '--port', String(REQUIRED_PORTS.metro)],
+      args: [
+        'expo',
+        'start',
+        '--lan',
+        '--clear',
+        '--port',
+        String(REQUIRED_PORTS.metro),
+      ],
       env: metroEnv,
       metadata,
     });
@@ -791,6 +869,11 @@ async function start() {
     await waitFor(
       'LAN API health',
       () => httpReady(`${metadata.urls.apiLan}/health`, '"status":"ok"'),
+      30_000,
+    );
+    await waitFor(
+      'physical-QA API handshake',
+      () => physicalQaHandshakeReady(metadata),
       30_000,
     );
     await waitFor(
@@ -818,7 +901,7 @@ async function start() {
     }
 
     print('Physical-QA runtime: READY');
-    printUrls(metadata);
+    printUrls(metadata, { includeQr: true });
   } catch (error) {
     await stopRecordedProcesses(metadata, { quiet: true });
     rmSync(metadataPath, { force: true });
@@ -826,16 +909,36 @@ async function start() {
   }
 }
 
-function printUrls(metadata) {
+function printUrls(metadata, { includeQr = false } = {}) {
+  print(
+    `Runtime fingerprint: ${metadata.runtime?.fingerprint ?? '(legacy runtime)'}`,
+  );
+  print(`Runtime HEAD: ${metadata.head.slice(0, 7)}`);
   print(`API local: ${metadata.urls.apiLocal}`);
   print(`API LAN: ${metadata.urls.apiLan}`);
   print(`Public local: ${metadata.urls.publicBookingLocal}`);
   print(`Public LAN: ${metadata.urls.publicBookingLan}`);
   print(`Expo Go: ${metadata.urls.expo}`);
+  if (includeQr) {
+    print(
+      `Scan this Expo LAN QR for runtime ${metadata.runtime.fingerprint}:`,
+    );
+    qrcode.generate(metadata.urls.expo, { small: true }, (code) => {
+      print(code.trimEnd());
+    });
+  }
   print(`Logs: ${path.relative(repoRoot, logsDir)}/{api,publicWeb,metro}.log`);
   print('Tail logs: tail -f .qa-runtime/logs/*.log');
   print('Status: npm run qa:physical:status');
+  print('Device: npm run qa:physical:device');
+  print('QA readiness: npm run qa:physical:ready');
   print('Stop: npm run qa:physical:stop');
+  print(
+    `Open the newly started Expo project; only the badge "QA ${metadata.head.slice(
+      0,
+      7,
+    )} · ${metadata.runtime?.fingerprint ?? 'UNKNOWN'}" belongs to this runtime.`,
+  );
 }
 
 async function status() {
@@ -870,6 +973,9 @@ async function status() {
   print(`Metadata stale: ${stale ? 'yes' : 'no'}`);
   print(`Database: ${metadata.database}`);
   print(`LAN IP: ${metadata.lanIp}`);
+  print(
+    `Runtime fingerprint: ${metadata.runtime?.fingerprint ?? '(legacy runtime)'}`,
+  );
 
   for (const name of serviceOrder) {
     const record = metadata.services[name];
@@ -883,6 +989,9 @@ async function status() {
     );
     if (!result.effectiveTraceMatches) {
       print('  required physical-QA tracing is disabled');
+    }
+    if (!result.effectiveRuntimeMatches) {
+      print('  physical-QA runtime identity is missing or stale');
     }
     if (!result.ready) {
       if (result.detail) print(`  ${result.detail}`);
@@ -908,6 +1017,112 @@ async function status() {
   );
 
   if (!summary.ready || stale) process.exitCode = 1;
+}
+
+function collectDeviceReadiness(metadata, now = Date.now()) {
+  const eventsPath = metadata.runtime?.mobileEventsPath
+    ? path.join(repoRoot, metadata.runtime.mobileEventsPath)
+    : null;
+  const events =
+    eventsPath && existsSync(eventsPath)
+      ? parseNdjsonRecords(readFileSync(eventsPath, 'utf8'))
+      : [];
+  const apiLogPath = metadata.services?.api?.logPath
+    ? path.join(repoRoot, metadata.services.api.logPath)
+    : null;
+  const mismatchEvents =
+    apiLogPath && existsSync(apiLogPath)
+      ? parsePhysicalQaRuntimeMismatches(readFileSync(apiLogPath, 'utf8'))
+      : [];
+  return summarizeDeviceReadiness({
+    metadata,
+    events,
+    mismatchEvents,
+    now,
+  });
+}
+
+function printDeviceReadiness(result) {
+  print(`Physical-QA device: ${result.classification}`);
+  print(`Runtime fingerprint: ${result.runtimeFingerprint ?? '(none)'}`);
+  print(
+    `App runtime fingerprint: ${result.appRuntimeFingerprint ?? '(none)'}`,
+  );
+  print(`App session: ${maskIdentifier(result.appSessionId) ?? '(none)'}`);
+  print(
+    `Heartbeat last seen: ${result.lastHeartbeatAt ?? '(none)'}`,
+  );
+  print(
+    `Heartbeat age: ${
+      result.heartbeatAgeMs === null
+        ? '(none)'
+        : `${Math.round(result.heartbeatAgeMs / 1000)}s`
+    }`,
+  );
+  print(`App HEAD: ${result.appHead?.slice(0, 7) ?? '(none)'}`);
+  print(`API HEAD: ${result.apiHead?.slice(0, 7) ?? '(none)'}`);
+  print(`App API target: ${result.apiTarget ?? '(none)'}`);
+  print(`Handshake: ${result.handshakeStatus}`);
+  print(`Last focused screen: ${result.lastFocusedScreen ?? '(none)'}`);
+  print(`Trace transport: ${result.traceEnabled ? 'enabled' : 'not proven'}`);
+  print(
+    `Current runtime session: ${result.ready ? 'verified' : 'not verified'}`,
+  );
+}
+
+async function requireCurrentRuntime() {
+  const metadata = readMetadata();
+  if (!metadata) {
+    fail('Start the physical-QA runtime first.');
+  }
+  const truth = currentGitTruth();
+  const summary = await collectStatus(metadata);
+  const processChecks = Object.fromEntries(
+    Object.entries(summary.services).map(([name, service]) => [
+      name,
+      { ok: service.identity },
+    ]),
+  );
+  const stale = isRuntimeMetadataStale({
+    metadata,
+    currentRepoRoot: repoRoot,
+    currentHead: truth.head,
+    processChecks,
+  });
+  if (!summary.ready || stale) {
+    fail('Physical-QA server runtime is not current and READY.');
+  }
+  return { metadata, truth, summary };
+}
+
+async function device() {
+  ensureRepoRoot();
+  const { metadata } = await requireCurrentRuntime();
+  const result = collectDeviceReadiness(metadata);
+  printDeviceReadiness(result);
+  if (!result.ready) process.exitCode = 1;
+}
+
+async function ready() {
+  ensureRepoRoot();
+  let runtime;
+  try {
+    runtime = await requireCurrentRuntime();
+  } catch (error) {
+    print('Physical-QA combined readiness: NOT READY');
+    print('Runtime: RUNTIME_NOT_READY');
+    print('Device: DEVICE_NOT_CONNECTED');
+    throw error;
+  }
+  print('Runtime: RUNTIME_READY');
+  const deviceResult = collectDeviceReadiness(runtime.metadata);
+  print(`Device: ${deviceResult.classification}`);
+  print(
+    `Physical-QA combined readiness: ${
+      deviceResult.ready ? 'QA_READY' : 'NOT READY'
+    }`,
+  );
+  if (!deviceResult.ready) process.exitCode = 1;
 }
 
 async function stop() {
@@ -1225,8 +1440,91 @@ async function snapshot(args) {
         report.counts.ledgerEvents,
       ).reduce((sum, value) => sum + value, 0)}`,
     );
+    return { outputPath, report };
   } finally {
     await prisma.$disconnect();
+  }
+}
+
+async function arm(action, args) {
+  ensureRepoRoot();
+  if (action !== 'loyalty-program-save') {
+    fail('Only the `loyalty-program-save` checkpoint is supported.');
+  }
+
+  const { metadata } = await requireCurrentRuntime();
+  const deviceResult = collectDeviceReadiness(metadata);
+  if (!deviceResult.ready) {
+    printDeviceReadiness(deviceResult);
+    fail(
+      `Checkpoint arming refused: ${deviceResult.classification}. Connect and verify the current phone runtime first.`,
+    );
+  }
+
+  const checkpointStartedAt = new Date().toISOString();
+  const snapshotResult = await snapshot(args);
+  const armedAt = new Date().toISOString();
+  const checkpointId = `checkpoint-${randomBytes(8).toString('hex')}`;
+  const runtimeCheckpointDir = path.join(
+    checkpointsDir,
+    metadata.runtime.id,
+  );
+  mkdirSync(runtimeCheckpointDir, { recursive: true, mode: 0o700 });
+  const checkpoint = buildPhysicalQaCheckpoint({
+    action,
+    metadata,
+    deviceReadiness: deviceResult,
+    checkpointId,
+    checkpointStartedAt,
+    armedAt,
+    beforeSnapshot: path.relative(repoRoot, snapshotResult.outputPath),
+  });
+  const outputPath = path.join(
+    runtimeCheckpointDir,
+    `${armedAt.replaceAll(':', '-')}-${action}.json`,
+  );
+  writeFileSync(outputPath, `${JSON.stringify(checkpoint, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  const latestPath = path.join(runtimeCheckpointDir, `latest-${action}.json`);
+  const temporaryLatestPath = `${latestPath}.tmp`;
+  writeFileSync(
+    temporaryLatestPath,
+    `${JSON.stringify(checkpoint, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+  renameSync(temporaryLatestPath, latestPath);
+
+  print(`Physical-QA checkpoint: ARMED`);
+  print(`Checkpoint: ${checkpointId}`);
+  print(`Runtime fingerprint: ${metadata.runtime.fingerprint}`);
+  print(`App session: ${maskIdentifier(deviceResult.appSessionId)}`);
+  print(`Armed at: ${armedAt}`);
+  print(`Before snapshot: ${path.relative(repoRoot, snapshotResult.outputPath)}`);
+  print(
+    'One action only: keep the Android keyboard open, tap Save loyalty program once, then stop.',
+  );
+}
+
+function readLatestCheckpoint(metadata, action) {
+  const checkpointPath = path.join(
+    checkpointsDir,
+    metadata.runtime.id,
+    `latest-${action}.json`,
+  );
+  if (!existsSync(checkpointPath)) return null;
+  try {
+    const checkpoint = JSON.parse(readFileSync(checkpointPath, 'utf8'));
+    if (
+      checkpoint.runtimeId !== metadata.runtime.id
+      || checkpoint.runtimeHead !== metadata.head
+      || checkpoint.action !== action
+    ) {
+      return null;
+    }
+    return { ...checkpoint, path: checkpointPath };
+  } catch {
+    return null;
   }
 }
 
@@ -1241,13 +1539,7 @@ async function evidence(domain, args) {
     fail('Only the `loyalty-program-save` mobile action is supported.');
   }
 
-  const metadata = readMetadata();
-  if (!metadata) fail('Start the physical-QA runtime before collecting evidence.');
-  const ready = await collectStatus(metadata);
-  const truth = currentGitTruth();
-  if (!ready.ready || metadata.head !== truth.head) {
-    fail('Physical-QA runtime is not current and READY; evidence refused.');
-  }
+  const { metadata } = await requireCurrentRuntime();
 
   const options = parseSnapshotOptions(optionArgs);
   const env = loadRuntimeEnvironment();
@@ -1278,27 +1570,108 @@ async function evidence(domain, args) {
     });
     if (!shop) fail(`Barbershop slug "${options.barbershop}" was not found.`);
 
-    const metroLog = readFileSync(
-      path.join(repoRoot, metadata.services.metro.logPath),
-      'utf8',
-    );
     const apiLog = readFileSync(
       path.join(repoRoot, metadata.services.api.logPath),
       'utf8',
     );
-    const mobileEvents = parseMobileQaEvents(metroLog, action);
+    const deviceResult = collectDeviceReadiness(metadata);
+    const checkpoint = readLatestCheckpoint(metadata, action);
+    if (deviceResult.ready && !checkpoint) {
+      fail(
+        `No current checkpoint is armed. Run \`npm run qa:physical:arm -- ${action}\` first.`,
+      );
+    }
+    const persistedEvents = parseNdjsonRecords(
+      readFileSync(
+        path.join(repoRoot, metadata.runtime.mobileEventsPath),
+        'utf8',
+      ),
+    );
+    const boundary = checkpoint ? Date.parse(checkpoint.armedAt) : 0;
+    const mobileEvents = persistedEvents.filter(
+      (event) =>
+        event.eventType === 'mutation_stage'
+        && event.action === action
+        && Date.parse(event.receivedAt ?? event.timestamp) >= boundary
+        && (
+          !checkpoint
+          || event.appSessionId === checkpoint.appSessionId
+        ),
+    );
     const apiRequests = parseApiQaRequests(apiLog);
     const result = summarizeMobileActionEvidence({
       action,
       mobileEvents,
       apiRequests,
       loyaltyProgram: shop.loyaltyProgram,
+      deviceReadiness: deviceResult,
+    });
+    const capturedAt = new Date().toISOString();
+    const report = {
+      version: 2,
+      capturedAt,
+      classification: result.classification,
+      action,
+      runtime: {
+        fingerprint: metadata.runtime.fingerprint,
+        head: metadata.head,
+        readyAt: metadata.readyAt,
+      },
+      device: {
+        classification: deviceResult.classification,
+        appSession: maskIdentifier(deviceResult.appSessionId),
+        appHead: deviceResult.appHead,
+        appRuntimeFingerprint: deviceResult.appRuntimeFingerprint,
+        lastHeartbeatAt: deviceResult.lastHeartbeatAt,
+        heartbeatAgeMs: deviceResult.heartbeatAgeMs,
+        lastFocusedScreen: deviceResult.lastFocusedScreen,
+        apiTarget: deviceResult.apiTarget,
+        handshakeStatus: deviceResult.handshakeStatus,
+        traceEnabled: deviceResult.traceEnabled,
+      },
+      checkpoint: checkpoint
+        ? {
+            checkpointId: checkpoint.checkpointId,
+            armedAt: checkpoint.armedAt,
+            beforeSnapshot: checkpoint.beforeSnapshot,
+          }
+        : null,
+      attemptId: result.attemptId,
+      mobileStages: result.mobileEvents.map((event) => ({
+        timestamp: event.timestamp,
+        receivedAt: event.receivedAt,
+        stage: event.stage,
+        status: event.status,
+        safeErrorCategory: event.safeErrorCategory,
+        visitsRequired: event.visitsRequired,
+      })),
+      apiRequest: result.apiRequest,
+      authoritativeLoyalty: shop.loyaltyProgram,
+      expectedVisitsRequired: result.expectedVisitsRequired,
+    };
+    mkdirSync(evidenceDir, { recursive: true, mode: 0o700 });
+    const outputPath = path.join(
+      evidenceDir,
+      `${capturedAt.replaceAll(':', '-')}-${action}.json`,
+    );
+    writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, {
+      mode: 0o600,
     });
 
     print(`Physical-QA evidence: ${result.classification}`);
     print(`Action: ${action}`);
     print(`Runtime: ${metadata.branch} @ ${metadata.head.slice(0, 7)} (READY)`);
-    print(`Captured: ${new Date().toISOString()}`);
+    print(`Captured: ${capturedAt}`);
+    print(`Evidence report: ${path.relative(repoRoot, outputPath)}`);
+    print(`Runtime fingerprint: ${metadata.runtime.fingerprint}`);
+    print(`Device: ${deviceResult.classification}`);
+    print(`App session: ${maskIdentifier(deviceResult.appSessionId) ?? '(none)'}`);
+    print(`App HEAD: ${deviceResult.appHead?.slice(0, 7) ?? '(none)'}`);
+    print(`Last heartbeat: ${deviceResult.lastHeartbeatAt ?? '(none)'}`);
+    print(`Last focused screen: ${deviceResult.lastFocusedScreen ?? '(none)'}`);
+    print(
+      `Checkpoint: ${checkpoint?.checkpointId ?? '(not armed)'}`,
+    );
     print(`Attempt: ${result.attemptId ?? '(none)'}`);
     print(
       `Mobile stages: ${
@@ -1340,6 +1713,10 @@ Commands:
   configure              Create the ignored local payment-key file once
   start                  Validate and start API, public web, and Metro
   status                 Prove recorded processes, ports, health, and targets
+  device                 Require a recent matching mobile handshake and heartbeat
+  ready                  Require both server runtime READY and DEVICE_READY
+  arm loyalty-program-save [...]
+                         Snapshot and arm one device-verified checkpoint
   stop                   Stop only identity-verified recorded process groups
   snapshot loyalty [...] Capture bounded read-only loyalty evidence
   evidence mobile-action loyalty-program-save [...]
@@ -1358,6 +1735,15 @@ async function main() {
       break;
     case 'status':
       await status();
+      break;
+    case 'device':
+      await device();
+      break;
+    case 'ready':
+      await ready();
+      break;
+    case 'arm':
+      await arm(domain, args);
       break;
     case 'stop':
       await stop();

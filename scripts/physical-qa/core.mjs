@@ -1,4 +1,5 @@
 /* eslint-env node */
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
 export const REQUIRED_PORTS = Object.freeze({
@@ -12,6 +13,8 @@ export const SHARED_DATABASE = Object.freeze({
   port: '5432',
   name: 'barberapp',
 });
+
+export const DEVICE_HEARTBEAT_STALE_MS = 45_000;
 
 const SECRET_NAME_PATTERN =
   /(SECRET|TOKEN|PASSWORD|ENCRYPTION_KEY|PRIVATE_KEY|DATABASE_URL)/i;
@@ -201,9 +204,21 @@ export function sanitizeEnvironmentForMetadata(env) {
     if (value === undefined || SECRET_NAME_PATTERN.test(name)) continue;
     if (
       name === 'EXPO_PUBLIC_API_URL' ||
+      name === 'EXPO_PUBLIC_PHYSICAL_QA_MODE' ||
       name === 'EXPO_PUBLIC_PHYSICAL_QA_TRACE' ||
+      name === 'EXPO_PUBLIC_QA_RUNTIME_ID' ||
+      name === 'EXPO_PUBLIC_QA_RUNTIME_FINGERPRINT' ||
+      name === 'EXPO_PUBLIC_QA_RUNTIME_HEAD' ||
+      name === 'EXPO_PUBLIC_QA_RUNTIME_STARTED_AT' ||
+      name === 'PHYSICAL_QA_MODE' ||
       name === 'PHYSICAL_QA_REQUEST_TRACE' ||
+      name === 'BARBERAPP_QA_RUNTIME_ID' ||
+      name === 'BARBERAPP_QA_RUNTIME_FINGERPRINT' ||
+      name === 'BARBERAPP_QA_RUNTIME_HEAD' ||
+      name === 'BARBERAPP_QA_RUNTIME_STARTED_AT' ||
+      name === 'BARBERAPP_QA_MOBILE_EVENTS_PATH' ||
       name === 'PUBLIC_WEB_API_URL' ||
+      name === 'NEXT_PUBLIC_QA_RUNTIME_ID' ||
       name === 'NODE_ENV'
     ) {
       result[name] = value;
@@ -365,12 +380,255 @@ export function parseApiQaRequests(source) {
   return parseStructuredLogLines(source, 'qa.api.request').slice(-200);
 }
 
+export function parsePhysicalQaRuntimeMismatches(source) {
+  return parseStructuredLogLines(source, 'qa.runtime.mismatch').slice(-200);
+}
+
+export function parseNdjsonRecords(source, limit = 2_000) {
+  const records = [];
+  for (const line of String(source).split(/\r?\n/u)) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        records.push(parsed);
+      }
+    } catch {
+      // Ignore partial final lines; persisted evidence is append-only.
+    }
+  }
+  return records.slice(-Math.max(1, Math.min(Number(limit) || 2_000, 10_000)));
+}
+
+export function summarizeDeviceReadiness({
+  metadata,
+  events,
+  mismatchEvents = [],
+  now = Date.now(),
+  staleAfterMs = DEVICE_HEARTBEAT_STALE_MS,
+}) {
+  const runtime = metadata?.runtime;
+  if (!runtime?.id || !runtime?.fingerprint || !metadata?.head) {
+    return createDeviceSummary('DEVICE_NOT_CONNECTED');
+  }
+
+  const currentEvents = events
+    .filter((event) => event.runtimeId === runtime.id)
+    .sort(compareEventTime);
+  const latestCurrentAt = eventTime(currentEvents.at(-1));
+  const latestMismatch = mismatchEvents
+    .filter(
+      (event) =>
+        event.expectedFingerprint === runtime.fingerprint
+        && (
+          event.client === 'mobile'
+          || typeof event.receivedFingerprint === 'string'
+        ),
+    )
+    .sort(compareEventTime)
+    .at(-1);
+  const latestMismatchAt = eventTime(latestMismatch);
+
+  if (
+    latestMismatch
+    && latestMismatchAt > latestCurrentAt
+    && latestMismatch.reason === 'head'
+  ) {
+    return createDeviceSummary('DEVICE_HEAD_MISMATCH', {
+      runtimeFingerprint: runtime.fingerprint,
+      appHead: latestMismatch.receivedHead ?? null,
+      lastSeenAt: latestMismatch.timestamp ?? null,
+    });
+  }
+  if (latestMismatch && latestMismatchAt > latestCurrentAt) {
+    return createDeviceSummary('DEVICE_RUNTIME_MISMATCH', {
+      runtimeFingerprint: runtime.fingerprint,
+      appRuntimeFingerprint:
+        latestMismatch.receivedFingerprint ?? null,
+      lastSeenAt: latestMismatch.timestamp ?? null,
+    });
+  }
+
+  const sessionEvent = [...currentEvents]
+    .reverse()
+    .find((event) => typeof event.appSessionId === 'string');
+  if (!sessionEvent) {
+    return createDeviceSummary('DEVICE_NOT_CONNECTED', {
+      runtimeFingerprint: runtime.fingerprint,
+    });
+  }
+
+  const appSessionId = sessionEvent.appSessionId;
+  const sessionEvents = currentEvents.filter(
+    (event) => event.appSessionId === appSessionId,
+  );
+  const heartbeat = [...sessionEvents]
+    .reverse()
+    .find((event) => event.eventType === 'heartbeat');
+  const handshakeSucceeded = [...sessionEvents]
+    .reverse()
+    .find((event) => event.eventType === 'runtime_handshake_succeeded');
+  const handshakeFailed = [...sessionEvents]
+    .reverse()
+    .find((event) => event.eventType === 'runtime_handshake_failed');
+  const focused = [...sessionEvents]
+    .reverse()
+    .find((event) => event.eventType === 'screen_focused');
+  const latest = sessionEvents.at(-1);
+  const appHead = latest?.appHead ?? null;
+  const appRuntimeFingerprint = latest?.runtimeFingerprint ?? null;
+  const apiTarget = latest?.apiTarget ?? null;
+  const lastHeartbeatAt = heartbeat?.receivedAt ?? heartbeat?.timestamp ?? null;
+  const heartbeatAgeMs = lastHeartbeatAt
+    ? Math.max(0, now - Date.parse(lastHeartbeatAt))
+    : null;
+  const base = {
+    runtimeFingerprint: runtime.fingerprint,
+    appRuntimeFingerprint,
+    appSessionId,
+    appHead,
+    apiHead: metadata.head,
+    apiTarget,
+    expectedApiTarget: metadata.urls?.apiBaseLan ?? null,
+    lastHeartbeatAt,
+    heartbeatAgeMs,
+    lastSeenAt: latest?.receivedAt ?? latest?.timestamp ?? null,
+    lastFocusedScreen: focused?.screen ?? null,
+    traceEnabled: latest?.traceVersion === 1,
+    handshakeStatus: handshakeSucceeded ? 'succeeded' : 'not_observed',
+  };
+
+  if (appRuntimeFingerprint !== runtime.fingerprint) {
+    return createDeviceSummary('DEVICE_RUNTIME_MISMATCH', base);
+  }
+  if (appHead !== metadata.head) {
+    return createDeviceSummary('DEVICE_HEAD_MISMATCH', base);
+  }
+  if (apiTarget !== metadata.urls?.apiBaseLan) {
+    return createDeviceSummary('DEVICE_HANDSHAKE_FAILED', {
+      ...base,
+      handshakeStatus: 'failed',
+    });
+  }
+  if (
+    !handshakeSucceeded
+    || (
+      handshakeFailed
+      && eventTime(handshakeFailed) > eventTime(handshakeSucceeded)
+    )
+  ) {
+    return createDeviceSummary('DEVICE_HANDSHAKE_FAILED', {
+      ...base,
+      handshakeStatus: 'failed',
+    });
+  }
+  if (!heartbeat || heartbeatAgeMs === null) {
+    return createDeviceSummary('DEVICE_NOT_CONNECTED', base);
+  }
+  if (heartbeatAgeMs > staleAfterMs) {
+    return createDeviceSummary('DEVICE_STALE', base);
+  }
+
+  return createDeviceSummary('DEVICE_READY', base);
+}
+
+export function createPhysicalQaRuntimeIdentity(
+  bytes = randomBytes(16),
+) {
+  if (!Buffer.isBuffer(bytes) || bytes.length !== 16) {
+    throw new Error('Physical-QA runtime identity requires exactly 16 bytes.');
+  }
+  const id = bytes.toString('hex');
+  return {
+    id,
+    fingerprint: id.slice(0, 8).toUpperCase(),
+  };
+}
+
+export function buildPhysicalQaCheckpoint({
+  action,
+  metadata,
+  deviceReadiness,
+  checkpointId,
+  checkpointStartedAt,
+  armedAt,
+  beforeSnapshot,
+}) {
+  if (deviceReadiness?.classification !== 'DEVICE_READY') {
+    throw new Error(
+      `Checkpoint arming refused: ${
+        deviceReadiness?.classification ?? 'DEVICE_NOT_CONNECTED'
+      }`,
+    );
+  }
+  if (action !== 'loyalty-program-save') {
+    throw new Error('Unsupported physical-QA checkpoint action.');
+  }
+  return {
+    version: 1,
+    checkpointId,
+    action,
+    runtimeId: metadata.runtime.id,
+    runtimeFingerprint: metadata.runtime.fingerprint,
+    runtimeHead: metadata.head,
+    appSessionId: deviceReadiness.appSessionId,
+    appHead: deviceReadiness.appHead,
+    checkpointStartedAt,
+    armedAt,
+    beforeSnapshot,
+  };
+}
+
+function createDeviceSummary(classification, fields = {}) {
+  return {
+    classification,
+    ready: classification === 'DEVICE_READY',
+    runtimeFingerprint: null,
+    appRuntimeFingerprint: null,
+    appSessionId: null,
+    appHead: null,
+    apiHead: null,
+    apiTarget: null,
+    expectedApiTarget: null,
+    lastHeartbeatAt: null,
+    heartbeatAgeMs: null,
+    lastSeenAt: null,
+    lastFocusedScreen: null,
+    traceEnabled: false,
+    handshakeStatus: 'not_observed',
+    ...fields,
+  };
+}
+
+function eventTime(event) {
+  if (!event) return Number.NEGATIVE_INFINITY;
+  const raw = event.receivedAt ?? event.timestamp;
+  const parsed = typeof raw === 'string' ? Date.parse(raw) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
+function compareEventTime(left, right) {
+  return eventTime(left) - eventTime(right);
+}
+
 export function summarizeMobileActionEvidence({
   action,
   mobileEvents,
   apiRequests,
   loyaltyProgram,
+  deviceReadiness,
 }) {
+  if (deviceReadiness && !deviceReadiness.ready) {
+    return {
+      classification: deviceReadiness.classification,
+      attemptId: null,
+      mobileEvents: [],
+      apiRequest: null,
+      expectedVisitsRequired: null,
+      loyaltyProgram,
+    };
+  }
+
   const presses = mobileEvents.filter(
     (event) => event.action === action && event.stage === 'press_received',
   );
@@ -485,18 +743,25 @@ export function createRuntimeMetadata({
   database,
   services,
   startedAt,
+  runtimeIdentity,
+  mobileEventsPath,
 }) {
   const apiLanBase = `http://${lanIp}:${REQUIRED_PORTS.api}`;
   const publicLanBase = `http://${lanIp}:${REQUIRED_PORTS.publicWeb}`;
 
   return {
-    version: 1,
+    version: 2,
     repositoryPath,
     branch,
     head,
     lanIp,
     startedAt,
     readyAt: null,
+    runtime: {
+      id: runtimeIdentity.id,
+      fingerprint: runtimeIdentity.fingerprint,
+      mobileEventsPath,
+    },
     database: database.sanitized,
     urls: {
       apiLocal: `http://127.0.0.1:${REQUIRED_PORTS.api}`,

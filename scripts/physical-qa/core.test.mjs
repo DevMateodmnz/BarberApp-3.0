@@ -6,7 +6,9 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   boundRecords,
+  buildPhysicalQaCheckpoint,
   classifyPortOccupant,
+  createPhysicalQaRuntimeIdentity,
   createRuntimeMetadata,
   isRuntimeMetadataStale,
   maskPhone,
@@ -14,12 +16,15 @@ import {
   parseAndValidateDatabaseTarget,
   parseLanRouteSource,
   parseMobileQaEvents,
+  parseNdjsonRecords,
+  parsePhysicalQaRuntimeMismatches,
   planSafeProcessStops,
   redactSecrets,
   sanitizeEnvironmentForMetadata,
   selectLanIpv4,
   summarizeRuntimeReadiness,
   summarizeMobileActionEvidence,
+  summarizeDeviceReadiness,
   validatePaymentEncryptionKey,
 } from './core.mjs';
 
@@ -200,6 +205,7 @@ test('validates only the intended shared database and rejects test port 5433', (
 });
 
 test('metadata stores generated paths and public targets but no secrets', () => {
+  const runtimeIdentity = createPhysicalQaRuntimeIdentity(Buffer.alloc(16, 10));
   const metadata = createRuntimeMetadata({
     repositoryPath: '/repo',
     branch: 'main',
@@ -218,11 +224,27 @@ test('metadata stores generated paths and public targets but no secrets', () => 
       },
     },
     startedAt: '2026-07-24T10:00:00.000Z',
+    runtimeIdentity,
+    mobileEventsPath: `.qa-runtime/mobile-events/${runtimeIdentity.id}.ndjson`,
   });
   const serialized = JSON.stringify(metadata);
   assert.match(serialized, /\.qa-runtime\/logs\/api\.log/u);
   assert.match(serialized, /192\.168\.1\.25:3000\/api\/v1/u);
   assert.doesNotMatch(serialized, /super-secret|sk_test_secret|user:pass/u);
+  assert.equal(metadata.runtime.fingerprint, '0A0A0A0A');
+});
+
+test('generates a fresh safe runtime identity from exactly 16 random bytes', () => {
+  const first = createPhysicalQaRuntimeIdentity(Buffer.alloc(16, 1));
+  const second = createPhysicalQaRuntimeIdentity(Buffer.alloc(16, 2));
+
+  assert.match(first.id, /^[a-f0-9]{32}$/u);
+  assert.equal(first.fingerprint, first.id.slice(0, 8).toUpperCase());
+  assert.notEqual(first.id, second.id);
+  assert.throws(
+    () => createPhysicalQaRuntimeIdentity(Buffer.alloc(15)),
+    /exactly 16 bytes/u,
+  );
 });
 
 test('redacts common keys and database passwords from diagnostics', () => {
@@ -265,6 +287,223 @@ test('parses prefixed mobile and API trace lines without depending on surroundin
   assert.equal(mobile[0].attemptId, 'qa-1');
   assert.equal(api.length, 1);
   assert.equal(api[0].status, 200);
+});
+
+test('parses bounded NDJSON and sanitized runtime mismatch traces', () => {
+  const records = parseNdjsonRecords(
+    '{"eventType":"heartbeat"}\npartial\n{"eventType":"screen_focused"}\n',
+  );
+  assert.deepEqual(
+    records.map((record) => record.eventType),
+    ['heartbeat', 'screen_focused'],
+  );
+  const mismatch = parsePhysicalQaRuntimeMismatches(
+    'qa.runtime.mismatch {"timestamp":"2026-07-24T10:00:00.000Z","reason":"runtime","expectedFingerprint":"AAAAAAAA","receivedFingerprint":"BBBBBBBB"}',
+  );
+  assert.equal(mismatch.length, 1);
+  assert.equal(mismatch[0].receivedFingerprint, 'BBBBBBBB');
+});
+
+test('classifies no device, mismatch, failed handshake, stale heartbeat, and ready device', () => {
+  const runtimeId = 'a'.repeat(32);
+  const head = 'b'.repeat(40);
+  const metadata = {
+    head,
+    runtime: {
+      id: runtimeId,
+      fingerprint: 'AAAAAAAA',
+    },
+    urls: {
+      apiBaseLan: 'http://192.168.1.25:3000/api/v1',
+    },
+  };
+  const base = {
+    runtimeId,
+    runtimeFingerprint: 'AAAAAAAA',
+    appSessionId: 'app-session-1',
+    appHead: head,
+    apiTarget: metadata.urls.apiBaseLan,
+    traceVersion: 1,
+  };
+  const at = (seconds) =>
+    `2026-07-24T10:00:${String(seconds).padStart(2, '0')}.000Z`;
+  const event = (eventType, seconds, extra = {}) => ({
+    ...base,
+    eventType,
+    timestamp: at(seconds),
+    receivedAt: at(seconds),
+    ...extra,
+  });
+
+  assert.equal(
+    summarizeDeviceReadiness({
+      metadata,
+      events: [],
+      now: Date.parse(at(30)),
+    }).classification,
+    'DEVICE_NOT_CONNECTED',
+  );
+  assert.equal(
+    summarizeDeviceReadiness({
+      metadata,
+      events: [],
+      mismatchEvents: [{
+        timestamp: at(20),
+        expectedFingerprint: 'AAAAAAAA',
+        receivedFingerprint: 'CCCCCCCC',
+        reason: 'runtime',
+      }],
+      now: Date.parse(at(30)),
+    }).classification,
+    'DEVICE_RUNTIME_MISMATCH',
+  );
+  assert.equal(
+    summarizeDeviceReadiness({
+      metadata,
+      events: [
+        event('runtime_handshake_failed', 20, {
+          safeErrorCategory: 'TRACE_TRANSPORT',
+        }),
+      ],
+      now: Date.parse(at(30)),
+    }).classification,
+    'DEVICE_HANDSHAKE_FAILED',
+  );
+  assert.equal(
+    summarizeDeviceReadiness({
+      metadata,
+      events: [
+        event('runtime_handshake_succeeded', 1),
+        event('heartbeat', 2),
+      ],
+      now: Date.parse('2026-07-24T10:01:00.000Z'),
+    }).classification,
+    'DEVICE_STALE',
+  );
+  const ready = summarizeDeviceReadiness({
+    metadata,
+    events: [
+      event('runtime_handshake_succeeded', 10),
+      event('screen_focused', 11, { screen: '/(tabs)/manage' }),
+      event('heartbeat', 20),
+    ],
+    now: Date.parse(at(30)),
+  });
+  assert.equal(ready.classification, 'DEVICE_READY');
+  assert.equal(ready.ready, true);
+  assert.equal(ready.lastFocusedScreen, '/(tabs)/manage');
+  assert.equal(ready.heartbeatAgeMs, 10_000);
+});
+
+test('ignores stale runtime events and detects app HEAD/API target mismatches', () => {
+  const runtimeId = 'a'.repeat(32);
+  const head = 'b'.repeat(40);
+  const metadata = {
+    head,
+    runtime: { id: runtimeId, fingerprint: 'AAAAAAAA' },
+    urls: { apiBaseLan: 'http://192.168.1.25:3000/api/v1' },
+  };
+  const base = {
+    runtimeId,
+    runtimeFingerprint: 'AAAAAAAA',
+    appSessionId: 'app-session-1',
+    appHead: head,
+    apiTarget: metadata.urls.apiBaseLan,
+    traceVersion: 1,
+    timestamp: '2026-07-24T10:00:00.000Z',
+    receivedAt: '2026-07-24T10:00:00.000Z',
+  };
+  const staleRuntimeEvent = {
+    ...base,
+    runtimeId: 'c'.repeat(32),
+    runtimeFingerprint: 'CCCCCCCC',
+    eventType: 'heartbeat',
+  };
+
+  assert.equal(
+    summarizeDeviceReadiness({
+      metadata,
+      events: [staleRuntimeEvent],
+      now: Date.parse('2026-07-24T10:00:10.000Z'),
+    }).classification,
+    'DEVICE_NOT_CONNECTED',
+  );
+  assert.equal(
+    summarizeDeviceReadiness({
+      metadata,
+      events: [{
+        ...base,
+        appHead: 'd'.repeat(40),
+        eventType: 'heartbeat',
+      }],
+      now: Date.parse('2026-07-24T10:00:10.000Z'),
+    }).classification,
+    'DEVICE_HEAD_MISMATCH',
+  );
+  assert.equal(
+    summarizeDeviceReadiness({
+      metadata,
+      events: [
+        { ...base, eventType: 'runtime_handshake_succeeded' },
+        {
+          ...base,
+          eventType: 'heartbeat',
+          apiTarget: 'http://192.168.1.99:3000/api/v1',
+        },
+      ],
+      now: Date.parse('2026-07-24T10:00:10.000Z'),
+    }).classification,
+    'DEVICE_HANDSHAKE_FAILED',
+  );
+});
+
+test('checkpoint arming refuses non-ready devices and records a ready session', () => {
+  const metadata = {
+    head: 'b'.repeat(40),
+    runtime: {
+      id: 'a'.repeat(32),
+      fingerprint: 'AAAAAAAA',
+    },
+  };
+  const input = {
+    action: 'loyalty-program-save',
+    metadata,
+    checkpointId: 'checkpoint-123',
+    checkpointStartedAt: '2026-07-24T10:00:00.000Z',
+    armedAt: '2026-07-24T10:00:01.000Z',
+    beforeSnapshot: '.qa-runtime/snapshots/before.json',
+  };
+
+  assert.throws(
+    () => buildPhysicalQaCheckpoint({
+      ...input,
+      deviceReadiness: { classification: 'DEVICE_STALE' },
+    }),
+    /DEVICE_STALE/u,
+  );
+  assert.deepEqual(
+    buildPhysicalQaCheckpoint({
+      ...input,
+      deviceReadiness: {
+        classification: 'DEVICE_READY',
+        appSessionId: 'app-session-1',
+        appHead: metadata.head,
+      },
+    }),
+    {
+      version: 1,
+      checkpointId: 'checkpoint-123',
+      action: 'loyalty-program-save',
+      runtimeId: metadata.runtime.id,
+      runtimeFingerprint: 'AAAAAAAA',
+      runtimeHead: metadata.head,
+      appSessionId: 'app-session-1',
+      appHead: metadata.head,
+      checkpointStartedAt: input.checkpointStartedAt,
+      armedAt: input.armedAt,
+      beforeSnapshot: input.beforeSnapshot,
+    },
+  );
 });
 
 test('classifies empty, validation, pre-request, rejected, mismatch, and authoritative mobile evidence', () => {
@@ -324,5 +563,18 @@ test('classifies empty, validation, pre-request, rejected, mismatch, and authori
   assert.equal(
     summarize(successfulEvents, successfulApi, { visitsRequired: 5 }),
     'PERSISTENCE_MISMATCH',
+  );
+  assert.equal(
+    summarizeMobileActionEvidence({
+      action: 'loyalty-program-save',
+      mobileEvents: successfulEvents,
+      apiRequests: successfulApi,
+      loyaltyProgram,
+      deviceReadiness: {
+        ready: false,
+        classification: 'DEVICE_STALE',
+      },
+    }).classification,
+    'DEVICE_STALE',
   );
 });
