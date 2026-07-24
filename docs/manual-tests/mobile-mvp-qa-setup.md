@@ -15,53 +15,42 @@ How to start the BarberApp MVP stack locally, bootstrap deterministic OWNER/BARB
 ## Quick Path
 
 ```bash
-# 1. Start only the development database
-
-docker compose up -d postgres
-
-# 2. Install deps (first time only)
-npm install
-
-# 3. Apply the committed migration chain to the local dev DB
-npm run db:migrate:deploy --workspace @barberapp/api
-
-# 4. Generate Prisma client if needed
-npm run db:generate --workspace @barberapp/api
-
-# 5. Seed demo data
-npm run db:seed --workspace @barberapp/api
-
-# 6. Create ignored local QA config from the tracked template
+# First-time identity setup only:
 cp apps/api/.env.qa.local.example apps/api/.env.qa.local
-
-# 7. Fill the two real Clerk user IDs in apps/api/.env.qa.local
-
-# 8. Reconcile deterministic local QA mappings
+# Fill the two real Clerk user IDs, then:
 npm run qa:bootstrap --workspace @barberapp/api
 npm run qa:verify --workspace @barberapp/api
 
-# 9. Start API and mobile
-npm run dev --workspace @barberapp/api
-npm run dev --workspace @barberapp/mobile
+# First-time physical-QA payment-key setup only:
+npm run qa:physical:configure
+
+# Every QA session:
+npm run qa:physical:start
+npm run qa:physical:status
 ```
+
+The physical-QA harness starts API, public web, and Expo/Metro together, keeps
+their API target consistent, persists logs and PIDs, and proves live readiness.
+Do not replace these commands with old terminal notes. See `docs/run-local.md`
+for architecture, evidence snapshots, and safe cleanup.
 
 ---
 
 ## 1. Database Startup
 
-Start only the development PostgreSQL container for local QA:
-
-```bash
-docker compose up -d postgres
-```
-
-This exposes the development database at:
+Physical QA uses the existing shared local PostgreSQL service on:
 
 - host: `localhost`
 - port: `5432`
 - database: `barberapp`
 
-The separate test PostgreSQL container uses port `5433` and is **not** required for normal device QA.
+The harness never starts, stops, resets, seeds, or migrates shared PostgreSQL
+automatically. If another shared container already owns `5432` (for example
+`kamikaze-postgres`), do not run `docker compose up postgres` on top of it.
+
+The separate repository test PostgreSQL container uses port `5433`. The harness
+uses it briefly as an isolated schema-comparison shadow and stops it before the
+physical-QA app services start.
 
 Verify:
 
@@ -69,7 +58,8 @@ Verify:
 docker ps --filter "name=postgres" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
 
-Apply the committed migration chain first:
+For intentional database maintenance outside the harness, apply the committed
+migration chain explicitly:
 
 ```bash
 npm run db:migrate:deploy --workspace @barberapp/api
@@ -109,17 +99,19 @@ PORT=3000
 
 `CLERK_SECRET_KEY` is required for authenticated backend requests. `CLERK_WEBHOOK_SECRET` is required when you want local Clerk webhook verification to succeed. The mobile publishable key belongs in `apps/mobile/.env.local`, not the API `.env`.
 
-Start the API:
+The API also requires a valid 32-byte payment credential encryption key because
+payment services are initialized when the API route graph is imported. Create
+the ignored local override without displaying the key:
 
 ```bash
-npm run dev --workspace @barberapp/api
+npm run qa:physical:configure
 ```
 
-Verify:
+Start and verify the complete runtime:
 
 ```bash
-curl http://localhost:3000/health
-# -> {"status":"ok","timestamp":"..."}
+npm run qa:physical:start
+npm run qa:physical:status
 ```
 
 ---
@@ -193,7 +185,9 @@ EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_<your-clerk-publishable-key>
 EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1
 ```
 
-For a real phone on the same LAN, replace `localhost` with the development machine's LAN IP before starting Expo.
+For a real phone, the harness discovers the active LAN address and overrides
+`EXPO_PUBLIC_API_URL` for the Metro process. Do not commit or repeatedly edit a
+machine-specific IP.
 
 ---
 
@@ -212,19 +206,23 @@ EXPO_PUBLIC_API_URL=http://10.0.2.2:3000/api/v1
 ### Physical Android Phone
 
 1. Make sure the phone and development machine are on the same Wi-Fi network.
-2. Set `EXPO_PUBLIC_API_URL` to the development machine's LAN IP, for example:
+2. Run `npm run qa:physical:start`.
+3. Confirm `npm run qa:physical:status` reports `READY`.
+4. Open the printed `exp://<LAN-IP>:8081` URL in Expo Go, or scan Expo's QR
+   code.
 
-```env
-EXPO_PUBLIC_API_URL=http://192.168.x.x:3000/api/v1
-```
+To resume on another day, always run `npm run qa:physical:status`. If it is not
+ready, run `npm run qa:physical:start`; the harness removes only stale,
+identity-verified BarberApp process groups and refuses unrelated listeners.
 
-3. Start Expo:
+When finished:
 
 ```bash
-npm run dev --workspace @barberapp/mobile
+npm run qa:physical:stop
 ```
 
-4. Scan the QR code with Expo Go.
+This leaves shared PostgreSQL `5432` running and reports any unexpected app
+listener.
 
 ---
 

@@ -6,10 +6,18 @@ Verify the visit-based loyalty flow added on Thursday, July 16, 2026.
 
 ## Preconditions
 
-- API and mobile app running against a local environment
+- `npm run qa:physical:status` reports the current runtime `READY`
+- a timestamped pre-action snapshot exists:
+  `npm run qa:physical:snapshot -- loyalty --barbershop qa-barbershop`
 - OWNER account and BARBER account available
 - loyalty template promotion created
 - customer exists in the target barbershop
+
+Do not treat old PID notes, a visible Expo screen, or a success toast as
+authoritative. The runtime must prove current PIDs, listeners, working
+directories, API URL, shared database target, Metro process, and current
+readiness timestamp. Capture another snapshot immediately after each manual
+checkpoint and compare it with the persisted API/Metro logs.
 
 ## OWNER program setup
 
@@ -21,6 +29,8 @@ Verify the visit-based loyalty flow added on Thursday, July 16, 2026.
 6. Optionally set reward validity days.
 7. Save.
 8. Confirm the success message appears and the page reloads with the saved values.
+9. Capture a post-action loyalty snapshot and verify the authoritative
+   `visitsRequired` and `updatedAt` changed exactly once.
 
 ## Stamp earning
 
@@ -51,12 +61,21 @@ Verify the visit-based loyalty flow added on Thursday, July 16, 2026.
 
 1. Start a public booking for the same customer phone.
 2. Enter the reward code.
-3. Confirm the quote preview succeeds, but do **not** count the preview as a booking or redemption.
-4. Submit the booking.
-5. Confirm the authoritative booking confirmation appears with a booking reference.
-6. Confirm the appointment exists for that reference and the reward is persisted as redeemed for that appointment.
+3. Confirm the quote preview succeeds. A **quote preview** only computes price
+   and eligibility; it creates no appointment and redeems nothing.
+4. Submit the booking. **Appointment creation** is authoritative only when the
+   API persists the appointment and returns a booking reference.
+5. Confirm the authoritative booking confirmation appears with that reference.
+6. Confirm the appointment exists and the reward is persisted as redeemed for
+   that appointment. **Reward redemption** is a persisted reward transition,
+   not a successful quote.
 7. Use a fresh available reward and repeat the quote with another phone number.
 8. Confirm the public response is a generic unavailable error and no appointment or redemption is created.
+
+**Appointment completion** is a separate staff lifecycle transition. Only a
+successful persisted completion can earn a stamp and potentially trigger
+**reward issuance**. A preview, creation, or in-progress appointment must not be
+counted as completion or issuance.
 
 ## Ledger
 

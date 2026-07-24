@@ -18,6 +18,12 @@
     "qa:public-booking": "node scripts/qaPublicBooking.mjs && npm run qa:public-booking:production",
     "qa:public-booking:production": "node scripts/qaPublicBookingProduction.mjs",
     "qa:verify": "npm run qa:verify --workspace @barberapp/api",
+    "qa:physical:configure": "node scripts/physical-qa.mjs configure",
+    "qa:physical:start": "node scripts/physical-qa.mjs start",
+    "qa:physical:status": "node scripts/physical-qa.mjs status",
+    "qa:physical:stop": "node scripts/physical-qa.mjs stop",
+    "qa:physical:snapshot": "node scripts/physical-qa.mjs snapshot",
+    "qa:physical:test": "node --test scripts/physical-qa/*.test.mjs",
     "dev": "npm run dev --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "build": "npm run build --workspaces --if-present"
