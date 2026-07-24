@@ -32,6 +32,13 @@ import {
   updateLoyaltyProgram,
   updatePromotion,
 } from '@/lib/promotions.js';
+import {
+  classifyMobileMutationError,
+  createMobileQaTraceContext,
+  traceMobileQaEvent,
+  type MobileQaTraceContext,
+  type MobileQaSafeErrorCode,
+} from '@/lib/physicalQaTrace.js';
 import { tokens } from '@/theme/index.js';
 
 const FILTERS = ['ALL', 'ACTIVE', 'UPCOMING', 'EXPIRED', 'INACTIVE'] as const;
@@ -133,6 +140,8 @@ export default function PromotionsScreen() {
   const [loyaltyRewardPromotionId, setLoyaltyRewardPromotionId] = useState<string | null>(null);
   const [loyaltyEnabled, setLoyaltyEnabled] = useState(false);
   const [savingLoyalty, setSavingLoyalty] = useState(false);
+  const [loyaltyError, setLoyaltyError] = useState<string | null>(null);
+  const [loyaltyMessage, setLoyaltyMessage] = useState<string | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [promotions, setPromotions] = useState<PromotionListItem[]>([]);
   const [selectedPromotion, setSelectedPromotion] = useState<PromotionDetail | null>(null);
@@ -147,6 +156,7 @@ export default function PromotionsScreen() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(buildEmptyForm);
   const loadRequestIdRef = useRef(0);
+  const savingLoyaltyRef = useRef(false);
 
   const applyLoyaltyProgram = useCallback((program: LoyaltyProgramSettings) => {
     setLoyaltyProgram(program);
@@ -242,6 +252,67 @@ export default function PromotionsScreen() {
     return promotions.filter((promotion) => promotion.status === filter);
   }, [filter, promotions]);
 
+  const loyaltyDirty = useMemo(() => {
+    if (!loyaltyProgram) return false;
+
+    const currentValidityDays = loyaltyProgram.rewardValidityDays ?? null;
+    const enteredValidityDays = loyaltyRewardValidityDays.trim()
+      ? Number(loyaltyRewardValidityDays)
+      : null;
+
+    return loyaltyEnabled !== loyaltyProgram.isEnabled
+      || Number(loyaltyVisitsRequired) !== loyaltyProgram.visitsRequired
+      || loyaltyRewardPromotionId !== (loyaltyProgram.rewardPromotion?.id ?? null)
+      || enteredValidityDays !== currentValidityDays;
+  }, [
+    loyaltyEnabled,
+    loyaltyProgram,
+    loyaltyRewardPromotionId,
+    loyaltyRewardValidityDays,
+    loyaltyVisitsRequired,
+  ]);
+
+  const clearLoyaltyFeedback = useCallback(() => {
+    setLoyaltyError(null);
+    setLoyaltyMessage(null);
+  }, []);
+
+  const validateLoyaltyForm = useCallback((): string | null => {
+    const visitsRequired = Number(loyaltyVisitsRequired);
+    if (
+      !/^\d+$/u.test(loyaltyVisitsRequired)
+      || !Number.isInteger(visitsRequired)
+      || visitsRequired < 2
+      || visitsRequired > 20
+    ) {
+      return t('promotions.loyalty.validation.visitsRequired');
+    }
+
+    if (loyaltyRewardValidityDays.trim()) {
+      const validityDays = Number(loyaltyRewardValidityDays);
+      if (
+        !/^\d+$/u.test(loyaltyRewardValidityDays)
+        || !Number.isInteger(validityDays)
+        || validityDays < 1
+        || validityDays > 365
+      ) {
+        return t('promotions.loyalty.validation.rewardValidityDays');
+      }
+    }
+
+    if (loyaltyEnabled && !loyaltyRewardPromotionId) {
+      return t('promotions.loyalty.validation.rewardPromotion');
+    }
+
+    return null;
+  }, [
+    loyaltyEnabled,
+    loyaltyRewardPromotionId,
+    loyaltyRewardValidityDays,
+    loyaltyVisitsRequired,
+    t,
+  ]);
+
   const validateForm = useCallback((): string | null => {
     if (!form.name.trim()) return t('promotions.validation.nameRequired');
     if (!normalizeCodePreview(form.code)) return t('promotions.validation.codeRequired');
@@ -309,32 +380,93 @@ export default function PromotionsScreen() {
     }
   }, [buildPayload, context?.barbershopId, form, load, loadPromotionDetailState, t, validateForm]);
 
-  const handleSaveLoyalty = useCallback(async () => {
-    if (!context?.barbershopId || !getTokenRef.current) return;
+  const handleSaveLoyalty = useCallback(async (
+    traceContext: MobileQaTraceContext,
+  ) => {
+    traceMobileQaEvent({ ...traceContext, stage: 'validation_started' });
+
+    if (savingLoyaltyRef.current) {
+      traceMobileQaEvent({
+        ...traceContext,
+        stage: 'validation_failed',
+        safeErrorCode: 'DUPLICATE_BLOCKED',
+      });
+      return;
+    }
+
+    const validationError = validateLoyaltyForm();
+    if (validationError) {
+      traceMobileQaEvent({
+        ...traceContext,
+        stage: 'validation_failed',
+        safeErrorCode: 'VALIDATION',
+      });
+      setLoyaltyError(validationError);
+      setLoyaltyMessage(null);
+      return;
+    }
+
+    if (!context?.barbershopId || !getTokenRef.current) {
+      setLoyaltyError(t('promotions.loyalty.errors.unavailable'));
+      setLoyaltyMessage(null);
+      return;
+    }
 
     // A load started before Save may contain older server state. Invalidate it
     // before issuing the mutation so it cannot overwrite the authoritative
     // mutation response while the success message is visible.
     loadRequestIdRef.current += 1;
+    savingLoyaltyRef.current = true;
     setSavingLoyalty(true);
-    setError(null);
-    setMessage(null);
+    setLoyaltyError(null);
+    setLoyaltyMessage(null);
     try {
+      traceMobileQaEvent({
+        ...traceContext,
+        stage: 'mutation_started',
+        visitsRequired: Number(loyaltyVisitsRequired),
+        templateSelected: Boolean(loyaltyRewardPromotionId),
+      });
       const nextProgram = await updateLoyaltyProgram(getTokenRef.current, context.barbershopId, {
         isEnabled: loyaltyEnabled,
         visitsRequired: Number(loyaltyVisitsRequired || '0'),
         rewardPromotionId: loyaltyRewardPromotionId,
         rewardValidityDays: loyaltyRewardValidityDays.trim() ? Number(loyaltyRewardValidityDays) : null,
+      }, traceContext);
+      traceMobileQaEvent({
+        ...traceContext,
+        stage: 'mutation_succeeded',
+        visitsRequired: nextProgram.visitsRequired,
       });
       applyLoyaltyProgram(nextProgram);
-      setMessage(t('promotions.loyalty.saved'));
-      await load();
+      traceMobileQaEvent({
+        ...traceContext,
+        stage: 'authoritative_state_applied',
+        visitsRequired: nextProgram.visitsRequired,
+      });
+      setLoyaltyMessage(t('promotions.loyalty.saved'));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : t('errors.unknownApi'));
+      const safeErrorCode = classifyMobileMutationError(nextError);
+      traceMobileQaEvent({
+        ...traceContext,
+        stage: 'mutation_failed',
+        safeErrorCode,
+      });
+      setLoyaltyError(resolveLoyaltySaveError(safeErrorCode, nextError, t));
     } finally {
+      savingLoyaltyRef.current = false;
       setSavingLoyalty(false);
     }
-  }, [applyLoyaltyProgram, context?.barbershopId, load, loyaltyEnabled, loyaltyRewardPromotionId, loyaltyRewardValidityDays, loyaltyVisitsRequired, t]);
+  }, [
+    applyLoyaltyProgram,
+    context?.barbershopId,
+    loyaltyEnabled,
+    loyaltyRewardPromotionId,
+    loyaltyRewardValidityDays,
+    loyaltyVisitsRequired,
+    t,
+    validateLoyaltyForm,
+  ]);
 
   if (!isLoaded || !isSignedIn) return null;
 
@@ -363,6 +495,8 @@ export default function PromotionsScreen() {
       <ScrollView
         testID="promotions-scroll"
         contentContainerStyle={styles.content}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         refreshControl={(
           <RefreshControl
             testID="promotions-refresh-control"
@@ -384,14 +518,20 @@ export default function PromotionsScreen() {
           <View style={styles.filterRow}>
             <Pressable
               testID="promotions-loyalty-enabled"
-              onPress={() => setLoyaltyEnabled(true)}
+              onPress={() => {
+                clearLoyaltyFeedback();
+                setLoyaltyEnabled(true);
+              }}
               style={[styles.filterChip, loyaltyEnabled && styles.filterChipActive]}
             >
               <Text style={[styles.filterChipText, loyaltyEnabled && styles.filterChipTextActive]}>{t('promotions.loyalty.enabled')}</Text>
             </Pressable>
             <Pressable
               testID="promotions-loyalty-disabled"
-              onPress={() => setLoyaltyEnabled(false)}
+              onPress={() => {
+                clearLoyaltyFeedback();
+                setLoyaltyEnabled(false);
+              }}
               style={[styles.filterChip, !loyaltyEnabled && styles.filterChipActive]}
             >
               <Text style={[styles.filterChipText, !loyaltyEnabled && styles.filterChipTextActive]}>{t('promotions.loyalty.disabled')}</Text>
@@ -401,14 +541,20 @@ export default function PromotionsScreen() {
             testID="promotions-loyalty-visits-required"
             label={t('promotions.loyalty.visitsRequired')}
             value={loyaltyVisitsRequired}
-            onChangeText={(value) => setLoyaltyVisitsRequired(value.replace(/[^0-9]/gu, ''))}
+            onChangeText={(value) => {
+              clearLoyaltyFeedback();
+              setLoyaltyVisitsRequired(value.replace(/[^0-9]/gu, ''));
+            }}
             keyboardType="number-pad"
           />
           <AppTextInput
             testID="promotions-loyalty-validity-days"
             label={t('promotions.loyalty.rewardValidityDays')}
             value={loyaltyRewardValidityDays}
-            onChangeText={(value) => setLoyaltyRewardValidityDays(value.replace(/[^0-9]/gu, ''))}
+            onChangeText={(value) => {
+              clearLoyaltyFeedback();
+              setLoyaltyRewardValidityDays(value.replace(/[^0-9]/gu, ''));
+            }}
             keyboardType="number-pad"
           />
           <SectionHeader title={t('promotions.loyalty.rewardPromotion')} />
@@ -420,7 +566,10 @@ export default function PromotionsScreen() {
               <Pressable
                 key={promotion.id}
                 testID={`promotions-loyalty-template-${promotion.id}`}
-                onPress={() => setLoyaltyRewardPromotionId(promotion.id)}
+                onPress={() => {
+                  clearLoyaltyFeedback();
+                  setLoyaltyRewardPromotionId(promotion.id);
+                }}
                 style={[styles.filterChip, loyaltyRewardPromotionId === promotion.id && styles.filterChipActive]}
               >
                 <Text style={[styles.filterChipText, loyaltyRewardPromotionId === promotion.id && styles.filterChipTextActive]}>{promotion.name}</Text>
@@ -431,10 +580,51 @@ export default function PromotionsScreen() {
             <AppButton
               testID="promotions-loyalty-save"
               title={t('promotions.loyalty.save')}
+              accessibilityLabel={t('promotions.loyalty.save')}
+              accessibilityState={{ disabled: !loyaltyDirty, busy: savingLoyalty }}
+              disabled={!loyaltyDirty}
               loading={savingLoyalty}
-              onPress={() => void handleSaveLoyalty()}
+              loadingText={t('promotions.loyalty.saving')}
+              onPress={() => {
+                const traceContext = createMobileQaTraceContext(
+                  'loyalty-program-save',
+                  'promotions-loyalty',
+                );
+                traceMobileQaEvent({
+                  ...traceContext,
+                  stage: 'press_received',
+                });
+                void handleSaveLoyalty(traceContext);
+              }}
             />
           </View>
+          <Text
+            testID="promotions-loyalty-state"
+            accessibilityLiveRegion="polite"
+            style={loyaltyDirty ? styles.unsavedText : styles.helperText}
+          >
+            {loyaltyDirty
+              ? t('promotions.loyalty.unsaved')
+              : t('promotions.loyalty.current')}
+          </Text>
+          {loyaltyError ? (
+            <Text
+              testID="promotions-loyalty-error"
+              accessibilityLiveRegion="assertive"
+              style={styles.errorText}
+            >
+              {loyaltyError}
+            </Text>
+          ) : null}
+          {loyaltyMessage ? (
+            <Text
+              testID="promotions-loyalty-success"
+              accessibilityLiveRegion="polite"
+              style={styles.successText}
+            >
+              {loyaltyMessage}
+            </Text>
+          ) : null}
           <SectionHeader title={t('promotions.loyalty.ledgerTitle')} />
           {loyaltyLedger.length === 0 ? (
             <Text style={styles.bodyText}>{t('promotions.loyalty.ledgerEmpty')}</Text>
@@ -650,6 +840,10 @@ const styles = StyleSheet.create({
     ...tokens.typography.variant.bodySmall,
     color: tokens.colors.success,
   },
+  unsavedText: {
+    ...tokens.typography.variant.bodySmall,
+    color: tokens.colors.warning,
+  },
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -734,3 +928,28 @@ const styles = StyleSheet.create({
     padding: tokens.spacing[3],
   },
 });
+
+function resolveLoyaltySaveError(
+  safeCode: MobileQaSafeErrorCode,
+  error: unknown,
+  t: (key: string) => string,
+): string {
+  if (
+    safeCode === 'AUTH_TOKEN_ERROR'
+    || safeCode === 'AUTH_TOKEN_UNAVAILABLE'
+    || safeCode === 'API_401'
+  ) {
+    return t('promotions.loyalty.errors.authenticationRequired');
+  }
+  if (safeCode === 'CONFIG_ERROR') {
+    return t('promotions.loyalty.errors.configuration');
+  }
+  if (
+    safeCode === 'NETWORK_ERROR'
+    || safeCode === 'TIMEOUT'
+    || safeCode === 'ABORTED'
+  ) {
+    return t('promotions.loyalty.errors.network');
+  }
+  return error instanceof Error ? error.message : t('errors.unknownApi');
+}

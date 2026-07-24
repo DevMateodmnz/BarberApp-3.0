@@ -2,6 +2,8 @@ import { act, create, type ReactTestInstance } from 'react-test-renderer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import PromotionsScreen from '../../app/(tabs)/promotions.js';
+import { ApiError } from '../../src/lib/api.js';
+import { MobileMutationError } from '../../src/lib/physicalQaTrace.js';
 import type { LoyaltyProgramSettings } from '../../src/lib/types.js';
 
 const apiMocks = vi.hoisted(() => ({
@@ -70,10 +72,12 @@ vi.mock('../../src/lib/promotions.js', () => ({
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((nextResolve) => {
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
     resolve = nextResolve;
+    reject = nextReject;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 function program(visitsRequired: number): LoyaltyProgramSettings {
@@ -105,6 +109,8 @@ function inputWithin(instance: ReactTestInstance): ReactTestInstance {
 describe('OWNER loyalty settings screen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    apiMocks.fetchLoyaltyProgram.mockReset();
+    apiMocks.updateLoyaltyProgram.mockReset();
     contextStoreState.context = {
       role: 'OWNER',
       barbershopId: 'shop-1',
@@ -121,6 +127,7 @@ describe('OWNER loyalty settings screen', () => {
       totalDiscountCents: 0,
     });
     apiMocks.fetchPromotions.mockResolvedValue([]);
+    apiMocks.fetchLoyaltyProgram.mockResolvedValue(program(5));
   });
 
   it('keeps the authoritative saved threshold when an older screen load resolves last', async () => {
@@ -168,6 +175,10 @@ describe('OWNER loyalty settings screen', () => {
       expect.any(Function),
       'shop-1',
       expect.objectContaining({ visitsRequired: 2 }),
+      expect.objectContaining({
+        action: 'loyalty-program-save',
+        screen: 'promotions-loyalty',
+      }),
     );
 
     await act(async () => {
@@ -184,6 +195,55 @@ describe('OWNER loyalty settings screen', () => {
       testID: 'promotions-loyalty-visits-required',
     });
     expect(inputWithin(finalVisitsField).props.value).toBe('2');
+  });
+
+  it('routes the first Save tap to the loyalty button while the numeric input is focused', async () => {
+    apiMocks.fetchLoyaltyProgram
+      .mockResolvedValueOnce(program(5))
+      .mockResolvedValueOnce(program(2));
+    apiMocks.updateLoyaltyProgram.mockResolvedValueOnce(program(2));
+
+    let renderer: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(<PromotionsScreen />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const scrollView = renderer!.root.findByProps({
+      testID: 'promotions-scroll',
+    });
+    const visitsInput = inputWithin(renderer!.root.findByProps({
+      testID: 'promotions-loyalty-visits-required',
+    }));
+
+    await act(async () => {
+      visitsInput.props.onFocus({ target: 42 });
+      visitsInput.props.onChangeText('2');
+    });
+
+    await act(async () => {
+      renderer!.root.findByProps({
+        testID: 'promotions-loyalty-save',
+      }).props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The Node renderer cannot emulate Android's native responder takeover,
+    // so this structural assertion protects the exact React Native contract:
+    // focused-keyboard taps handled by a child must reach that child.
+    expect(scrollView.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(apiMocks.updateLoyaltyProgram).toHaveBeenCalledTimes(1);
+    expect(apiMocks.updateLoyaltyProgram).toHaveBeenCalledWith(
+      expect.any(Function),
+      'shop-1',
+      expect.objectContaining({ visitsRequired: 2 }),
+      expect.objectContaining({
+        action: 'loyalty-program-save',
+        screen: 'promotions-loyalty',
+      }),
+    );
   });
 
   it('does not show success or discard the entered threshold when Save fails', async () => {
@@ -213,8 +273,8 @@ describe('OWNER loyalty settings screen', () => {
     expect(inputWithin(renderer!.root.findByProps({
       testID: 'promotions-loyalty-visits-required',
     })).props.value).toBe('2');
-    expect(renderer!.root.findAllByProps({ testID: 'promotions-message-card' })).toHaveLength(0);
-    expect(renderer!.root.findByProps({ testID: 'promotions-error-card' })).toBeTruthy();
+    expect(renderer!.root.findAllByProps({ testID: 'promotions-loyalty-success' })).toHaveLength(0);
+    expect(renderer!.root.findByProps({ testID: 'promotions-loyalty-error' })).toBeTruthy();
     expect(renderer!.root.findAllByType('Text').some((node) =>
       node.props.children === 'Threshold was not persisted'
     )).toBe(true);
@@ -256,6 +316,160 @@ describe('OWNER loyalty settings screen', () => {
       testID: 'promotions-loyalty-visits-required',
     })).props.value).toBe('7');
     expect(apiMocks.updateLoyaltyProgram).not.toHaveBeenCalled();
+  });
+
+  it('validates locally and never starts a mutation for an invalid threshold', async () => {
+    let renderer: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(<PromotionsScreen />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      inputWithin(renderer!.root.findByProps({
+        testID: 'promotions-loyalty-visits-required',
+      })).props.onChangeText('');
+    });
+
+    await act(async () => {
+      renderer!.root.findByProps({
+        testID: 'promotions-loyalty-save',
+      }).props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.updateLoyaltyProgram).not.toHaveBeenCalled();
+    expect(renderer!.root.findByProps({
+      testID: 'promotions-loyalty-error',
+    })).toBeTruthy();
+    expect(renderer!.root.findAllByProps({
+      testID: 'promotions-loyalty-success',
+    })).toHaveLength(0);
+  });
+
+  it('shows accepted/loading state, blocks rapid duplicates, and waits for the authoritative response before success', async () => {
+    const update = deferred<LoyaltyProgramSettings>();
+    apiMocks.updateLoyaltyProgram.mockReturnValueOnce(update.promise);
+
+    let renderer: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(<PromotionsScreen />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      inputWithin(renderer!.root.findByProps({
+        testID: 'promotions-loyalty-visits-required',
+      })).props.onChangeText('2');
+    });
+
+    const firstRenderedSave = renderer!.root.findByProps({
+      testID: 'promotions-loyalty-save',
+    });
+    await act(async () => {
+      firstRenderedSave.props.onPress();
+      firstRenderedSave.props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.updateLoyaltyProgram).toHaveBeenCalledTimes(1);
+    expect(renderer!.root.findByProps({
+      testID: 'promotions-loyalty-save',
+    }).props.loading).toBe(true);
+    expect(renderer!.root.findAllByProps({
+      testID: 'promotions-loyalty-success',
+    })).toHaveLength(0);
+
+    await act(async () => {
+      update.resolve(program(2));
+      await update.promise;
+      await Promise.resolve();
+    });
+
+    expect(inputWithin(renderer!.root.findByProps({
+      testID: 'promotions-loyalty-visits-required',
+    })).props.value).toBe('2');
+    expect(renderer!.root.findByProps({
+      testID: 'promotions-loyalty-save',
+    }).props.disabled).toBe(true);
+    expect(renderer!.root.findByProps({
+      testID: 'promotions-loyalty-success',
+    })).toBeTruthy();
+  });
+
+  it.each([
+    ['Clerk token unavailable', new MobileMutationError(
+      'Authentication token unavailable',
+      'AUTH_TOKEN_UNAVAILABLE',
+    )],
+    ['Clerk token lookup throws', new MobileMutationError(
+      'Authentication token retrieval failed',
+      'AUTH_TOKEN_ERROR',
+    )],
+    ['API configuration invalid', Object.assign(
+      new Error('Malformed API URL'),
+      { name: 'PublicRuntimeConfigError' },
+    )],
+    ['network request fails', { isAxiosError: true }],
+    ['request is aborted', { code: 'ERR_CANCELED' }],
+    ['request times out', { code: 'ECONNABORTED' }],
+    ['API returns 400', new ApiError('Validation rejected', 'VALIDATION', 400)],
+    ['API returns 401', new ApiError('Unauthorized', 'UNAUTHORIZED', 401)],
+    ['API returns 403', new ApiError('Forbidden', 'FORBIDDEN', 403)],
+    ['API returns 500', new ApiError('Server failed', 'INTERNAL', 500)],
+  ])('keeps edits, shows no false success, and permits retry when %s', async (
+    _label,
+    failure,
+  ) => {
+    apiMocks.updateLoyaltyProgram
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(program(2));
+
+    let renderer: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(<PromotionsScreen />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      inputWithin(renderer!.root.findByProps({
+        testID: 'promotions-loyalty-visits-required',
+      })).props.onChangeText('2');
+    });
+
+    await act(async () => {
+      renderer!.root.findByProps({
+        testID: 'promotions-loyalty-save',
+      }).props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(inputWithin(renderer!.root.findByProps({
+      testID: 'promotions-loyalty-visits-required',
+    })).props.value).toBe('2');
+    expect(renderer!.root.findByProps({
+      testID: 'promotions-loyalty-error',
+    })).toBeTruthy();
+    expect(renderer!.root.findAllByProps({
+      testID: 'promotions-loyalty-success',
+    })).toHaveLength(0);
+
+    await act(async () => {
+      renderer!.root.findByProps({
+        testID: 'promotions-loyalty-save',
+      }).props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.updateLoyaltyProgram).toHaveBeenCalledTimes(2);
+    expect(renderer!.root.findByProps({
+      testID: 'promotions-loyalty-success',
+    })).toBeTruthy();
   });
 
   it('blocks a non-OWNER tenant context without allowing Save or success feedback', async () => {

@@ -249,6 +249,41 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     literal: 'Failed to reconcile employee invitation onboarding',
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
   },
+  {
+    file: 'src/lib/physicalQaTrace.ts',
+    literal: 'MobileMutationError',
+    reason: 'Internal Error.name value used for safe diagnostics, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaTrace.ts',
+    literal: 'AbortError',
+    reason: 'Platform error classifier name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaTrace.ts',
+    literal: 'CanceledError',
+    reason: 'Axios error classifier name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaTrace.ts',
+    literal: 'PublicRuntimeConfigError',
+    reason: 'Runtime configuration error classifier name, not interface copy.',
+  },
+  {
+    file: 'src/lib/promotions.ts',
+    literal: 'Authentication token retrieval failed',
+    reason: 'Internal pre-request error detail; the screen maps its safe code to translated interface copy.',
+  },
+  {
+    file: 'src/lib/promotions.ts',
+    literal: 'Authentication token unavailable',
+    reason: 'Internal pre-request error detail; the screen maps its safe code to translated interface copy.',
+  },
+  {
+    file: 'src/lib/promotions.ts',
+    literal: 'X-Request-Id',
+    reason: 'HTTP correlation header name, not interface copy.',
+  },
 ] as const;
 
 const ALLOWLIST_KEYS = new Set(

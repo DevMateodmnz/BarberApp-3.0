@@ -106,7 +106,11 @@ export function PaymentReviewDetailScreenView({
 
   return (
     <Screen>
-      <ScrollView refreshControl={refreshControl}>
+      <ScrollView
+        refreshControl={refreshControl}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+      >
         <ScreenHeader
           testID="payment-review-detail-header"
           title={t('paymentsSettings.reviews.detailTitle')}

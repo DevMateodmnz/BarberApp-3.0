@@ -192,7 +192,7 @@ export default function PaymentsSettingsScreen() {
   const statusLabel = connection ? t(`paymentsSettings.connection.status.${connection.status}`) : '—';
 
   return (
-    <Screen scrollable>
+    <Screen scrollable keyboardAware>
       <ScreenHeader title={t('paymentsSettings.title')} subtitle={t('paymentsSettings.subtitle')} />
       <View style={styles.stack}>
         <AppCard variant="outlined">

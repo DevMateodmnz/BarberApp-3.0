@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { PaymentReviewDetailScreenView } from '@/components/PaymentReviewDetailScreenView.js';
 import type { PaymentReviewDetail } from '@/lib/types.js';
-import { findByTestId, findByText, press } from '@/testing/elementTree.js';
+import {
+  findByDisplayName,
+  findByTestId,
+  findByText,
+  press,
+} from '@/testing/elementTree.js';
 
 function makeDetail(overrides: Partial<PaymentReviewDetail> = {}): PaymentReviewDetail {
   return {
@@ -91,6 +96,15 @@ function renderView(overrides: Partial<Parameters<typeof PaymentReviewDetailScre
 }
 
 describe('PaymentReviewDetailScreenView', () => {
+  it('keeps note actions tappable while the keyboard is visible', () => {
+    const tree = renderView();
+    const scrollView = findByDisplayName(tree, 'ScrollView');
+
+    expect((scrollView as {
+      props: { keyboardShouldPersistTaps?: string };
+    }).props.keyboardShouldPersistTaps).toBe('handled');
+  });
+
   it('renders loading and error states without detail data', () => {
     const loadingTree = renderView({ detail: null, isLoading: true });
     expect(findByTestId(loadingTree, 'payment-review-detail-loading')).toBeDefined();

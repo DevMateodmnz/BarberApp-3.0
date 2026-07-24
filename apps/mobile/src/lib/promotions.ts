@@ -1,5 +1,11 @@
 import { localizeUnknownError } from '@/i18n/errors.js';
 import { api, ApiError, type ApiResponse, type GetToken } from './api.js';
+import {
+  MobileMutationError,
+  classifyMobileMutationError,
+  traceMobileQaEvent,
+  type MobileQaTraceContext,
+} from './physicalQaTrace.js';
 import type {
   CreatePromotionInput,
   LoyaltyCustomerSummary,
@@ -185,15 +191,75 @@ export async function updateLoyaltyProgram(
     rewardPromotionId?: string | null;
     rewardValidityDays?: number | null;
   },
+  traceContext?: MobileQaTraceContext,
 ): Promise<LoyaltyProgramSettings> {
-  const token = await getToken();
-  const response = await api.put<ApiResponse<LoyaltyProgramSettings>>(
-    `/barbershops/${barbershopId}/loyalty-program`,
-    payload,
-    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
-  );
+  if (traceContext) {
+    traceMobileQaEvent({ ...traceContext, stage: 'token_started' });
+  }
 
-  return ensureSuccess(response, localizeUnknownError('Failed to update loyalty program'));
+  let token: string | null;
+  try {
+    token = await getToken();
+  } catch {
+    throw new MobileMutationError(
+      'Authentication token retrieval failed',
+      'AUTH_TOKEN_ERROR',
+    );
+  }
+
+  if (!token) {
+    throw new MobileMutationError(
+      'Authentication token unavailable',
+      'AUTH_TOKEN_UNAVAILABLE',
+    );
+  }
+
+  if (traceContext) {
+    traceMobileQaEvent({
+      ...traceContext,
+      stage: 'request_started',
+      visitsRequired: payload.visitsRequired,
+      templateSelected: Boolean(payload.rewardPromotionId),
+    });
+  }
+
+  try {
+    const response = await api.put<ApiResponse<LoyaltyProgramSettings>>(
+      `/barbershops/${barbershopId}/loyalty-program`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(traceContext
+            ? { 'X-Request-Id': traceContext.attemptId }
+            : {}),
+        },
+      },
+    );
+
+    if (traceContext) {
+      traceMobileQaEvent({
+        ...traceContext,
+        stage: 'response_received',
+        status: response.status,
+      });
+    }
+
+    return ensureSuccess(
+      response,
+      localizeUnknownError('Failed to update loyalty program'),
+    );
+  } catch (error) {
+    if (traceContext && error instanceof ApiError && error.status !== undefined) {
+      traceMobileQaEvent({
+        ...traceContext,
+        stage: 'response_received',
+        status: error.status,
+        safeErrorCode: classifyMobileMutationError(error),
+      });
+    }
+    throw error;
+  }
 }
 
 export async function fetchCustomerLoyaltySummary(
