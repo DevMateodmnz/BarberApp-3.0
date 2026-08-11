@@ -1,4 +1,5 @@
 import type { NodeEnv } from '../../config/runtime.js';
+import { AppError } from '../errors.js';
 
 export interface MercadoPagoRuntimeConfig {
   apiBaseUrl: string;
@@ -11,11 +12,25 @@ export interface MercadoPagoRuntimeConfig {
 }
 
 export interface PaymentRuntimeConfig {
+  enabled: boolean;
   nodeEnv: NodeEnv;
-  encryptionKey: Buffer;
+  encryptionKey?: Buffer;
   publicWebBaseUrl?: string;
   webhookPublicUrl?: string;
   mercadoPago: MercadoPagoRuntimeConfig;
+}
+
+export interface EnabledPaymentRuntimeConfig extends PaymentRuntimeConfig {
+  enabled: true;
+  encryptionKey: Buffer;
+  publicWebBaseUrl: string;
+  webhookPublicUrl: string;
+  mercadoPago: MercadoPagoRuntimeConfig & {
+    clientId: string;
+    clientSecret: string;
+    redirectUri: string;
+    webhookSecret: string;
+  };
 }
 
 function readOptionalTrimmed(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -26,6 +41,31 @@ function readOptionalTrimmed(env: NodeJS.ProcessEnv, name: string): string | und
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readPaymentsEnabled(env: NodeJS.ProcessEnv): boolean {
+  const raw = env.PAYMENTS_ENABLED;
+  if (raw === undefined) {
+    return false;
+  }
+
+  const value = raw.trim().toLowerCase();
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+
+  throw new Error('PAYMENTS_ENABLED must be "true" or "false"');
+}
+
+function readRequired(env: NodeJS.ProcessEnv, name: string): string {
+  const value = readOptionalTrimmed(env, name);
+  if (!value) {
+    throw new Error(`${name} is required when PAYMENTS_ENABLED=true`);
+  }
+  return value;
 }
 
 function normalizeBaseUrl(raw: string, name: string): string {
@@ -41,6 +81,10 @@ function normalizeBaseUrl(raw: string, name: string): string {
     throw new Error(`${name} must use http:// or https://`);
   }
 
+  if (parsed.username || parsed.password) {
+    throw new Error(`${name} must not include credentials`);
+  }
+
   return parsed.toString().replace(/\/$/, '');
 }
 
@@ -48,15 +92,36 @@ function normalizeWebhookUrl(raw: string, name: string): string {
   const normalized = normalizeBaseUrl(raw, name);
   const parsed = new URL(normalized);
 
-  if (parsed.username || parsed.password) {
-    throw new Error(`${name} must not include credentials`);
-  }
-
   if (parsed.search || parsed.hash) {
     throw new Error(`${name} must not include a query string or fragment`);
   }
 
   return normalized;
+}
+
+function assertUrlPath(raw: string, name: string, expectedPath: string): void {
+  if (new URL(raw).pathname !== expectedPath) {
+    throw new Error(`${name} must use the ${expectedPath} path`);
+  }
+}
+
+function assertPublicWebOrigin(raw: string): void {
+  const parsed = new URL(raw);
+  if ((parsed.pathname !== '/' && parsed.pathname !== '') || parsed.search || parsed.hash) {
+    throw new Error('PUBLIC_WEB_BASE_URL must be an origin without a path, query string, or fragment');
+  }
+}
+
+function assertProductionHttps(nodeEnv: NodeEnv, values: Array<[string, string]>): void {
+  if (nodeEnv !== 'production') {
+    return;
+  }
+
+  for (const [name, value] of values) {
+    if (new URL(value).protocol !== 'https:') {
+      throw new Error(`${name} must use https:// in production`);
+    }
+  }
 }
 
 function decodeEncryptionKey(raw: string): Buffer {
@@ -85,63 +150,90 @@ export function readPaymentRuntimeConfig(
   env: NodeJS.ProcessEnv = process.env
 ): PaymentRuntimeConfig {
   const nodeEnv = (env.NODE_ENV?.trim() || 'development') as NodeEnv;
-  const encryptionKeyRaw = readOptionalTrimmed(env, 'PAYMENT_CREDENTIAL_ENCRYPTION_KEY');
+  const enabled = readPaymentsEnabled(env);
+  const apiBaseUrl = normalizeBaseUrl(
+    readOptionalTrimmed(env, 'MERCADO_PAGO_API_BASE_URL') ?? 'https://api.mercadopago.com',
+    'MERCADO_PAGO_API_BASE_URL'
+  );
+  const authorizationBaseUrl = normalizeBaseUrl(
+    readOptionalTrimmed(env, 'MERCADO_PAGO_AUTHORIZATION_BASE_URL') ?? 'https://auth.mercadopago.com',
+    'MERCADO_PAGO_AUTHORIZATION_BASE_URL'
+  );
+  const oauthScope =
+    readOptionalTrimmed(env, 'MERCADO_PAGO_OAUTH_SCOPE') ?? 'offline_access read write';
 
-  if (!encryptionKeyRaw) {
-    throw new Error('PAYMENT_CREDENTIAL_ENCRYPTION_KEY is required');
+  if (!enabled) {
+    return {
+      enabled: false,
+      nodeEnv,
+      mercadoPago: {
+        apiBaseUrl,
+        authorizationBaseUrl,
+        oauthScope,
+      },
+    };
   }
 
-  const encryptionKey = decodeEncryptionKey(encryptionKeyRaw);
-
-  const mercadoPago: MercadoPagoRuntimeConfig = {
-    apiBaseUrl: normalizeBaseUrl(
-      readOptionalTrimmed(env, 'MERCADO_PAGO_API_BASE_URL') ?? 'https://api.mercadopago.com',
-      'MERCADO_PAGO_API_BASE_URL'
-    ),
-    authorizationBaseUrl: normalizeBaseUrl(
-      readOptionalTrimmed(env, 'MERCADO_PAGO_AUTHORIZATION_BASE_URL') ?? 'https://auth.mercadopago.com',
-      'MERCADO_PAGO_AUTHORIZATION_BASE_URL'
-    ),
-    clientId: readOptionalTrimmed(env, 'MERCADO_PAGO_CLIENT_ID'),
-    clientSecret: readOptionalTrimmed(env, 'MERCADO_PAGO_CLIENT_SECRET'),
-    redirectUri: readOptionalTrimmed(env, 'MERCADO_PAGO_REDIRECT_URI'),
-    webhookSecret: readOptionalTrimmed(env, 'MERCADO_PAGO_WEBHOOK_SECRET'),
-    oauthScope:
-      readOptionalTrimmed(env, 'MERCADO_PAGO_OAUTH_SCOPE') ?? 'offline_access read write',
-  };
-
-  if (nodeEnv === 'production') {
-    if (!mercadoPago.clientId) {
-      throw new Error('MERCADO_PAGO_CLIENT_ID is required in production');
-    }
-
-    if (!mercadoPago.clientSecret) {
-      throw new Error('MERCADO_PAGO_CLIENT_SECRET is required in production');
-    }
-
-    if (!mercadoPago.redirectUri) {
-      throw new Error('MERCADO_PAGO_REDIRECT_URI is required in production');
-    }
-
-    if (!mercadoPago.webhookSecret) {
-      throw new Error('MERCADO_PAGO_WEBHOOK_SECRET is required in production');
-    }
-  }
-
-  const publicWebBaseUrl = readOptionalTrimmed(env, 'PUBLIC_WEB_BASE_URL');
-  const webhookPublicUrl =
-    readOptionalTrimmed(env, 'PAYMENT_WEBHOOK_PUBLIC_URL')
-    ?? (nodeEnv === 'production' ? undefined : 'http://localhost:3000/api/v1/webhooks/mercado-pago');
-
-  return {
+  const config: EnabledPaymentRuntimeConfig = {
+    enabled: true,
     nodeEnv,
-    encryptionKey,
-    publicWebBaseUrl: publicWebBaseUrl
-      ? normalizeBaseUrl(publicWebBaseUrl, 'PUBLIC_WEB_BASE_URL')
-      : undefined,
-    webhookPublicUrl: webhookPublicUrl
-      ? normalizeWebhookUrl(webhookPublicUrl, 'PAYMENT_WEBHOOK_PUBLIC_URL')
-      : undefined,
-    mercadoPago,
+    encryptionKey: decodeEncryptionKey(
+      readRequired(env, 'PAYMENT_CREDENTIAL_ENCRYPTION_KEY')
+    ),
+    publicWebBaseUrl: normalizeBaseUrl(
+      readRequired(env, 'PUBLIC_WEB_BASE_URL'),
+      'PUBLIC_WEB_BASE_URL'
+    ),
+    webhookPublicUrl: normalizeWebhookUrl(
+      readRequired(env, 'PAYMENT_WEBHOOK_PUBLIC_URL'),
+      'PAYMENT_WEBHOOK_PUBLIC_URL'
+    ),
+    mercadoPago: {
+      apiBaseUrl,
+      authorizationBaseUrl,
+      clientId: readRequired(env, 'MERCADO_PAGO_CLIENT_ID'),
+      clientSecret: readRequired(env, 'MERCADO_PAGO_CLIENT_SECRET'),
+      redirectUri: normalizeWebhookUrl(
+        readRequired(env, 'MERCADO_PAGO_REDIRECT_URI'),
+        'MERCADO_PAGO_REDIRECT_URI'
+      ),
+      webhookSecret: readRequired(env, 'MERCADO_PAGO_WEBHOOK_SECRET'),
+      oauthScope,
+    },
   };
+
+  assertPublicWebOrigin(config.publicWebBaseUrl);
+  assertUrlPath(
+    config.webhookPublicUrl,
+    'PAYMENT_WEBHOOK_PUBLIC_URL',
+    '/api/v1/webhooks/mercado-pago'
+  );
+  assertUrlPath(
+    config.mercadoPago.redirectUri,
+    'MERCADO_PAGO_REDIRECT_URI',
+    '/api/v1/payments/mercado-pago/oauth/callback'
+  );
+  assertProductionHttps(nodeEnv, [
+    ['PUBLIC_WEB_BASE_URL', config.publicWebBaseUrl],
+    ['PAYMENT_WEBHOOK_PUBLIC_URL', config.webhookPublicUrl],
+    ['MERCADO_PAGO_REDIRECT_URI', config.mercadoPago.redirectUri],
+    ['MERCADO_PAGO_API_BASE_URL', config.mercadoPago.apiBaseUrl],
+    ['MERCADO_PAGO_AUTHORIZATION_BASE_URL', config.mercadoPago.authorizationBaseUrl],
+  ]);
+
+  return config;
+}
+
+export function requirePaymentsEnabled(
+  runtime: PaymentRuntimeConfig = readPaymentRuntimeConfig(process.env)
+): EnabledPaymentRuntimeConfig {
+  if (!runtime.enabled) {
+    throw new AppError(
+      503,
+      'PAYMENTS_DISABLED',
+      'Payment processing is not enabled for this deployment'
+    );
+  }
+
+  return runtime as EnabledPaymentRuntimeConfig;
 }

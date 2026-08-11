@@ -1,48 +1,62 @@
 # API Production Release Runbook
 
-Release the BarberApp API only from a clean, validated commit.
+Release BarberApp only from a clean, reviewed commit. The current repository-controlled candidate is `mvp-1.2.0`; the existing `mvp-1.1.1` tag is historical and immutable.
 
-For the current MVP deployment target, see the Railway-specific runbook: [`docs/releases/railway-mvp-deployment.md`](./railway-mvp-deployment.md).
+## Production environment contract
 
-## Preconditions
+### Core required (API and workers)
 
-- Working tree is clean.
-- The target commit already passed API validation (`typecheck`, `lint`, tests).
-- A production database backup or provider snapshot is available before migration.
-- Production environment values are prepared outside the repository.
-- Local QA bootstrap is **not** part of production startup.
+| Variable | Secret | Purpose |
+|---|---:|---|
+| `NODE_ENV=production` | no | Enables production validation and proxy policy. |
+| `DATABASE_URL` | yes | PostgreSQL connection string. |
+| `CLERK_SECRET_KEY` | yes | Staff authentication and invitation backend. |
+| `CLERK_WEBHOOK_SECRET` | yes | Clerk webhook signature verification. |
 
-## Required Production Environment
+### Core optional
 
-| Variable | Required | Secret | Notes |
-|----------|----------|--------|-------|
-| `NODE_ENV` | yes | no | Must be `production`. |
-| `DATABASE_URL` | yes | yes | Production PostgreSQL connection string. |
-| `CLERK_SECRET_KEY` | yes | yes | Backend Clerk secret for authenticated API requests. |
-| `CLERK_WEBHOOK_SECRET` | yes | yes | Required for Clerk webhook signature verification. |
-| `CORS_ALLOWED_ORIGINS` | no | no | Exact browser-origin allowlist for direct browser-to-Express traffic only. Omit when only mobile, webhooks, health checks, or the Next.js BFF call the API. |
-| `PORT` | no | no | Defaults to `3000` if unset. |
-| `RATE_LIMIT_ENABLED` | no | no | Optional override; defaults to enabled outside test. |
-| `RATE_LIMIT_WINDOW_MS` | no | no | Optional positive integer override. |
-| `RATE_LIMIT_MAX` | no | no | Optional positive integer override. |
+| Variable | Purpose |
+|---|---|
+| `PORT` | API listen port; hosting platforms normally inject it. |
+| `CLERK_INVITATION_REDIRECT_URL` | Optional Clerk invitation landing URL. |
+| `CORS_ALLOWED_ORIGINS` | Exact comma-separated browser origins only when direct browser-to-API traffic exists. |
+| `RATE_LIMIT_ENABLED` | Boolean rate-limit override. |
+| `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` | Positive integer rate-limit overrides. |
 
-Examples:
+### Notification worker required for `mvp-1.2.0`
 
-```env
-NODE_ENV=production
-DATABASE_URL=postgresql://db_user:db_password@db-host:5432/barberapp
-CLERK_SECRET_KEY=sk_live_replace_me
-CLERK_WEBHOOK_SECRET=whsec_replace_me
-CORS_ALLOWED_ORIGINS=https://admin.example.com
-# CORS_ALLOWED_ORIGINS=https://admin.example.com,https://ops.example.com
-PORT=3000
-```
+| Variable | Required | Purpose |
+|---|---:|---|
+| `SMTP_HOST` | yes | SMTP server. |
+| `SMTP_PORT` | no | Defaults to `1025`; set the production provider port. |
+| `SMTP_SECURE` | no | Strict `true`/`false`; defaults false. |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | provider-dependent | SMTP authentication. |
+| `SMTP_FROM_EMAIL` | yes | Sender address. |
+| `SMTP_FROM_NAME` | no | Sender display name. |
+| `PUBLIC_WEB_BASE_URL` | operationally required | HTTPS public-web origin used for cancellation links. |
+| `NOTIFICATION_WORKER_BATCH_SIZE` | no | Defaults to `10`. |
+| `NOTIFICATION_WORKER_POLL_INTERVAL_MS` | no | Defaults to `30000`. |
+| `NOTIFICATION_STALE_LOCK_MS` | no | Defaults to `600000`. |
 
-If `CORS_ALLOWED_ORIGINS` is set, startup fails before listening when it is empty, wildcard-based, malformed, non-HTTP(S), or includes paths, query strings, fragments, or credentials.
+### Payments
 
-## Install, Generate, Build
+`PAYMENTS_ENABLED` defaults to `false`. The initial `mvp-1.2.0` deployment must set it explicitly to `false` for audit clarity. Disabled mode does not require payment secrets, never turns tenant deposit policies into a payment requirement, and payment workers exit without work.
 
-Run from the repository root:
+Only a separately approved activation may set `PAYMENTS_ENABLED=true`. Startup then requires all of:
+
+- `PAYMENT_CREDENTIAL_ENCRYPTION_KEY` (exactly 32 decoded bytes)
+- `PUBLIC_WEB_BASE_URL`
+- `PAYMENT_WEBHOOK_PUBLIC_URL`
+- `MERCADO_PAGO_CLIENT_ID`
+- `MERCADO_PAGO_CLIENT_SECRET`
+- `MERCADO_PAGO_REDIRECT_URI`
+- `MERCADO_PAGO_WEBHOOK_SECRET`
+
+The optional provider overrides actually consumed by code are `MERCADO_PAGO_API_BASE_URL`, `MERCADO_PAGO_AUTHORIZATION_BASE_URL`, and `MERCADO_PAGO_OAUTH_SCOPE`. Payment worker polling overrides are `PAYMENT_WEBHOOK_WORKER_POLL_INTERVAL_MS` and `PAYMENT_EXPIRE_HOLDS_POLL_INTERVAL_MS`.
+
+## Install, build, and migrate
+
+From the repository root:
 
 ```bash
 npm ci
@@ -51,92 +65,48 @@ npm run typecheck --workspace @barberapp/api
 npm run build --workspace @barberapp/api
 ```
 
-`prisma generate` is explicit here so the runtime client matches the deployed schema.
+Before a production migration:
 
-## Database Migration Order
-
-Apply database migrations **before** starting the new API process:
+1. verify the target database identity and backup/recovery posture;
+2. review and execute each relevant migration `preflight.sql` as a **read-only** check;
+3. stop if a preflight reports unsafe or unexpected rows;
+4. apply committed migrations only with:
 
 ```bash
 npm run db:migrate:deploy --workspace @barberapp/api
 ```
 
-Production rules:
+Never use `prisma db push`, `prisma migrate reset`, seeds, `qa:bootstrap`, or test fixtures in production. Never rewrite already-applied migration SQL. Application rollback does not roll back schema; use a reviewed forward fix or the verified restore plan.
 
-- Use `prisma migrate deploy`.
-- Do **not** use `prisma db push`.
-- Do **not** run demo seed data.
-- Do **not** run `qa:bootstrap` or any local QA-only scripts.
-
-If `prisma migrate deploy` fails:
-
-1. Stop the rollout.
-2. Keep the currently running application version in place if it is still healthy.
-3. Investigate the failed migration and either:
-   - apply a forward fix, or
-   - restore the database from the pre-release backup/snapshot if recovery is required.
-
-There is no repository-provided automatic schema rollback.
-
-## API Startup
-
-Start the built API:
+## Built process commands
 
 ```bash
-npm run start --workspace @barberapp/api
+# API web service
+node apps/api/dist/index.js
+
+# Required notification worker (exactly one replica for the initial release)
+node apps/api/dist/scripts/notificationWorker.js
+
+# Optional only after PAYMENTS_ENABLED=true approval
+node apps/api/dist/scripts/paymentWebhookWorker.js
+node apps/api/dist/scripts/paymentExpirationWorker.js
 ```
 
-Expected behavior:
+The notification outbox uses transactional claims and stale-lock recovery. Start one worker replica for the initial deployment to avoid unnecessary duplicate consumers. Payment workers safely exit when payments are disabled.
 
-- The API refuses to start if required production configuration is invalid.
-- No listening log is emitted before configuration validation succeeds.
-- Credentialed CORS uses only exact allowed origins, never `*`.
-- Requests without an `Origin` header remain usable for health checks, probes, and server-to-server calls.
-
-Reverse-proxy trust is **not** enabled by default in the current codebase; configure it explicitly only if your deployment topology requires it.
-
-For Railway specifically, the deployment path in this repository now trusts exactly one proxy hop in production and uses a direct `node apps/api/dist/index.js` start command so `SIGTERM` reaches the API process.
-
-## Verification Checklist
-
-Basic smoke:
+## Verification
 
 ```bash
-curl http://127.0.0.1:3000/health
-curl http://127.0.0.1:3000/api/v1/ping
+curl -fsS https://<api-domain>/health
+curl -fsS https://<api-domain>/api/v1/ping
 ```
 
-CORS allowlist verification:
+Also verify a real Clerk-authenticated read/write flow, Clerk webhook delivery, notification delivery from the worker, database persistence, exact CORS behavior where configured, and the public-web BFF against the final API URL. `/health` is process liveness, not dependency readiness.
 
-```bash
-curl -i \
-  -X OPTIONS \
-  -H 'Origin: https://app.example.com' \
-  -H 'Access-Control-Request-Method: GET' \
-  http://127.0.0.1:3000/api/v1/ping
-```
+## Rollback basics
 
-Rejected-origin verification:
-
-```bash
-curl -i \
-  -H 'Origin: https://evil.example.com' \
-  http://127.0.0.1:3000/health
-```
-
-Release checklist items:
-
-- `/health` returns 200.
-- `/api/v1/ping` returns 200.
-- `/health` is process liveness only; perform a real authenticated smoke test for readiness.
-- Database connectivity is confirmed through a real authenticated API flow after startup.
-- A Clerk-authenticated smoke test succeeds with a real production user/session.
-- Allowed-origin preflight returns the exact configured origin.
-- Rejected origins do not receive permissive CORS headers.
-
-## Rollback / Incident Basics
-
-- Rolling back application code does **not** automatically roll back database schema.
-- Preserve the pre-release database backup until the deployment is accepted.
+- Stop or roll back application traffic independently from PostgreSQL.
+- Preserve pre-migration backups until acceptance.
 - Do not run destructive Prisma commands during incident response.
-- Prefer a forward migration/fix when possible; otherwise restore from backup/snapshot according to the incident plan.
+- Unpublish a pilot slug before deleting or rewriting customer data.
+- Keep `PAYMENTS_ENABLED=false`; payment activation has its own provider/OAuth/webhook reconciliation gate.

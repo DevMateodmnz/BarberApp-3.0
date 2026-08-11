@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { readPaymentRuntimeConfig } from '../../src/lib/payments/runtime.js';
+import { readPaymentRuntimeConfig, requirePaymentsEnabled } from '../../src/lib/payments/runtime.js';
 import {
   buildMercadoPagoAuthorizationUrl,
   createMercadoPagoCheckoutPreference,
   setMercadoPagoTransportForTests,
 } from '../../src/services/payments/providers/mercadoPagoClient.js';
 
-const runtime = readPaymentRuntimeConfig(process.env);
+const runtime = requirePaymentsEnabled(readPaymentRuntimeConfig(process.env));
 
 describe('mercadoPagoClient', () => {
   afterEach(() => {

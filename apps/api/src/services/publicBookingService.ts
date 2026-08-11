@@ -46,6 +46,7 @@ import {
 } from './payments/bookingPaymentService.js';
 import { getDepositPolicyPreviewForService } from './payments/depositPolicyService.js';
 import { generatePaymentExternalReference } from '../lib/payments/references.js';
+import type { PaymentRuntimeConfig } from '../lib/payments/runtime.js';
 import {
   createPromotionRedemption,
   evaluatePromotion,
@@ -63,6 +64,7 @@ interface CreatePublicBookingInput {
   body: PublicCreateAppointmentInput;
   idempotencyKey: string;
   now?: Date;
+  paymentRuntime?: PaymentRuntimeConfig;
 }
 
 function createPublicNotFoundError(): AppError {
@@ -339,6 +341,7 @@ export async function createPublicBookingBySlug(
       const depositPreview = await getDepositPolicyPreviewForService({
         barbershopId: barbershop.id,
         servicePriceCents: pricing.finalPriceCents,
+        paymentRuntime: input.paymentRuntime,
       });
 
       const requiresDeposit = depositPreview.enabled && pricing.finalPriceCents > 0;

@@ -37,7 +37,10 @@ function resolveHeadline(confirmation: PublicBookingConfirmation) {
   const appointmentStatus = confirmation.appointmentStatus ?? confirmation.status;
   const paymentStatus = confirmation.paymentStatus ?? (appointmentStatus === 'CONFIRMED' ? 'APPROVED' : 'NOT_REQUIRED');
 
-  if (appointmentStatus === 'CONFIRMED' && paymentStatus === 'APPROVED') {
+  if (
+    appointmentStatus === 'CONFIRMED' &&
+    (paymentStatus === 'APPROVED' || paymentStatus === 'NOT_REQUIRED')
+  ) {
     return {
       eyebrow: '¡Turno confirmado!',
       statusLabel: 'Turno confirmado',

@@ -40,6 +40,28 @@ describe('PublicBookingConfirmationView', () => {
     expect(screen.getByText('¡Turno confirmado!')).toBeInTheDocument();
   });
 
+  it('shows a confirmed appointment when no payment is required', async () => {
+    saveBookingConfirmation('mateo-barber', {
+      bookingReference: 'pb_TEST1234567890',
+      barbershopName: 'Mateo Barber',
+      serviceName: 'Corte clásico',
+      barberName: 'Mateo',
+      timezone: 'America/Argentina/Tucuman',
+      localDate: '2026-07-20',
+      localStartTime: '10:00',
+      startAt: '2026-07-20T13:00:00.000Z',
+      endAt: '2026-07-20T13:30:00.000Z',
+      appointmentStatus: 'CONFIRMED',
+      paymentStatus: 'NOT_REQUIRED',
+      canCancel: true,
+    });
+
+    render(<PublicBookingConfirmationView slug="mateo-barber" />);
+
+    expect(await screen.findByText('¡Turno confirmado!')).toBeInTheDocument();
+    expect(screen.getByText('Turno confirmado')).toBeInTheDocument();
+  });
+
   it('refreshes the confirmation from the public reference when one is provided', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

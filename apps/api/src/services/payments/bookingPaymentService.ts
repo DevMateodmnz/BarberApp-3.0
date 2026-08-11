@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { AppError } from '../../lib/errors.js';
 import { buildLifecycleUpdateForCancel } from '../../lib/appointmentLifecycle.js';
 import { decryptPaymentSecret, encryptPaymentSecret, timingSafeEqualHex } from '../../lib/payments/crypto.js';
-import { readPaymentRuntimeConfig } from '../../lib/payments/runtime.js';
+import { readPaymentRuntimeConfig, requirePaymentsEnabled } from '../../lib/payments/runtime.js';
 import { prisma } from '../../lib/prisma.js';
 import { cancelAppointmentNotifications, scheduleAppointmentNotificationsForNewAppointment } from '../appointmentNotificationService.js';
 import { getOperationalMercadoPagoCredentials } from './paymentConnectionService.js';
@@ -11,7 +11,6 @@ import { createMercadoPagoCheckoutPreference, getMercadoPagoPaymentById } from '
 import { ensurePaymentReviewCase, getOpenPaymentReviewForPayment, getPaymentTimelineForPayment, getProviderEventSummariesForPayment } from './paymentReviewService.js';
 import { consumeReservedPromotionRedemptionForAppointment, releaseReservedPromotionRedemptionForAppointment } from '../promotionService.js';
 
-const runtime = readPaymentRuntimeConfig(process.env);
 const MAX_WEBHOOK_SIGNATURE_HEADER_LENGTH = 512;
 
 export interface PublicBookingPaymentStateDto {
@@ -257,8 +256,12 @@ export async function loadPublicBookingPaymentStateByReference(input: {
   }
 
   const payment = appointment.bookingPayments[0] ?? null;
-  const checkoutUrl = payment?.checkoutUrlCiphertext
-    ? decryptPaymentSecret(payment.checkoutUrlCiphertext, runtime.encryptionKey)
+  const paymentRuntime = readPaymentRuntimeConfig(process.env);
+  const checkoutUrl = payment?.checkoutUrlCiphertext && paymentRuntime.enabled
+    ? decryptPaymentSecret(
+        payment.checkoutUrlCiphertext,
+        requirePaymentsEnabled(paymentRuntime).encryptionKey
+      )
     : null;
   const hasOpenReview = Boolean(payment?.reviews?.length);
 
@@ -295,7 +298,11 @@ export async function loadPublicBookingPaymentStateByReference(input: {
     expiresAt: toIso(payment?.expiresAt ?? appointment.paymentHoldExpiresAt),
     checkoutUrl:
       payment && ['CREATING', 'PENDING', 'ERROR'].includes(payment.status) ? checkoutUrl : null,
-    canRetry: Boolean(payment && ['ERROR', 'REJECTED', 'EXPIRED', 'CANCELLED'].includes(payment.status)),
+    canRetry: Boolean(
+      paymentRuntime.enabled
+      && payment
+      && ['ERROR', 'REJECTED', 'EXPIRED', 'CANCELLED'].includes(payment.status)
+    ),
     canCancel: appointment.status === 'PENDING' || appointment.status === 'CONFIRMED',
     publicTerms: appointment.barbershop.depositPolicy?.publicTerms ?? null,
   };
@@ -306,6 +313,7 @@ export async function createCheckoutPreferenceForBookingPayment(input: {
   publicReference: string;
   barbershopSlug: string;
 }) {
+  const runtime = requirePaymentsEnabled(readPaymentRuntimeConfig(process.env));
   const payment = await prisma.bookingPayment.findUniqueOrThrow({
     where: { id: input.bookingPaymentId },
     include: {
@@ -497,10 +505,8 @@ export function validateMercadoPagoWebhookSignature(input: {
   dataId: string | undefined;
   rawDataId?: string | undefined;
 }) {
+  const runtime = requirePaymentsEnabled(readPaymentRuntimeConfig(process.env));
   const secret = runtime.mercadoPago.webhookSecret;
-  if (!secret) {
-    throw new AppError(500, 'PAYMENT_PROVIDER_CONFIGURATION_ERROR', 'Mercado Pago webhook secret is not configured');
-  }
 
   if (!input.xSignature || !input.xRequestId || !input.dataId) {
     throw new AppError(401, 'INVALID_WEBHOOK_SIGNATURE', 'Missing Mercado Pago webhook signature data');
@@ -604,6 +610,7 @@ export async function persistMercadoPagoWebhook(input: {
 }
 
 export async function processPendingPaymentWebhookEvents(input: { now?: Date } = {}) {
+  const runtime = requirePaymentsEnabled(readPaymentRuntimeConfig(process.env));
   const now = input.now ?? new Date();
   const events = await prisma.paymentWebhookEvent.findMany({
     where: { status: { in: ['RECEIVED', 'ERROR'] } },

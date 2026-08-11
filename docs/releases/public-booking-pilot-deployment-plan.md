@@ -1,5 +1,7 @@
 # Public Booking Pilot Deployment Plan
 
+> **Historical snapshot (2026-07-14): superseded.** Do not use the `mvp-1.1.1` deployment identity below. The current successor is `mvp-1.2.0`; use [`mvp-1.2.0.md`](./mvp-1.2.0.md), [`railway-mvp-deployment.md`](./railway-mvp-deployment.md), and [`api-production-runbook.md`](./api-production-runbook.md). The old `mvp-1.1.1` tag remains immutable.
+
 ## Release identity
 
 - Deployment candidate version: `mvp-1.1.1`

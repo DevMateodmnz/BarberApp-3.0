@@ -1,4 +1,8 @@
 import type { CorsOptions } from 'cors';
+import {
+  readPaymentRuntimeConfig,
+  type PaymentRuntimeConfig,
+} from '../lib/payments/runtime.js';
 
 export type NodeEnv = 'development' | 'test' | 'production';
 
@@ -29,6 +33,7 @@ export interface ApiRuntimeConfig {
   databaseUrl?: string;
   clerkSecretKey?: string;
   clerkWebhookSecret?: string;
+  payments: PaymentRuntimeConfig;
   corsPolicy: CorsPolicy;
   rateLimit: RateLimitConfig;
 }
@@ -395,6 +400,7 @@ export function readApiRuntimeConfig(
       nodeEnv,
       'CLERK_WEBHOOK_SECRET'
     ),
+    payments: readPaymentRuntimeConfig(env),
     corsPolicy: createCorsPolicy(
       readOptionalNonEmpty(env, 'CORS_ALLOWED_ORIGINS')
     ),

@@ -12,7 +12,7 @@ import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { createPublicCatalogRouter } from '../../src/routes/publicCatalog.js';
 import { provisionBarbershopScheduleException } from '../../src/services/scheduleExceptionProvisioningService.js';
-import { getNextLocalWeekdayDate } from '../helpers/timezone.js';
+import { getActiveTestTimeWindow, getNextLocalWeekdayDate } from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
 const TEST_TIMEZONE = 'America/Argentina/Tucuman';
@@ -572,6 +572,8 @@ describe('POST /api/v1/public/barbershops/:slug/appointments', () => {
   });
 
   it('returns a safe public promotion quote without leaking internal identifiers', async () => {
+    const activeWindow = getActiveTestTimeWindow();
+
     await prisma.customer.upsert({
       where: {
         barbershopId_phoneNormalized: {
@@ -600,8 +602,8 @@ describe('POST /api/v1/public/barbershops/:slug/appointments', () => {
         codeNormalized: 'BIENVENIDA25',
         discountType: 'PERCENTAGE',
         percentageBasisPoints: 2500,
-        startsAt: new Date('2026-07-01T00:00:00.000Z'),
-        endsAt: new Date('2026-08-01T00:00:00.000Z'),
+        startsAt: activeWindow.startsAt,
+        endsAt: activeWindow.endsAt,
         appliesToPublicBookings: true,
         appliesToStaffBookings: true,
         serviceScope: 'ALL',

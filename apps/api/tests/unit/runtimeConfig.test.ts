@@ -17,7 +17,60 @@ function createProductionEnv(
   };
 }
 
+function createEnabledPaymentProductionEnv(): NodeJS.ProcessEnv {
+  return createProductionEnv({
+    PAYMENTS_ENABLED: 'true',
+    PAYMENT_CREDENTIAL_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+    PUBLIC_WEB_BASE_URL: 'https://bookings.example.com',
+    PAYMENT_WEBHOOK_PUBLIC_URL: 'https://api.example.com/api/v1/webhooks/mercado-pago',
+    MERCADO_PAGO_CLIENT_ID: 'client-id',
+    MERCADO_PAGO_CLIENT_SECRET: 'client-secret',
+    MERCADO_PAGO_REDIRECT_URI: 'https://api.example.com/api/v1/payments/mercado-pago/oauth/callback',
+    MERCADO_PAGO_WEBHOOK_SECRET: 'webhook-secret',
+  });
+}
+
 describe('readApiRuntimeConfig', () => {
+  it('keeps payments disabled by default without requiring payment secrets', () => {
+    const config = readApiRuntimeConfig(createProductionEnv());
+
+    expect(config.payments.enabled).toBe(false);
+    expect(config.payments.encryptionKey).toBeUndefined();
+  });
+
+  it('rejects invalid payment feature flag values', () => {
+    expect(() => readApiRuntimeConfig(createProductionEnv({
+      PAYMENTS_ENABLED: 'yes',
+    }))).toThrow('PAYMENTS_ENABLED must be "true" or "false"');
+  });
+
+  it('fails startup when payments are enabled without complete global configuration', () => {
+    const requiredNames = [
+      'PAYMENT_CREDENTIAL_ENCRYPTION_KEY',
+      'PUBLIC_WEB_BASE_URL',
+      'PAYMENT_WEBHOOK_PUBLIC_URL',
+      'MERCADO_PAGO_CLIENT_ID',
+      'MERCADO_PAGO_CLIENT_SECRET',
+      'MERCADO_PAGO_REDIRECT_URI',
+      'MERCADO_PAGO_WEBHOOK_SECRET',
+    ];
+
+    for (const name of requiredNames) {
+      const env = createEnabledPaymentProductionEnv();
+      delete env[name];
+      expect(() => readApiRuntimeConfig(env)).toThrow(
+        `${name} is required when PAYMENTS_ENABLED=true`
+      );
+    }
+  });
+
+  it('accepts complete enabled payment configuration', () => {
+    const config = readApiRuntimeConfig(createEnabledPaymentProductionEnv());
+
+    expect(config.payments.enabled).toBe(true);
+    expect(config.payments.encryptionKey).toHaveLength(32);
+  });
+
   it('keeps production locked down when no browser allowlist is configured', () => {
     const env = createProductionEnv();
     delete env.CORS_ALLOWED_ORIGINS;

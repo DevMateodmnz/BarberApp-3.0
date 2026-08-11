@@ -400,10 +400,10 @@ model EmployeeScheduleExceptionInterval {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  scheduleException EmployeeScheduleException @relation(fields: [scheduleExceptionId], references: [id], onDelete: Cascade)
+  scheduleException EmployeeScheduleException @relation(fields: [scheduleExceptionId], references: [id], onDelete: Cascade, map: "employee_schedule_exception_intervals_schedule_exception_id_fke")
 
-  @@unique([scheduleExceptionId, position])
-  @@index([scheduleExceptionId])
+  @@unique([scheduleExceptionId, position], map: "employee_schedule_exception_intervals_schedule_exception_id_pos")
+  @@index([scheduleExceptionId], map: "employee_schedule_exception_intervals_schedule_exception_id_idx")
   @@map("employee_schedule_exception_intervals")
 }
 
@@ -472,6 +472,7 @@ model Service {
   promotionServices PromotionService[]
 
   // Indexes
+  @@unique([id, barbershopId])
   @@index([barbershopId])
   @@index([barbershopId, isActive])
   @@map("services")
@@ -702,7 +703,7 @@ model Promotion {
   appliesToPublicBookings   Boolean               @default(true) @map("applies_to_public_bookings")
   appliesToStaffBookings    Boolean               @default(true) @map("applies_to_staff_bookings")
   maxActiveRedemptions      Int?                  @map("max_active_redemptions")
-  maxRedemptionsPerCustomer Int?                  @default(1) @map("max_redemptions_per_customer")
+  maxRedemptionsPerCustomer Int?                  @map("max_redemptions_per_customer")
   activeRedemptionCount     Int                   @default(0) @map("active_redemption_count")
   minimumPriceCents         Int?                  @map("minimum_price_cents")
   serviceScope              PromotionServiceScope @default(ALL) @map("service_scope")
@@ -722,6 +723,7 @@ model Promotion {
   loyaltyReward          LoyaltyReward?
 
   @@unique([barbershopId, codeNormalized])
+  @@unique([id, barbershopId])
   @@index([barbershopId, isActive, startsAt, endsAt])
   @@map("promotions")
 }
@@ -1055,7 +1057,7 @@ model AppointmentNotificationAttempt {
   durationMs                Int?                       @map("duration_ms")
   createdAt                 DateTime                   @default(now()) @map("created_at")
 
-  notification AppointmentNotification @relation(fields: [appointmentNotificationId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  notification AppointmentNotification @relation(fields: [appointmentNotificationId, barbershopId], references: [id, barbershopId], onDelete: Restrict, map: "appointment_notification_attempts_appointment_notification_id_b")
   barbershop   Barbershop              @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
 
   @@unique([appointmentNotificationId, attemptNumber], map: "appt_notif_attempts_notif_attempt_num_key")
@@ -1078,7 +1080,7 @@ model PublicBookingIdempotency {
   barbershop  Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
-  @@unique([barbershopId, operation, idempotencyKey])
+  @@unique([barbershopId, operation, idempotencyKey], map: "public_booking_idempotency_barbershop_id_operation_idempotency_")
   @@index([barbershopId])
   @@index([appointmentId])
   @@index([expiresAt])
@@ -1182,10 +1184,10 @@ model BarbershopScheduleExceptionInterval {
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   // Relations
-  scheduleException BarbershopScheduleException @relation(fields: [scheduleExceptionId], references: [id], onDelete: Cascade)
+  scheduleException BarbershopScheduleException @relation(fields: [scheduleExceptionId], references: [id], onDelete: Cascade, map: "barbershop_schedule_exception_intervals_schedule_exception_id_f")
 
-  @@unique([scheduleExceptionId, position])
-  @@index([scheduleExceptionId])
+  @@unique([scheduleExceptionId, position], map: "barbershop_schedule_exception_intervals_schedule_exception_id_p")
+  @@index([scheduleExceptionId], map: "barbershop_schedule_exception_intervals_schedule_exception_id_i")
   @@map("barbershop_schedule_exception_intervals")
 }
 

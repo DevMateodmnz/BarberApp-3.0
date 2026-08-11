@@ -1,4 +1,5 @@
 import { releaseExpiredPaymentHolds } from '../services/payments/bookingPaymentService.js';
+import { readPaymentRuntimeConfig } from '../lib/payments/runtime.js';
 
 function hasFlag(flag: string): boolean {
   return process.argv.slice(2).includes(flag);
@@ -28,6 +29,12 @@ async function runBatch() {
 }
 
 async function main() {
+  if (!readPaymentRuntimeConfig(process.env).enabled) {
+    // eslint-disable-next-line no-console
+    console.info('[payments][expire-holds] PAYMENTS_ENABLED=false; exiting without processing');
+    return;
+  }
+
   if (hasFlag('--once')) {
     await runBatch();
     return;

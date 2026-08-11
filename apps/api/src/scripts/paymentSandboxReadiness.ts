@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
-import { readPaymentRuntimeConfig } from '../lib/payments/runtime.js';
+import { readPaymentRuntimeConfig, requirePaymentsEnabled } from '../lib/payments/runtime.js';
 
 interface CheckResult {
   name: string;
@@ -49,6 +49,12 @@ async function main() {
   const externalCallOccurred = false;
   const repoRoot = findRepoRoot(process.cwd());
 
+  checks.push({
+    name: 'payments-enabled',
+    ok: env.PAYMENTS_ENABLED?.trim().toLowerCase() === 'true',
+    detail: env.PAYMENTS_ENABLED?.trim() || 'missing (defaults to false)',
+  });
+
   const redirectUri = parseAbsoluteUrl(env.MERCADO_PAGO_REDIRECT_URI, 'MERCADO_PAGO_REDIRECT_URI');
   const webhookUrl = parseAbsoluteUrl(
     env.PAYMENT_WEBHOOK_PUBLIC_URL ?? (strictHttps ? undefined : 'http://localhost:3000/api/v1/webhooks/mercado-pago'),
@@ -63,7 +69,7 @@ async function main() {
   checks.push({ name: 'public-web-base-url', ok: Boolean(publicWebBaseUrl.url?.origin), detail: publicWebBaseUrl.error ?? publicWebBaseUrl.url?.toString() ?? 'missing' });
 
   try {
-    const runtime = readPaymentRuntimeConfig(env);
+    const runtime = requirePaymentsEnabled(readPaymentRuntimeConfig(env));
     checks.push({ name: 'encryption-key', ok: runtime.encryptionKey.length === 32, detail: 'valid AES-256-GCM key length' });
   } catch (error) {
     checks.push({ name: 'encryption-key', ok: false, detail: error instanceof Error ? error.message : 'invalid PAYMENT_CREDENTIAL_ENCRYPTION_KEY' });

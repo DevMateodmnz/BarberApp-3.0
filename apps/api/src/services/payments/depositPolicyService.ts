@@ -2,6 +2,11 @@ import { AppError, BadRequestError } from '../../lib/errors.js';
 import { calculateDepositAmountCents } from '../../lib/payments/policy.js';
 import { prisma } from '../../lib/prisma.js';
 import type { DepositPolicyMode, Prisma } from '@prisma/client';
+import {
+  readPaymentRuntimeConfig,
+  requirePaymentsEnabled,
+  type PaymentRuntimeConfig,
+} from '../../lib/payments/runtime.js';
 
 export interface DepositPolicyDto {
   mode: DepositPolicyMode;
@@ -67,6 +72,10 @@ export async function updateDepositPolicy(
     throw new BadRequestError('Hold duration must be between 5 and 30 minutes');
   }
 
+  if (input.mode !== 'DISABLED') {
+    requirePaymentsEnabled(readPaymentRuntimeConfig(process.env));
+  }
+
   const connection = await prisma.barbershopPaymentConnection.findUnique({
     where: {
       barbershopId_provider: {
@@ -129,7 +138,22 @@ export async function updateDepositPolicy(
 export async function getDepositPolicyPreviewForService(input: {
   barbershopId: string;
   servicePriceCents: number;
+  paymentRuntime?: PaymentRuntimeConfig;
 }) {
+  const paymentRuntime = input.paymentRuntime ?? readPaymentRuntimeConfig(process.env);
+
+  if (!paymentRuntime.enabled) {
+    return {
+      enabled: false as const,
+      mode: 'DISABLED' as const,
+      amountCents: null,
+      remainingAmountCents: null,
+      holdDurationMinutes: 15,
+      currency: 'ARS' as const,
+      publicTerms: null,
+    };
+  }
+
   const policy = await ensureDepositPolicy(input.barbershopId);
 
   if (policy.mode === 'DISABLED') {

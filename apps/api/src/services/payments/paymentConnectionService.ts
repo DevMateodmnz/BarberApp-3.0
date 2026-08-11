@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { AppError } from '../../lib/errors.js';
 import { decryptPaymentSecret, encryptPaymentSecret, randomOpaqueToken, sha256Hex } from '../../lib/payments/crypto.js';
-import { readPaymentRuntimeConfig } from '../../lib/payments/runtime.js';
+import { readPaymentRuntimeConfig, requirePaymentsEnabled } from '../../lib/payments/runtime.js';
 import { prisma } from '../../lib/prisma.js';
 import {
   buildMercadoPagoAuthorizationUrl,
@@ -9,7 +9,6 @@ import {
   refreshMercadoPagoAuthorization,
 } from './providers/mercadoPagoClient.js';
 
-const runtime = readPaymentRuntimeConfig(process.env);
 const OAUTH_STATE_TTL_MS = 10 * 60_000;
 const SAFE_REDIRECT_TARGET_PATTERN = /^\/(?!\/)(?!.*(?:\.\.|javascript:)).*$/i;
 
@@ -92,6 +91,7 @@ export async function startMercadoPagoConnect(input: {
   userId: string;
   redirectTarget?: string | null;
 }) {
+  const runtime = requirePaymentsEnabled(readPaymentRuntimeConfig(process.env));
   const redirectTarget = normalizeRedirectTarget(input.redirectTarget);
   const state = randomOpaqueToken(24);
   const stateHash = sha256Hex(state);
@@ -154,6 +154,7 @@ export async function handleMercadoPagoOAuthCallback(input: {
   state?: string | null;
   error?: string | null;
 }) {
+  const runtime = requirePaymentsEnabled(readPaymentRuntimeConfig(process.env));
   if (input.error) {
     return {
       ok: false as const,
@@ -313,6 +314,7 @@ export async function disconnectPaymentConnection(barbershopId: string) {
 }
 
 export async function getOperationalMercadoPagoCredentials(barbershopId: string) {
+  const runtime = requirePaymentsEnabled(readPaymentRuntimeConfig(process.env));
   const connection = await ensurePaymentConnection(barbershopId);
   if (connection.status !== 'CONNECTED' || !connection.accessTokenCiphertext || !connection.refreshTokenCiphertext) {
     throw new AppError(409, 'PAYMENT_CONNECTION_NOT_OPERATIONAL', 'Mercado Pago connection is not operational');

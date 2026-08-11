@@ -1,5 +1,6 @@
 import 'server-only';
 import { getPublicWebRuntime } from '@/lib/config/publicRuntime';
+import { sanitizePublicApiPath } from '@/lib/api/sanitizePath';
 import type {
   ApiEnvelope,
   PublicAvailability,
@@ -55,6 +56,7 @@ function logPublicApiFailure(
   console.error('[public-web][public-api]', {
     category,
     ...context,
+    path: sanitizePublicApiPath(context.path),
   });
 }
 

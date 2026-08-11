@@ -28,23 +28,21 @@ async function openBookingPage(page: Page, slug: string) {
 async function chooseServiceBarberDate(
   page: Page,
   fixture: {
+    barberId: string;
     expectedBarberName: string;
     expectedServiceName: string;
     futureLocalDate: string;
+    serviceId: string;
   }
 ) {
-  await page
-    .getByRole('radio', { name: new RegExp(fixture.expectedServiceName, 'i') })
-    .click();
-  await page
-    .getByRole('radio', { name: new RegExp(fixture.expectedBarberName, 'i') })
-    .click();
-  await page.getByLabel('Fecha de reserva').fill(fixture.futureLocalDate);
+  await page.getByLabel('Servicio', { exact: true }).selectOption(fixture.serviceId);
+  await page.getByLabel('Profesional', { exact: true }).selectOption(fixture.barberId);
+  await page.getByLabel('Fecha', { exact: true }).fill(fixture.futureLocalDate);
   await page.getByRole('button', { name: /ver horarios disponibles/i }).click();
 }
 
 async function readAvailableTimes(page: Page) {
-  const buttons = page.locator('section[aria-labelledby="slot-section-title"] button');
+  const buttons = getAvailableSlotButtons(page);
   const count = await buttons.count();
   const times: string[] = [];
 
@@ -55,8 +53,12 @@ async function readAvailableTimes(page: Page) {
   return times;
 }
 
+function getAvailableSlotButtons(page: Page) {
+  return page.getByText(/^Horarios para /).locator('..').getByRole('button');
+}
+
 async function selectFirstAvailableSlot(page: Page) {
-  const button = page.locator('section[aria-labelledby="slot-section-title"] button').first();
+  const button = getAvailableSlotButtons(page).first();
   const timeLabel = (await button.innerText()).trim();
   await button.click();
   return timeLabel;
@@ -100,17 +102,19 @@ async function waitForBookingResponse(
   });
 }
 
-function getBookingAlert(page: Page) {
-  return page.locator('p[role="alert"]');
+function getBookingMessage(page: Page) {
+  return page.locator('form p[tabindex="-1"]');
 }
 
 async function bookThroughPublicFlow(
   page: Page,
   fixture: {
+    barberId: string;
     slug: string;
     expectedBarberName: string;
     expectedServiceName: string;
     futureLocalDate: string;
+    serviceId: string;
   },
   overrides?: Partial<{
     clientName: string;
@@ -123,9 +127,11 @@ async function bookThroughPublicFlow(
   await fillCustomerForm(page, overrides);
 
   const responsePromise = waitForBookingResponse(page, fixture.slug);
-  await page.getByRole('button', { name: /reservar turno/i }).click();
+  await page.getByRole('button', { name: /confirmar turno/i }).click();
   const response = await responsePromise;
-  await page.waitForURL(new RegExp(`/barberias/${fixture.slug}/confirmacion$`));
+  await page.waitForURL(
+    new RegExp(`/barberias/${fixture.slug}/confirmacion\\?ref=pb_[A-Z2-7]{20}$`)
+  );
 
   return {
     chosenTime,
@@ -158,9 +164,12 @@ test('scenario 1 — direct public page load', async ({
   await expect(
     page.getByRole('heading', { name: bookingFixture.shopName })
   ).toBeVisible();
+  await expect(page.getByLabel('Servicio', { exact: true })).toBeVisible();
   await expect(
-    page.getByText('1. Elegí un servicio', { exact: false })
-  ).toBeVisible();
+    page.getByRole('option', {
+      name: new RegExp(bookingFixture.expectedServiceName, 'i'),
+    })
+  ).toHaveCount(1);
 
   const bodyText = await page.locator('body').innerText();
   expect(bodyText).not.toContain(bookingFixture.serviceId);
@@ -196,8 +205,7 @@ test('scenario 2 — complete successful booking', async ({
     page.getByText(bookingFixture.expectedBarberName, { exact: false })
   ).toBeVisible();
   await expect(page.getByText(chosenTime, { exact: false })).toBeVisible();
-  await expect(page.getByText('+543811234567')).toBeVisible();
-  await expect(page.getByText('CONFIRMED')).toBeVisible();
+  await expect(page.getByText('Turno confirmado', { exact: true })).toBeVisible();
 
   const appointment = await prisma.appointment.findUniqueOrThrow({
     where: {
@@ -280,12 +288,12 @@ test('scenario 3 — double-click prevention', async ({
   });
 
   const responsePromise = waitForBookingResponse(page, bookingFixture.slug);
-  await page.getByRole('button', { name: /reservar turno/i }).dblclick();
+  await page.getByRole('button', { name: /confirmar turno/i }).dblclick();
   const response = await responsePromise;
 
   expect(response.status()).toBe(201);
   expect(bookingPostCount).toBe(1);
-  await expect(page.getByText('¡Reserva confirmada!')).toBeVisible();
+  await expect(page.getByText('¡Turno confirmado!')).toBeVisible();
   await expect(
     page.getByText(/ya no está disponible/i)
   ).not.toBeVisible();
@@ -337,11 +345,11 @@ test('scenario 4 — ambiguous network retry and idempotency', async ({
     }
   );
 
-  await page.getByRole('button', { name: /reservar turno/i }).click();
+  await page.getByRole('button', { name: /confirmar turno/i }).click();
 
   await expect(
-    getBookingAlert(page)
-  ).toHaveText(/no pudimos confirmar si la reserva se completó/i);
+    getBookingMessage(page)
+  ).toHaveText(/no pudimos confirmar el estado de la reserva/i);
 
   const pendingAttempt = await page.evaluate((slug) => {
     return window.sessionStorage.getItem(`public-booking-pending-attempt:${slug}`);
@@ -362,7 +370,7 @@ test('scenario 4 — ambiguous network retry and idempotency', async ({
   expect(afterFirstAttempt).toHaveLength(1);
 
   const replayResponsePromise = waitForBookingResponse(page, bookingFixture.slug);
-  await page.getByRole('button', { name: /reservar turno/i }).click();
+  await page.getByRole('button', { name: /confirmar turno/i }).click();
   const replayResponse = await replayResponsePromise;
 
   expect(replayResponse.status()).toBe(200);
@@ -378,7 +386,7 @@ test('scenario 4 — ambiguous network retry and idempotency', async ({
   });
 
   expect(finalAppointments).toHaveLength(1);
-  await expect(page.getByText('¡Reserva confirmada!')).toBeVisible();
+  await expect(page.getByText('¡Turno confirmado!')).toBeVisible();
 });
 
 test('scenario 5 — stale-slot conflict recovery', async ({
@@ -434,11 +442,11 @@ test('scenario 5 — stale-slot conflict recovery', async ({
   expect(competingResponse.status()).toBe(201);
 
   const staleResponsePromise = waitForBookingResponse(page, bookingFixture.slug);
-  await page.getByRole('button', { name: /reservar turno/i }).click();
+  await page.getByRole('button', { name: /confirmar turno/i }).click();
   const staleResponse = await staleResponsePromise;
 
   expect(staleResponse.status()).toBe(409);
-  await expect(getBookingAlert(page)).toHaveText(/ya no está disponible/i);
+  await expect(getBookingMessage(page)).toHaveText(/ya no está disponible/i);
   await expect(page.getByText(/turno seleccionado/i)).not.toBeVisible();
   await expect(page.getByLabel('Nombre y apellido')).toHaveValue(
     'Cliente Conflicto'
@@ -452,12 +460,9 @@ test('scenario 5 — stale-slot conflict recovery', async ({
   expect(remainingTimes).not.toContain(chosenTime);
   expect(remainingTimes.length).toBeGreaterThan(0);
 
-  await page
-    .locator('section[aria-labelledby="slot-section-title"] button')
-    .first()
-    .click();
+  await getAvailableSlotButtons(page).first().click();
   const recoveryResponsePromise = waitForBookingResponse(page, bookingFixture.slug);
-  await page.getByRole('button', { name: /reservar turno/i }).click();
+  await page.getByRole('button', { name: /confirmar turno/i }).click();
   const recoveryResponse = await recoveryResponsePromise;
 
   expect(recoveryResponse.status()).toBe(201);
@@ -506,7 +511,7 @@ test('scenario 6 — confirmation refresh behavior', async ({
     `http://127.0.0.1:3001/barberias/${bookingFixture.slug}/confirmacion`
   );
   await expect(
-    freshPage.getByText(/no encontramos la confirmación en este navegador/i)
+    freshPage.getByText(/no encontramos la reserva en este navegador/i)
   ).toBeVisible();
 
   expect(freshRequests.every((url) => !url.includes(bookingReference))).toBe(true);
@@ -538,13 +543,11 @@ test('scenario 7 — validation and accessibility smoke', async ({
   await chooseServiceBarberDate(page, bookingFixture);
   await selectFirstAvailableSlot(page);
 
-  await page.getByRole('button', { name: /reservar turno/i }).click();
-  await expect(getBookingAlert(page)).toHaveText(
+  await page.getByRole('button', { name: /confirmar turno/i }).click();
+  await expect(getBookingMessage(page)).toHaveText(
     /ingresá tu nombre y apellido/i
   );
-  expect(await page.evaluate(() => document.activeElement?.getAttribute('role'))).toBe(
-    'alert'
-  );
+  await expect(getBookingMessage(page)).toBeFocused();
 
   await fillCustomerForm(page, {
     clientName: 'Cliente Validación',
@@ -553,8 +556,8 @@ test('scenario 7 — validation and accessibility smoke', async ({
     notes: 'Smoke a11y',
   });
 
-  await page.getByRole('button', { name: /reservar turno/i }).click();
-  await expect(getBookingAlert(page)).toHaveText(
+  await page.getByRole('button', { name: /confirmar turno/i }).click();
+  await expect(getBookingMessage(page)).toHaveText(
     /formato internacional/i
   );
 
@@ -565,21 +568,21 @@ test('scenario 7 — validation and accessibility smoke', async ({
     notes: 'Smoke a11y',
   });
 
-  await page.getByRole('button', { name: /reservar turno/i }).click();
-  await expect(getBookingAlert(page)).toHaveText(
+  await page.getByRole('button', { name: /confirmar turno/i }).click();
+  await expect(getBookingMessage(page)).toHaveText(
     /aceptar el consentimiento/i
   );
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole('checkbox').focus();
   await page.keyboard.press('Space');
-  await page.getByRole('button', { name: /reservar turno/i }).focus();
+  await page.getByRole('button', { name: /confirmar turno/i }).focus();
   const responsePromise = waitForBookingResponse(page, bookingFixture.slug);
   await page.keyboard.press('Enter');
   const response = await responsePromise;
 
   expect(response.status()).toBe(201);
-  await expect(page.getByText('¡Reserva confirmada!')).toBeVisible();
+  await expect(page.getByText('¡Turno confirmado!')).toBeVisible();
 });
 
 test('scenario 8 — public route and protected-route isolation', async ({
@@ -596,8 +599,8 @@ test('scenario 8 — public route and protected-route isolation', async ({
   });
 
   await page
-    .getByRole('radio', { name: new RegExp(bookingFixture.expectedServiceName, 'i') })
-    .click();
+    .getByLabel('Servicio', { exact: true })
+    .selectOption(bookingFixture.serviceId);
 
   const barberResponse = await barberResponsePromise;
   expect(barberResponse.status()).toBe(200);

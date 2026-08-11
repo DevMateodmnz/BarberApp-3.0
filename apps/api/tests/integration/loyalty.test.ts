@@ -6,6 +6,7 @@ import { prisma } from '../../src/lib/prisma.js';
 import { localDateTimeToUtc } from '../../src/lib/dateUtils.js';
 import { setupDefaultWorkingHours } from '../../src/services/barbershopService.js';
 import { processCompletedAppointmentLoyalty, upsertLoyaltyProgram } from '../../src/services/loyaltyService.js';
+import { getActiveTestTimeWindow, getFutureOpenBusinessTime } from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
 const TEST_TIMEZONE = 'America/Argentina/Tucuman';
@@ -54,6 +55,8 @@ async function createInProgressAppointment(localDate: string, localTime: string)
 }
 
 beforeAll(async () => {
+  const activeWindow = getActiveTestTimeWindow();
+
   await prisma.publicBookingIdempotency.deleteMany();
   await prisma.appointmentNotification.deleteMany();
   await prisma.loyaltyLedgerEvent.deleteMany();
@@ -140,8 +143,8 @@ beforeAll(async () => {
       discountType: 'FIXED',
       fixedDiscountCents: 1500,
       percentageBasisPoints: null,
-      startsAt: new Date('2026-07-01T00:00:00.000Z'),
-      endsAt: new Date('2027-07-01T00:00:00.000Z'),
+      startsAt: activeWindow.startsAt,
+      endsAt: activeWindow.endsAt,
       appliesToPublicBookings: true,
       appliesToStaffBookings: true,
       maxActiveRedemptions: null,
@@ -361,7 +364,7 @@ describe('loyalty earning and redemption', () => {
       .send({
         employeeId: fixtures.barber.employeeId,
         serviceId: fixtures.service.id,
-        startAt: localDateTimeToUtc('2026-07-25', '11:00', TEST_TIMEZONE).toISOString(),
+        startAt: getFutureOpenBusinessTime(1, '11:00', new Date(), TEST_TIMEZONE).toISOString(),
         clientName: 'Loyal Customer',
         clientPhone: fixtures.customer.phone,
         promotionCode: rewardCode,

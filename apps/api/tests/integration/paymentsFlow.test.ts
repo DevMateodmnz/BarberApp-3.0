@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import request from 'supertest';
 import { createAppFromEnv } from '../../src/app.js';
 import { encryptPaymentSecret } from '../../src/lib/payments/crypto.js';
-import { readPaymentRuntimeConfig } from '../../src/lib/payments/runtime.js';
+import { readPaymentRuntimeConfig, requirePaymentsEnabled } from '../../src/lib/payments/runtime.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { CURRENT_PUBLIC_BOOKING_CONSENT_VERSION } from '../../src/lib/publicBookingConsent.js';
 import { localDateTimeToUtc } from '../../src/lib/dateUtils.js';
@@ -19,7 +19,7 @@ import { setupDefaultWorkingHours } from '../../src/services/barbershopService.j
 import { getNextLocalWeekdayDate, TEST_BARBERSHOP_TIMEZONE } from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
-const runtime = readPaymentRuntimeConfig(process.env);
+const runtime = requirePaymentsEnabled(readPaymentRuntimeConfig(process.env));
 
 interface Fixtures {
   owner: { id: string; clerkUserId: string };
@@ -309,6 +309,56 @@ describe('Mercado Pago deposit reservation flow', () => {
       where: { appointmentId: appointment.id },
     });
     expect(notifications).toHaveLength(0);
+  });
+
+  it('bypasses a configured deposit without contacting the provider when payments are globally disabled', async () => {
+    const disabledApp = createAppFromEnv({
+      ...process.env,
+      PAYMENTS_ENABLED: 'false',
+    });
+
+    const response = await request(disabledApp)
+      .post(`/api/v1/public/barbershops/${fixtures.shop.slug}/appointments`)
+      .set('Idempotency-Key', `disabled_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`)
+      .send(publicBookingPayload());
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.appointmentStatus).toBe('CONFIRMED');
+    expect(response.body.data.paymentStatus).toBe('NOT_REQUIRED');
+    expect(response.body.data.amountCents).toBeNull();
+    expect(latestPreferenceBody).toBeNull();
+
+    const appointment = await prisma.appointment.findUniqueOrThrow({
+      where: { publicReference: response.body.data.bookingReference },
+    });
+    expect(appointment.status).toBe('CONFIRMED');
+    expect(appointment.paymentHoldExpiresAt).toBeNull();
+    expect(await prisma.bookingPayment.count({ where: { appointmentId: appointment.id } })).toBe(0);
+    expect(await prisma.appointmentNotification.count({ where: { appointmentId: appointment.id } })).toBeGreaterThan(0);
+  });
+
+  it('serves concurrent public payment previews without creating policy state when payments are disabled', async () => {
+    await prisma.barbershopDepositPolicy.delete({
+      where: { barbershopId: fixtures.shop.id },
+    });
+    const disabledApp = createAppFromEnv({
+      ...process.env,
+      PAYMENTS_ENABLED: 'false',
+    });
+
+    const [services, bookingConfig] = await Promise.all([
+      request(disabledApp).get(`/api/v1/public/barbershops/${fixtures.shop.slug}/services`),
+      request(disabledApp).get(`/api/v1/public/barbershops/${fixtures.shop.slug}/booking-config`),
+    ]);
+
+    expect(services.status).toBe(200);
+    expect(services.body.data[0].depositRequired).toBe(false);
+    expect(bookingConfig.status).toBe(200);
+    expect(bookingConfig.body.data.depositPolicy.enabled).toBe(false);
+    expect(await prisma.barbershopDepositPolicy.count({
+      where: { barbershopId: fixtures.shop.id },
+    })).toBe(0);
+    expect(latestPreferenceBody).toBeNull();
   });
 
   it('rejects manual owner confirmation while the deposit is still unpaid', async () => {

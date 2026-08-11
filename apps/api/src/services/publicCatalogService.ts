@@ -4,6 +4,7 @@ import { getPublicBookingConsent } from '../lib/publicBookingConsent.js';
 import { getPublicBookingPolicy } from '../lib/publicBookingPolicy.js';
 import { validatePublicSlug } from '../lib/publicSlug.js';
 import { getDepositPolicyPreviewForService } from './payments/depositPolicyService.js';
+import type { PaymentRuntimeConfig } from '../lib/payments/runtime.js';
 
 export interface PublicBarbershopDto {
   slug: string;
@@ -113,7 +114,8 @@ export async function getPublicBarbershopBySlug(
 }
 
 export async function listPublicServicesBySlug(
-  slug: string
+  slug: string,
+  paymentRuntime?: PaymentRuntimeConfig
 ): Promise<PublicServiceDto[]> {
   const barbershop = await resolvePublishedPublicBarbershop(slug);
 
@@ -142,6 +144,7 @@ export async function listPublicServicesBySlug(
     const depositPreview = await getDepositPolicyPreviewForService({
       barbershopId: barbershop.id,
       servicePriceCents: service.priceCents,
+      paymentRuntime,
     });
 
     result.push({
@@ -216,7 +219,8 @@ export async function listEligiblePublicBarbersBySlug(
 }
 
 export async function getPublicBookingConfigBySlug(
-  slug: string
+  slug: string,
+  paymentRuntime?: PaymentRuntimeConfig
 ): Promise<PublicBookingConfigDto> {
   const barbershop = await resolvePublishedPublicBarbershop(slug);
 
@@ -225,6 +229,7 @@ export async function getPublicBookingConfigBySlug(
   const depositPolicy = await getDepositPolicyPreviewForService({
     barbershopId: barbershop.id,
     servicePriceCents: 10_000,
+    paymentRuntime,
   });
 
   return {

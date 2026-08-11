@@ -126,7 +126,7 @@ export function createPublicCatalogRouter(
     catalogReadRateLimit,
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const services = await listPublicServicesBySlug(paramSlug(req));
+        const services = await listPublicServicesBySlug(paramSlug(req), config.payments);
         res.json({ success: true, data: services });
       } catch (error) {
         next(error);
@@ -156,7 +156,7 @@ export function createPublicCatalogRouter(
     catalogReadRateLimit,
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const configDto = await getPublicBookingConfigBySlug(paramSlug(req));
+        const configDto = await getPublicBookingConfigBySlug(paramSlug(req), config.payments);
         res.json({ success: true, data: configDto });
       } catch (error) {
         next(error);
@@ -212,6 +212,7 @@ export function createPublicCatalogRouter(
           slug: paramSlug(req),
           idempotencyKey: requireIdempotencyKey(req),
           body: req.body,
+          paymentRuntime: config.payments,
         });
 
         res
