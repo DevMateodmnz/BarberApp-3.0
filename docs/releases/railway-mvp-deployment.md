@@ -49,20 +49,21 @@ Create a second Railway application service from the same repository and release
 - health check: none; monitor process/restarts and notification delivery metrics/logs
 - restart policy: on failure with bounded retries
 
-Give it the same `NODE_ENV`, `DATABASE_URL`, and core secrets plus the SMTP/notification variables in `apps/api/.env.production.example`. The worker requires `SMTP_HOST` and `SMTP_FROM_EMAIL`; configure provider authentication as needed. Set `PUBLIC_WEB_BASE_URL` so notification emails contain the correct cancellation link.
+Configure only the notification-worker contract: `DATABASE_URL`, `SMTP_HOST`, `SMTP_FROM_EMAIL`, `PUBLIC_WEB_BASE_URL`, any SMTP provider authentication, and optional SMTP/worker tuning from `apps/api/.env.production.example`. Do not give this service the API-only `CLERK_SECRET_KEY` or `CLERK_WEBHOOK_SECRET`. It also does not need the payment encryption key or Mercado Pago credentials.
 
 The database claim/lock implementation protects against duplicate sends, but a single initial replica avoids needless contention. Scale only after reviewing throughput and lease behavior.
 
 ## Payments remain off
 
-Set `PAYMENTS_ENABLED=false` on the API and worker environments for the initial `mvp-1.2.0` deployment. Payment credentials and payment worker services are not required. If either payment worker binary is accidentally started, it logs that payments are disabled and exits successfully without provider activity.
+Set `PAYMENTS_ENABLED=false` on the API service for the initial `mvp-1.2.0` deployment. The notification worker does not read payment configuration and should receive no payment variables. Payment credentials and payment worker services are not required. If either payment worker binary is accidentally started with the flag omitted, payments still default to disabled and it exits successfully without provider activity.
 
 Payment activation is a later release gate requiring complete secrets, production OAuth/callback registration, signed webhook proof, authoritative reconciliation proof, and both payment workers.
 
 ## Environment ownership
 
-- API: core variables, `PAYMENTS_ENABLED=false`, optional CORS/rate limits.
-- Notification worker: core database/runtime variables, SMTP variables, notification tuning, `PUBLIC_WEB_BASE_URL`, and `PAYMENTS_ENABLED=false`.
+- API: `NODE_ENV=production`, `DATABASE_URL`, both Clerk secrets, `PAYMENTS_ENABLED=false`, and optional API CORS/rate-limit variables.
+- Notification worker: `DATABASE_URL`, SMTP variables, notification tuning, and `PUBLIC_WEB_BASE_URL`; no Clerk or payment variables.
+- Payment workers: not deployed for the initial release and receive no environment contract until the separate payment-activation gate.
 - Railway injects API `PORT`; do not hardcode it.
 - Use a Railway reference variable for PostgreSQL `DATABASE_URL`.
 - Keep all live credentials outside Git.

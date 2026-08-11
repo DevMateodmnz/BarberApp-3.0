@@ -4,7 +4,7 @@ Release BarberApp only from a clean, reviewed commit. The current repository-con
 
 ## Production environment contract
 
-### Core required (API and workers)
+### API web service required
 
 | Variable | Secret | Purpose |
 |---|---:|---|
@@ -13,7 +13,9 @@ Release BarberApp only from a clean, reviewed commit. The current repository-con
 | `CLERK_SECRET_KEY` | yes | Staff authentication and invitation backend. |
 | `CLERK_WEBHOOK_SECRET` | yes | Clerk webhook signature verification. |
 
-### Core optional
+The Clerk secrets are API-service-only. Do not provide them to the notification worker or to any other service that does not consume Clerk APIs or webhooks.
+
+### API web service optional
 
 | Variable | Purpose |
 |---|---|
@@ -27,6 +29,7 @@ Release BarberApp only from a clean, reviewed commit. The current repository-con
 
 | Variable | Required | Purpose |
 |---|---:|---|
+| `DATABASE_URL` | yes | PostgreSQL connection string shared with the API service. |
 | `SMTP_HOST` | yes | SMTP server. |
 | `SMTP_PORT` | no | Defaults to `1025`; set the production provider port. |
 | `SMTP_SECURE` | no | Strict `true`/`false`; defaults false. |
@@ -38,9 +41,11 @@ Release BarberApp only from a clean, reviewed commit. The current repository-con
 | `NOTIFICATION_WORKER_POLL_INTERVAL_MS` | no | Defaults to `30000`. |
 | `NOTIFICATION_STALE_LOCK_MS` | no | Defaults to `600000`. |
 
+This is the complete notification-worker contract. Do not provide `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET`, `PAYMENT_CREDENTIAL_ENCRYPTION_KEY`, or Mercado Pago credentials to this service.
+
 ### Payments
 
-`PAYMENTS_ENABLED` defaults to `false`. The initial `mvp-1.2.0` deployment must set it explicitly to `false` for audit clarity. Disabled mode does not require payment secrets, never turns tenant deposit policies into a payment requirement, and payment workers exit without work.
+`PAYMENTS_ENABLED` defaults to `false`. The API service in the initial `mvp-1.2.0` deployment must set it explicitly to `false` for audit clarity. Disabled mode does not require payment secrets, never turns tenant deposit policies into a payment requirement, and payment workers exit without work.
 
 Only a separately approved activation may set `PAYMENTS_ENABLED=true`. Startup then requires all of:
 
