@@ -159,6 +159,10 @@ function cancelUrl(reference: string) {
   return `/api/v1/public/barbershops/${fixtures.shop.slug}/appointments/${reference}/cancel`;
 }
 
+function authHeader(clerkUserId: string) {
+  return { 'x-test-user-id': clerkUserId };
+}
+
 describe('POST /api/v1/public/barbershops/:slug/appointments/:reference/cancel', () => {
   it('cancels a future CONFIRMED booking and records PUBLIC_BOOKING source with null actor', async () => {
     const startAt = new Date(Date.now() + 60 * 60_000);
@@ -354,45 +358,69 @@ describe('POST /api/v1/public/barbershops/:slug/appointments/:reference/cancel',
     expect(persisted.cancelledByRole).toBeNull();
   });
 
-  it('concurrent staff NO_SHOW wins atomically over public cancel (only one transition is recorded)', async () => {
+  it('public cancel vs staff NO_SHOW workflow: exactly one terminal outcome wins', async () => {
     const startAt = new Date(Date.now() + 60 * 60_000);
     const booking = await createBookingAt(startAt, 'CONFIRMED');
 
-    // Simulate the race: a staff transition and a public cancel run
-    // back to back. The atomic transaction in cancelPublicBookingByReference
-    // re-reads inside the transaction, so whichever finishes first
-    // commits and the other observes the terminal state.
+    // NO_SHOW is legal only after IN_PROGRESS. Exercise the real staff
+    // transition route for both lifecycle steps while the public cancellation
+    // races the staff workflow from the original CONFIRMED state.
     const publicCancel = request(app)
       .post(cancelUrl(booking.publicReference!))
-      .send();
+      .send({ reason: 'public race winner' });
 
-    const staffUpdate = prisma.appointment.update({
-      where: { id: booking.id },
-      data: {
-        status: 'NO_SHOW',
-        noShowAt: new Date(),
-      },
-    });
+    const staffNoShow = (async () => {
+      const inProgressRes = await request(app)
+        .put(`/api/v1/appointments/${booking.id}/status`)
+        .set(authHeader(fixtures.barber.clerkUserId))
+        .send({ status: 'IN_PROGRESS' });
 
-    const [publicRes, staffRes] = await Promise.all([publicCancel, staffUpdate]);
+      if (inProgressRes.status !== 200) {
+        return inProgressRes;
+      }
 
-    // The staff update must succeed unconditionally (returns the row).
-    expect(staffRes.id).toBe(booking.id);
-    expect(staffRes.status).toBe('NO_SHOW');
+      return request(app)
+        .put(`/api/v1/appointments/${booking.id}/status`)
+        .set(authHeader(fixtures.barber.clerkUserId))
+        .send({ status: 'NO_SHOW' });
+    })();
 
-    // The public cancel must observe the terminal state and return 409
-    // with the correct stable code (ALREADY_TERMINAL once NO_SHOW).
-    expect(publicRes.status).toBe(409);
-    expect(publicRes.body.error.code).toBe('PUBLIC_BOOKING_ALREADY_TERMINAL');
+    const [publicRes, staffRes] = await Promise.all([publicCancel, staffNoShow]);
+    const publicWon = publicRes.status === 200;
+    const staffWon = staffRes.status === 200;
+
+    expect(publicWon).not.toBe(staffWon);
 
     const persisted = await prisma.appointment.findUniqueOrThrow({
       where: { id: booking.id },
     });
-    // The staff transition wins atomically; the public cancel sees
-    // the terminal state and never overwrites it.
-    expect(persisted.status).toBe('NO_SHOW');
-    expect(persisted.cancellationSource).toBeNull();
-    expect(persisted.cancelledByRole).toBeNull();
+
+    if (publicWon) {
+      expect(['APPOINTMENT_TRANSITION_CONFLICT', 'BAD_REQUEST']).toContain(
+        staffRes.body.error.code
+      );
+      expect(persisted.status).toBe('CANCELLED');
+      expect(persisted.cancelledAt).toBeInstanceOf(Date);
+      expect(persisted.cancellationSource).toBe('PUBLIC_BOOKING');
+      expect(persisted.cancelledByRole).toBeNull();
+      expect(persisted.cancelReason).toBe('public race winner');
+      expect(persisted.startedAt).toBeNull();
+      expect(persisted.noShowAt).toBeNull();
+    } else {
+      expect(staffRes.body.data.status).toBe('NO_SHOW');
+      expect(publicRes.status).toBe(409);
+      expect([
+        'PUBLIC_BOOKING_CANCELLATION_CLOSED',
+        'PUBLIC_BOOKING_ALREADY_TERMINAL',
+      ]).toContain(publicRes.body.error.code);
+      expect(persisted.status).toBe('NO_SHOW');
+      expect(persisted.startedAt).toBeInstanceOf(Date);
+      expect(persisted.noShowAt).toBeInstanceOf(Date);
+      expect(persisted.cancelledAt).toBeNull();
+      expect(persisted.cancellationSource).toBeNull();
+      expect(persisted.cancelledByRole).toBeNull();
+      expect(persisted.cancelReason).toBeNull();
+    }
   });
 
   it('is timezone-independent: a UTC instant in the past is closed regardless of the barbershop timezone', async () => {
