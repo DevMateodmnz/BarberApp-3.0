@@ -535,6 +535,14 @@ export default function EmployeesScreen() {
         manageServicesLabel: isExpanded ? t('common.actions.hideServices') : t('common.actions.manageServices'),
         manageServicesTestID: `employee-manage-services-${employee.id}`,
         onManageServices: () => handleToggleAssignments(employee.id),
+        manageScheduleLabel: t('employeeSchedules.openAction'),
+        manageScheduleTestID: `employee-manage-schedule-${employee.id}`,
+        onManageSchedule: () => {
+          router.push({
+            pathname: '/(tabs)/employee-schedule',
+            params: { employeeId: employee.id },
+          });
+        },
         assignmentsExpanded: isExpanded,
         isAssignmentsLoading: isExpanded && isAssignmentsLoading,
         assignedServices: assignedServiceRows,

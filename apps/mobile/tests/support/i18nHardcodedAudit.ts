@@ -50,9 +50,29 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Time-format mask placeholder shared across locales.',
   },
   {
+    file: 'src/components/EmployeeScheduleScreenView.tsx',
+    literal: 'HH:mm',
+    reason: 'Time-format mask placeholder shared across locales.',
+  },
+  {
     file: 'app/(tabs)/employees.tsx',
     literal: '2-digit',
     reason: 'Intl date-format option value for localized invitation timestamps, not interface copy.',
+  },
+  {
+    file: 'src/components/CustomerDetailScreenView.tsx',
+    literal: '2-digit',
+    reason: 'Intl time-format option value for localized appointment timestamps, not interface copy.',
+  },
+  {
+    file: 'src/components/AppointmentRescheduleScreenView.tsx',
+    literal: '2-digit',
+    reason: 'Intl time-format option value for localized reschedule history timestamps, not interface copy.',
+  },
+  {
+    file: 'src/lib/notificationOperationsPresentation.ts',
+    literal: '2-digit',
+    reason: 'Intl time-format option value for localized notification timestamps, not interface copy.',
   },
   {
     file: 'src/i18n/errors.ts',
@@ -170,6 +190,21 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
   },
   {
+    file: 'src/lib/appointments.ts',
+    literal: 'Failed to reschedule appointment',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/appointments.ts',
+    literal: 'Failed to fetch appointment changes',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/appointments.ts',
+    literal: 'Failed to fetch appointment notifications',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
     file: 'src/lib/employeeInvitations.ts',
     literal: 'Failed to create employee invitation',
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
@@ -190,9 +225,99 @@ export const HARD_CODED_STRING_ALLOWLIST: readonly AllowlistEntry[] = [
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
   },
   {
+    file: 'src/lib/employeeSchedules.ts',
+    literal: 'Failed to fetch employee schedule',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeSchedules.ts',
+    literal: 'Failed to update employee schedule',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeSchedules.ts',
+    literal: 'Failed to update employee schedule exception',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/employeeSchedules.ts',
+    literal: 'Failed to delete employee schedule exception',
+    reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
     file: 'src/lib/employeeInvitations.ts',
     literal: 'Failed to reconcile employee invitation onboarding',
     reason: 'Internal fallback for ApiError construction when the backend omits an error message.',
+  },
+  {
+    file: 'src/lib/physicalQaTrace.ts',
+    literal: 'MobileMutationError',
+    reason: 'Internal Error.name value used for safe diagnostics, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaTrace.ts',
+    literal: 'AbortError',
+    reason: 'Platform error classifier name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaTrace.ts',
+    literal: 'CanceledError',
+    reason: 'Axios error classifier name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaTrace.ts',
+    literal: 'PublicRuntimeConfigError',
+    reason: 'Runtime configuration error classifier name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'application/json',
+    reason: 'HTTP media type for the development-only QA evidence transport, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'Content-Type',
+    reason: 'HTTP protocol header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'X-BarberApp-QA-Client',
+    reason: 'Development-only runtime identity header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'X-BarberApp-QA-Head',
+    reason: 'Development-only runtime identity header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'X-BarberApp-QA-Runtime',
+    reason: 'Development-only runtime identity header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'X-BarberApp-QA-Session',
+    reason: 'Development-only ephemeral session header name, not interface copy.',
+  },
+  {
+    file: 'src/lib/physicalQaRuntime.ts',
+    literal: 'Physical-QA transport request failed',
+    reason: 'Internal transport error detail; the blocking UI renders translated safe copy.',
+  },
+  {
+    file: 'src/lib/promotions.ts',
+    literal: 'Authentication token retrieval failed',
+    reason: 'Internal pre-request error detail; the screen maps its safe code to translated interface copy.',
+  },
+  {
+    file: 'src/lib/promotions.ts',
+    literal: 'Authentication token unavailable',
+    reason: 'Internal pre-request error detail; the screen maps its safe code to translated interface copy.',
+  },
+  {
+    file: 'src/lib/promotions.ts',
+    literal: 'X-Request-Id',
+    reason: 'HTTP correlation header name, not interface copy.',
   },
 ] as const;
 

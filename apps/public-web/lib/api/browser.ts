@@ -3,6 +3,8 @@ import type {
   PublicBarber,
   PublicBookingConfirmation,
   PublicCreateAppointmentPayload,
+  PublicPaymentStatus,
+  PublicPromotionQuote,
 } from '@/lib/api/types';
 
 interface ApiEnvelope<T> {
@@ -87,5 +89,36 @@ export function submitPublicBooking(input: {
       },
       body: JSON.stringify(input.payload),
     }
+  );
+}
+
+export function quotePublicPromotion(input: {
+  slug: string;
+  serviceId: string;
+  code: string;
+  clientPhone?: string;
+}) {
+  return fetchEnvelope<PublicPromotionQuote>(
+    `/api/public-booking/shops/${encodeURIComponent(input.slug)}/promotions/quote`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        serviceId: input.serviceId,
+        code: input.code,
+        ...(input.clientPhone?.trim() ? { clientPhone: input.clientPhone.trim() } : {}),
+      }),
+    },
+  );
+}
+
+export function loadPublicPaymentStatus(input: {
+  slug: string;
+  reference: string;
+}) {
+  return fetchEnvelope<PublicPaymentStatus>(
+    `/api/public-booking/shops/${encodeURIComponent(input.slug)}/bookings/${encodeURIComponent(input.reference)}/payment`
   );
 }

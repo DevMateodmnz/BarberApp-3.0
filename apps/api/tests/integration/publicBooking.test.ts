@@ -12,7 +12,7 @@ import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { prisma } from '../../src/lib/prisma.js';
 import { createPublicCatalogRouter } from '../../src/routes/publicCatalog.js';
 import { provisionBarbershopScheduleException } from '../../src/services/scheduleExceptionProvisioningService.js';
-import { getNextLocalWeekdayDate } from '../helpers/timezone.js';
+import { getActiveTestTimeWindow, getNextLocalWeekdayDate } from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
 const TEST_TIMEZONE = 'America/Argentina/Tucuman';
@@ -139,6 +139,12 @@ async function getFirstPublicSlot(localDate: string) {
 beforeAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+  await prisma.promotionRedemption.deleteMany();
+  await prisma.promotionCustomerUsage.deleteMany();
+  await prisma.promotionService.deleteMany();
+  await prisma.promotion.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.barbershopScheduleExceptionInterval.deleteMany();
@@ -276,6 +282,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.barbershopScheduleExceptionInterval.deleteMany();
   await prisma.barbershopScheduleException.deleteMany();
@@ -286,6 +294,12 @@ beforeEach(async () => {
 afterAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.publicBookingIdempotency.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+  await prisma.promotionRedemption.deleteMany();
+  await prisma.promotionCustomerUsage.deleteMany();
+  await prisma.promotionService.deleteMany();
+  await prisma.promotion.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.barbershopScheduleExceptionInterval.deleteMany();
@@ -311,7 +325,7 @@ describe('POST /api/v1/public/barbershops/:slug/appointments', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.bookingReference).toMatch(/^pb_[A-Z2-7]{16}$/u);
+    expect(res.body.data.bookingReference).toMatch(/^pb_[A-Z2-7]{20}$/u);
     expect(res.body.data.barbershopName).toBe('Booking Shop');
     expect(res.body.data.serviceName).toBe(fixtures.service30.name);
     expect(res.body.data.barberName).toBe(fixtures.barber.name);
@@ -555,5 +569,67 @@ describe('POST /api/v1/public/barbershops/:slug/appointments', () => {
     expect(first.status).toBe(201);
     expect(second.status).toBe(429);
     expect(second.body.error.code).toBe('PUBLIC_BOOKING_WRITE_RATE_LIMITED');
+  });
+
+  it('returns a safe public promotion quote without leaking internal identifiers', async () => {
+    const activeWindow = getActiveTestTimeWindow();
+
+    await prisma.customer.upsert({
+      where: {
+        barbershopId_phoneNormalized: {
+          barbershopId: fixtures.publishedShop.id,
+          phoneNormalized: '+543811234567',
+        },
+      },
+      create: {
+        barbershopId: fixtures.publishedShop.id,
+        name: 'Public Promotion Customer',
+        phone: '+543811234567',
+        phoneNormalized: '+543811234567',
+        firstSeenAt: new Date('2026-07-01T12:00:00.000Z'),
+        lastSeenAt: new Date('2026-07-01T12:00:00.000Z'),
+      },
+      update: {
+        name: 'Public Promotion Customer',
+      },
+    });
+
+    await prisma.promotion.create({
+      data: {
+        barbershopId: fixtures.publishedShop.id,
+        name: 'Bienvenida 25%',
+        code: 'bienvenida 25',
+        codeNormalized: 'BIENVENIDA25',
+        discountType: 'PERCENTAGE',
+        percentageBasisPoints: 2500,
+        startsAt: activeWindow.startsAt,
+        endsAt: activeWindow.endsAt,
+        appliesToPublicBookings: true,
+        appliesToStaffBookings: true,
+        serviceScope: 'ALL',
+        createdByUserId: fixtures.owner.id,
+        updatedByUserId: fixtures.owner.id,
+      },
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/public/barbershops/${fixtures.publishedShop.slug}/promotions/quote`)
+      .send({
+        serviceId: fixtures.service30.id,
+        code: ' bienvenida 25 ',
+        clientPhone: '+543811234567',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      promotionName: 'Bienvenida 25%',
+      servicePriceCents: 3200,
+      discountCents: 800,
+      finalPriceCents: 2400,
+      currency: 'ARS',
+    });
+    expect(response.body.data).not.toHaveProperty('promotionId');
+    expect(response.body.data).not.toHaveProperty('customerId');
+    expect(response.body.data).not.toHaveProperty('remainingUsage');
   });
 });

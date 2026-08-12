@@ -18,7 +18,9 @@ export type AppointmentCreationField =
   | 'selectedSlot'
   | 'clientName'
   | 'clientPhone'
-  | 'notes';
+  | 'clientEmail'
+  | 'notes'
+  | 'promotionCode';
 
 export type AppointmentCreationValidationKey =
   | 'employeeRequired'
@@ -29,7 +31,9 @@ export type AppointmentCreationValidationKey =
   | 'clientNameRequired'
   | 'clientNameTooLong'
   | 'clientPhoneTooLong'
+  | 'clientEmailInvalid'
   | 'notesTooLong'
+  | 'promotionCodeInvalid'
   | 'invalidDate'
   | 'staleSlot';
 
@@ -67,12 +71,15 @@ export interface AppointmentCreationErrorDescriptor {
 
 export interface AppointmentCreationState {
   context: AppointmentCreationContext;
+  customerId: string | null;
   employeeId: string | null;
   serviceId: string | null;
+  promotionCode: string;
   localDate: string;
   selectedSlotStartAt: string | null;
   clientName: string;
   clientPhone: string;
+  clientEmail: string;
   notes: string;
   availableEmployees: EmployeeListItem[];
   availableServices: Service[];
@@ -101,6 +108,7 @@ export type BuildStaffAppointmentPayloadResult =
 
 const CLIENT_NAME_MAX_LENGTH = 200;
 const CLIENT_PHONE_MAX_LENGTH = 50;
+const CLIENT_EMAIL_MAX_LENGTH = 200;
 const NOTES_MAX_LENGTH = 500;
 
 function trimOptionalText(value?: string | null): string | undefined {
@@ -114,6 +122,14 @@ function trimOptionalText(value?: string | null): string | undefined {
 
 function normalizeClientName(value: string): string {
   return value.trim();
+}
+
+export function normalizePromotionCode(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/gu, '');
+}
+
+function isValidClientEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
 }
 
 function lowerMessage(error: unknown): string {
@@ -164,12 +180,15 @@ export function createInitialAppointmentCreationState(
 ): AppointmentCreationState {
   return {
     context,
+    customerId: null,
     employeeId: context.role === 'BARBER' ? context.authenticatedEmployeeId : null,
     serviceId: null,
+    promotionCode: '',
     localDate: '',
     selectedSlotStartAt: null,
     clientName: '',
     clientPhone: '',
+    clientEmail: '',
     notes: '',
     availableEmployees: [],
     availableServices: [],
@@ -180,6 +199,31 @@ export function createInitialAppointmentCreationState(
     submissionError: null,
     fieldErrors: {},
     activeAvailabilityRequestKey: null,
+  };
+}
+
+export function applyAppointmentCreationCustomerPrefill(
+  state: AppointmentCreationState,
+  input: {
+    customerId: string;
+    clientName: string;
+    clientPhone: string;
+    clientEmail?: string | null;
+  }
+): AppointmentCreationState {
+  return {
+    ...state,
+    customerId: input.customerId,
+    clientName: input.clientName,
+    clientPhone: input.clientPhone,
+    clientEmail: input.clientEmail ?? '',
+    submissionError: null,
+    fieldErrors: {
+      ...state.fieldErrors,
+      clientName: undefined,
+      clientPhone: undefined,
+      clientEmail: undefined,
+    },
   };
 }
 
@@ -257,9 +301,12 @@ export function syncAppointmentCreationContext(
 
   return {
     ...createInitialAppointmentCreationState(nextContext),
+    customerId: state.customerId,
     clientName: state.clientName,
     clientPhone: state.clientPhone,
+    clientEmail: state.clientEmail,
     notes: state.notes,
+    promotionCode: state.promotionCode,
     localDate: state.localDate,
   };
 }
@@ -283,6 +330,21 @@ export function applyAppointmentCreationEmployeeChange(
       serviceId: undefined,
       localDate: undefined,
       selectedSlot: undefined,
+    },
+    submissionError: null,
+  };
+}
+
+export function applyAppointmentCreationPromotionCodeChange(
+  state: AppointmentCreationState,
+  promotionCode: string
+): AppointmentCreationState {
+  return {
+    ...state,
+    promotionCode,
+    fieldErrors: {
+      ...state.fieldErrors,
+      promotionCode: undefined,
     },
     submissionError: null,
   };
@@ -504,9 +566,25 @@ export function validateAppointmentCreationDraft(
     fieldErrors.clientPhone = 'clientPhoneTooLong';
   }
 
+  const trimmedClientEmail = trimOptionalText(state.clientEmail);
+  if (
+    trimmedClientEmail
+    && (
+      trimmedClientEmail.length > CLIENT_EMAIL_MAX_LENGTH
+      || !isValidClientEmail(trimmedClientEmail)
+    )
+  ) {
+    fieldErrors.clientEmail = 'clientEmailInvalid';
+  }
+
   const trimmedNotes = trimOptionalText(state.notes);
   if (trimmedNotes && trimmedNotes.length > NOTES_MAX_LENGTH) {
     fieldErrors.notes = 'notesTooLong';
+  }
+
+  const normalizedPromotionCode = normalizePromotionCode(state.promotionCode);
+  if (normalizedPromotionCode && !/^[A-Z0-9_-]{3,32}$/u.test(normalizedPromotionCode)) {
+    fieldErrors.promotionCode = 'promotionCodeInvalid';
   }
 
   if (!state.selectedSlotStartAt) {
@@ -561,10 +639,15 @@ export function buildCreateStaffAppointmentPayload(
     startAt: selectedSlot.startAt,
     clientName: normalizeClientName(state.clientName),
     ...(state.context.role === 'OWNER' ? { employeeId: effectiveEmployeeId } : {}),
+    ...(state.customerId ? { customerId: state.customerId } : {}),
     ...(trimOptionalText(state.clientPhone)
       ? { clientPhone: trimOptionalText(state.clientPhone) }
       : {}),
+    ...(trimOptionalText(state.clientEmail)
+      ? { clientEmail: trimOptionalText(state.clientEmail) }
+      : {}),
     ...(trimOptionalText(state.notes) ? { notes: trimOptionalText(state.notes) } : {}),
+    ...(normalizePromotionCode(state.promotionCode) ? { promotionCode: normalizePromotionCode(state.promotionCode) } : {}),
   };
 
   return {
@@ -618,6 +701,19 @@ export function mapAppointmentCreationError(
         key: 'appointmentTimeInvalid',
         shouldClearSelectedSlot: false,
         shouldRefreshAvailability: false,
+      };
+    }
+
+    if (
+      error.code === 'EMPLOYEE_NOT_WORKING' ||
+      error.code === 'EMPLOYEE_TIME_OFF' ||
+      error.code === 'EMPLOYEE_SCHEDULE_CONFLICT' ||
+      error.code === 'BARBERSHOP_CLOSED'
+    ) {
+      return {
+        key: 'appointmentOutsideWorkingHours',
+        shouldClearSelectedSlot: true,
+        shouldRefreshAvailability: true,
       };
     }
 

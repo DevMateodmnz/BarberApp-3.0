@@ -3,6 +3,16 @@ import { getLocalDateStringInTimeZone, getUtcRangeForLocalDate } from '../../src
 export const TEST_BARBERSHOP_TIMEZONE = 'America/Argentina/Buenos_Aires';
 export const FIXED_TEST_NOW = new Date('2026-06-23T00:32:00.000Z');
 
+export function getActiveTestTimeWindow(
+  reference: Date = new Date(),
+  radiusMs = 24 * 60 * 60 * 1_000,
+): { startsAt: Date; endsAt: Date } {
+  return {
+    startsAt: new Date(reference.getTime() - radiusMs),
+    endsAt: new Date(reference.getTime() + radiusMs),
+  };
+}
+
 function addDaysToDateString(dateStr: string, days: number): string {
   const [year, month, day] = dateStr.split('-').map(Number) as [number, number, number];
   const next = new Date(Date.UTC(year, month - 1, day + days));

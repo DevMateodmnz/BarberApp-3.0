@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -13,7 +13,9 @@ import {
 } from '@/components/AppointmentCreateScreenView.js';
 import {
   applyAppointmentCreationDateChange,
+  applyAppointmentCreationCustomerPrefill,
   applyAppointmentCreationEmployeeChange,
+  applyAppointmentCreationPromotionCodeChange,
   applyAppointmentCreationServiceChange,
   beginAppointmentCreationAvailabilityRequest,
   buildAppointmentAvailabilityRequestKey,
@@ -30,14 +32,20 @@ import {
   type AppointmentCreationState,
 } from '@/lib/appointmentCreationDomain.js';
 import { submitAppointmentCreationFlow } from '@/lib/appointmentCreationFlow.js';
-import { createStaffAppointment, fetchAppointmentAvailability } from '@/lib/appointments.js';
+import {
+  createStaffAppointment,
+  fetchAppointmentAvailability,
+  lookupCustomerByPhone,
+  type CustomerInsights,
+} from '@/lib/appointments.js';
 import { useAppointmentsStore } from '@/lib/appointmentsStore.js';
 import { fetchMyAssignedServices, fetchEmployeeServices } from '@/lib/employeeServices.js';
 import { fetchEmployees } from '@/lib/employees.js';
 import { getTodayDateString, addDaysToDateString } from '@/lib/format.js';
 import { useFlashStore } from '@/lib/flashStore.js';
+import { quoteStaffPromotion } from '@/lib/promotions.js';
 import { useContextStore } from '@/lib/store.js';
-import type { CurrentUserContext } from '@/lib/types.js';
+import type { CurrentUserContext, StaffPromotionQuote } from '@/lib/types.js';
 
 function toAppointmentCreationContext(context: CurrentUserContext | null): AppointmentCreationContext | null {
   if (!context || (context.role !== 'OWNER' && context.role !== 'BARBER')) {
@@ -53,6 +61,15 @@ function toAppointmentCreationContext(context: CurrentUserContext | null): Appoi
 
 export default function AppointmentCreateScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    prefillCustomerId?: string;
+    prefillCustomerName?: string;
+    prefillCustomerPhone?: string;
+    prefillCustomerEmail?: string;
+    prefillEmployeeId?: string;
+    prefillDate?: string;
+    prefillStartAt?: string;
+  }>();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { t } = useTranslation();
   const getTokenRef = useRef(getToken);
@@ -75,6 +92,14 @@ export default function AppointmentCreateScreen() {
   const employeeRequestIdRef = useRef(0);
   const servicesRequestIdRef = useRef(0);
   const availabilityRequestRef = useRef<ReturnType<typeof getAppointmentCreationAvailabilityRequest> | null>(null);
+  const [customerInsights, setCustomerInsights] = useState<CustomerInsights | null>(null);
+  const [promotionQuote, setPromotionQuote] = useState<Extract<StaffPromotionQuote, { eligible: true }> | null>(null);
+  const [promotionMessage, setPromotionMessage] = useState<string | null>(null);
+  const [isQuotingPromotion, setIsQuotingPromotion] = useState(false);
+  const customerLookupRequestIdRef = useRef(0);
+  const promotionRequestIdRef = useRef(0);
+  const appliedPrefillKeyRef = useRef<string | null>(null);
+  const appliedSchedulePrefillKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isSignedIn || !getTokenRef.current || context) {
@@ -96,6 +121,47 @@ export default function AppointmentCreateScreen() {
         : createInitialAppointmentCreationState(creationContext)
     ));
   }, [creationContext]);
+
+  useEffect(() => {
+    const customerId = typeof params.prefillCustomerId === 'string'
+      ? params.prefillCustomerId
+      : null;
+    const clientName = typeof params.prefillCustomerName === 'string'
+      ? params.prefillCustomerName
+      : null;
+    const clientPhone = typeof params.prefillCustomerPhone === 'string'
+      ? params.prefillCustomerPhone
+      : null;
+    const clientEmail = typeof params.prefillCustomerEmail === 'string'
+      ? params.prefillCustomerEmail
+      : null;
+
+    if (!customerId || !clientName || !clientPhone) {
+      return;
+    }
+
+    const prefillKey = `${customerId}::${clientName}::${clientPhone}::${clientEmail ?? ''}`;
+    if (appliedPrefillKeyRef.current === prefillKey) {
+      return;
+    }
+
+    appliedPrefillKeyRef.current = prefillKey;
+    setCreationState((current) => (
+      current
+        ? applyAppointmentCreationCustomerPrefill(current, {
+            customerId,
+            clientName,
+            clientPhone,
+            clientEmail,
+          })
+        : current
+    ));
+  }, [
+    params.prefillCustomerId,
+    params.prefillCustomerName,
+    params.prefillCustomerPhone,
+    params.prefillCustomerEmail,
+  ]);
 
   const loadOwnerEmployees = useCallback(async () => {
     if (!creationContext || creationContext.role !== 'OWNER' || !creationContext.barbershopId || !getTokenRef.current) {
@@ -173,6 +239,50 @@ export default function AppointmentCreateScreen() {
       setServicesError(error instanceof Error ? error.message : t('errors.unknownApi'));
     }
   }, [creationContext, t]);
+
+  useEffect(() => {
+    const prefillDate = typeof params.prefillDate === 'string' ? params.prefillDate : null;
+    const prefillEmployeeId = typeof params.prefillEmployeeId === 'string'
+      ? params.prefillEmployeeId
+      : null;
+    const prefillStartAt = typeof params.prefillStartAt === 'string'
+      ? params.prefillStartAt
+      : null;
+
+    if (!creationState || !prefillDate) {
+      return;
+    }
+
+    const schedulePrefillKey = `${prefillEmployeeId ?? 'self'}::${prefillDate}::${prefillStartAt ?? ''}`;
+    if (appliedSchedulePrefillKeyRef.current === schedulePrefillKey) {
+      return;
+    }
+
+    appliedSchedulePrefillKeyRef.current = schedulePrefillKey;
+    setCreationState((current) => {
+      if (!current) {
+        return current;
+      }
+
+      let nextState = current;
+      if (current.context.role === 'OWNER' && prefillEmployeeId) {
+        nextState = applyAppointmentCreationEmployeeChange(nextState, prefillEmployeeId);
+      }
+
+      nextState = applyAppointmentCreationDateChange(nextState, prefillDate);
+      return nextState;
+    });
+
+    if (prefillEmployeeId) {
+      void loadServicesForEmployee(prefillEmployeeId);
+    }
+  }, [
+    creationState,
+    loadServicesForEmployee,
+    params.prefillDate,
+    params.prefillEmployeeId,
+    params.prefillStartAt,
+  ]);
 
   const availabilityRequest = useMemo(
     () => (creationState ? getAppointmentCreationAvailabilityRequest(creationState) : null),
@@ -258,6 +368,27 @@ export default function AppointmentCreateScreen() {
     };
   }, [availabilityRequestKey, availabilityReloadNonce, creationContext?.barbershopId]);
 
+  useEffect(() => {
+    const preferredStartAt = typeof params.prefillStartAt === 'string'
+      ? params.prefillStartAt
+      : null;
+    if (!preferredStartAt || !creationState?.availability) {
+      return;
+    }
+
+    const matchingSlot = creationState.availability.slots.find(
+      (slot) => slot.startAt === preferredStartAt,
+    );
+
+    if (!matchingSlot || creationState.selectedSlotStartAt === preferredStartAt) {
+      return;
+    }
+
+    setCreationState((current) => (
+      current ? selectAppointmentCreationSlot(current, preferredStartAt) : current
+    ));
+  }, [creationState?.availability, creationState?.selectedSlotStartAt, params.prefillStartAt]);
+
   const handleEmployeeSelect = useCallback((employeeId: string) => {
     setCreationState((current) => (
       current ? applyAppointmentCreationEmployeeChange(current, employeeId) : current
@@ -271,6 +402,8 @@ export default function AppointmentCreateScreen() {
     setCreationState((current) => (
       current ? applyAppointmentCreationServiceChange(current, serviceId) : current
     ));
+    setPromotionQuote(null);
+    setPromotionMessage(null);
   }, []);
 
   const handleSelectToday = useCallback(() => {
@@ -333,6 +466,7 @@ export default function AppointmentCreateScreen() {
       current
         ? {
           ...current,
+          customerId: null,
           clientPhone: value,
           submissionError: null,
           fieldErrors: {
@@ -342,7 +476,86 @@ export default function AppointmentCreateScreen() {
         }
         : current
     ));
-  }, []);
+    setPromotionQuote(null);
+    setPromotionMessage(value.trim() ? t('appointmentCreation.messages.promotionNeedsReapply') : null);
+  }, [t]);
+
+  /**
+   * Debounced repeat-customer lookup. The backend requires a
+   * canonical E.164 phone and returns a zeroed-out response when no
+   * history exists, so the UI can render an empty state without a
+   * special branch. We keep the most recent request id and ignore
+   * stale responses (out-of-order completion).
+   */
+  useEffect(() => {
+    const phone = creationState?.clientPhone?.trim() ?? '';
+    const barbershopId = creationContext?.barbershopId;
+    if (!barbershopId) {
+      setCustomerInsights(null);
+      return;
+    }
+
+    if (!/^\+[1-9]\d{7,19}$/u.test(phone)) {
+      // Don't query until the user has typed a real E.164 number.
+      setCustomerInsights(null);
+      return;
+    }
+
+    const requestId = customerLookupRequestIdRef.current + 1;
+    customerLookupRequestIdRef.current = requestId;
+    const handle = setTimeout(() => {
+      if (customerLookupRequestIdRef.current !== requestId) {
+        return;
+      }
+      const token = getTokenRef.current;
+      if (!token) {
+        return;
+      }
+      void lookupCustomerByPhone(token, barbershopId, phone)
+        .then((insights) => {
+          if (customerLookupRequestIdRef.current !== requestId) {
+            return;
+          }
+          setCustomerInsights(insights);
+          setCreationState((current) => (
+            current && current.clientPhone.trim() === phone
+              ? {
+                  ...current,
+                  customerId: insights.customerId,
+                }
+              : current
+          ));
+        })
+        .catch(() => {
+          if (customerLookupRequestIdRef.current !== requestId) {
+            return;
+          }
+          setCustomerInsights(null);
+          setCreationState((current) => (
+            current && current.clientPhone.trim() === phone
+              ? {
+                  ...current,
+                  customerId: null,
+                }
+              : current
+          ));
+        });
+    }, 400);
+
+    return () => {
+      clearTimeout(handle);
+    };
+  }, [creationState?.clientPhone, creationContext?.barbershopId]);
+
+  const customerWarning = useMemo(() => {
+    if (!customerInsights || customerInsights.noShowCount <= 0) {
+      return null;
+    }
+    return {
+      noShowCount: customerInsights.noShowCount,
+      lastNoShowAt: customerInsights.lastNoShowAt,
+    };
+  }, [customerInsights]);
 
   const handleNotesChange = useCallback((value: string) => {
     setCreationState((current) => (
@@ -359,6 +572,99 @@ export default function AppointmentCreateScreen() {
         : current
     ));
   }, []);
+
+  const handleClientEmailChange = useCallback((value: string) => {
+    setCreationState((current) => (
+      current
+        ? {
+          ...current,
+          clientEmail: value,
+          submissionError: null,
+          fieldErrors: {
+            ...current.fieldErrors,
+            clientEmail: undefined,
+          },
+        }
+        : current
+    ));
+  }, []);
+
+  const handlePromotionCodeChange = useCallback((value: string) => {
+    setCreationState((current) => (
+      current ? applyAppointmentCreationPromotionCodeChange(current, value) : current
+    ));
+    setPromotionQuote(null);
+    setPromotionMessage(null);
+  }, []);
+
+  const handleRemovePromotion = useCallback(() => {
+    setCreationState((current) => (
+      current ? applyAppointmentCreationPromotionCodeChange(current, '') : current
+    ));
+    setPromotionQuote(null);
+    setPromotionMessage(null);
+  }, []);
+
+  const handleApplyPromotion = useCallback(async (codeOverride?: string) => {
+    if (!creationContext?.barbershopId || !creationState?.serviceId || !getTokenRef.current) {
+      setPromotionQuote(null);
+      setPromotionMessage(t('appointmentCreation.messages.promotionSelectServiceFirst'));
+      return;
+    }
+
+    const trimmedCode = (codeOverride ?? creationState.promotionCode).trim();
+    if (!trimmedCode) {
+      setPromotionQuote(null);
+      setPromotionMessage(t('appointmentCreation.messages.promotionEnterCode'));
+      return;
+    }
+
+    const requestId = promotionRequestIdRef.current + 1;
+    promotionRequestIdRef.current = requestId;
+    setIsQuotingPromotion(true);
+    setPromotionMessage(null);
+
+    try {
+      const quote = await quoteStaffPromotion(getTokenRef.current, creationContext.barbershopId, {
+        serviceId: creationState.serviceId,
+        code: trimmedCode,
+        clientPhone: creationState.clientPhone,
+      });
+
+      if (promotionRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (!quote.eligible) {
+        setPromotionQuote(null);
+        setPromotionMessage(t('appointmentCreation.messages.promotionUnavailable'));
+        return;
+      }
+
+      setCreationState((current) => (
+        current ? applyAppointmentCreationPromotionCodeChange(current, quote.promotion.codeNormalized) : current
+      ));
+      setPromotionQuote(quote);
+      setPromotionMessage(t('appointmentCreation.messages.promotionApplied', { name: quote.promotion.name }));
+    } catch (error) {
+      if (promotionRequestIdRef.current !== requestId) {
+        return;
+      }
+      setPromotionQuote(null);
+      setPromotionMessage(error instanceof Error ? error.message : t('appointmentCreation.messages.promotionUnavailable'));
+    } finally {
+      if (promotionRequestIdRef.current === requestId) {
+        setIsQuotingPromotion(false);
+      }
+    }
+  }, [creationContext?.barbershopId, creationState, t]);
+
+  const handleApplyLoyaltyReward = useCallback((code: string) => {
+    setCreationState((current) => (
+      current ? applyAppointmentCreationPromotionCodeChange(current, code) : current
+    ));
+    void handleApplyPromotion(code);
+  }, [handleApplyPromotion]);
 
   const refreshAvailability = useCallback(async () => {
     setAvailabilityReloadNonce((current) => current + 1);
@@ -518,13 +824,13 @@ export default function AppointmentCreateScreen() {
       localDate: creationState.localDate,
       localStartTime: selectedSlot.localStartTime,
       localEndTime: selectedSlot.localEndTime,
-      priceCents: selectedService.priceCents,
+      priceCents: promotionQuote?.finalPriceCents ?? selectedService.priceCents,
       currency: selectedService.currency,
       serviceName: selectedService.name,
       durationMinutes: selectedService.durationMinutes,
       t,
     });
-  }, [creationState, selectedEmployeeName, t]);
+  }, [creationState, promotionQuote, selectedEmployeeName, t]);
 
   if (!isLoaded || !isSignedIn) {
     return null;
@@ -552,7 +858,14 @@ export default function AppointmentCreateScreen() {
       slotOptions={slotOptions}
       clientName={creationState?.clientName ?? ''}
       clientPhone={creationState?.clientPhone ?? ''}
+      clientEmail={creationState?.clientEmail ?? ''}
       notes={creationState?.notes ?? ''}
+      promotionCode={creationState?.promotionCode ?? ''}
+      promotionQuote={promotionQuote}
+      promotionMessage={promotionMessage}
+      isQuotingPromotion={isQuotingPromotion}
+      customerWarning={customerWarning}
+      customerLoyalty={customerInsights?.loyalty ?? null}
       fieldErrors={creationState?.fieldErrors ?? {}}
       submissionErrorKey={creationState?.submissionError?.key ?? null}
       summary={summary}
@@ -573,7 +886,14 @@ export default function AppointmentCreateScreen() {
       }}
       onClientNameChange={handleClientNameChange}
       onClientPhoneChange={handleClientPhoneChange}
+      onClientEmailChange={handleClientEmailChange}
       onNotesChange={handleNotesChange}
+      onPromotionCodeChange={handlePromotionCodeChange}
+      onApplyPromotion={() => {
+        void handleApplyPromotion();
+      }}
+      onApplyLoyaltyReward={handleApplyLoyaltyReward}
+      onRemovePromotion={handleRemovePromotion}
       onSubmit={() => {
         void handleSubmit();
       }}

@@ -60,6 +60,8 @@ function mockClerkUser(input: {
 
 beforeAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -160,6 +162,8 @@ beforeEach(async () => {
 afterAll(async () => {
   vi.restoreAllMocks();
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();

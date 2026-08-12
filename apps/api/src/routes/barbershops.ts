@@ -32,22 +32,55 @@ import { CreateEmployeeSchema } from '../schemas/employee.js';
 import { CreateEmployeeInvitationSchema } from '../schemas/employeeInvitation.js';
 import { AssignServiceSchema } from '../schemas/employeeService.js';
 import {
+  UpdateEmployeeScheduleSchema,
+  UpsertEmployeeScheduleExceptionSchema,
+} from '../schemas/employeeSchedule.js';
+import {
   AppointmentAvailabilityQuerySchema,
+  DailyScheduleBoardQuerySchema,
   AppointmentListQuerySchema,
+  CustomerLookupBodySchema,
   StaffCreateAppointmentSchema,
 } from '../schemas/appointment.js';
+import {
+  PromotionCreateSchema,
+  PromotionQuoteSchema,
+  PromotionRedemptionListQuerySchema,
+  PromotionUpdateSchema,
+} from '../schemas/promotion.js';
+import {
+  LoyaltyAdminAdjustmentSchema,
+  LoyaltyLedgerListQuerySchema,
+  LoyaltyProgramUpdateSchema,
+} from '../schemas/loyalty.js';
+import {
+  NotificationOperationsQuerySchema,
+  NotificationRetryBodySchema,
+} from '../schemas/notification.js';
 import { CreateServiceSchema, UpdateServiceSchema } from '../schemas/service.js';
 import * as employeeService from '../services/employeeService.js';
+import * as employeeScheduleService from '../services/employeeScheduleService.js';
 import * as employeeInvitationService from '../services/employeeInvitationService.js';
 import * as serviceService from '../services/serviceService.js';
 import * as appointmentService from '../services/appointmentService.js';
+import * as appointmentNotificationService from '../services/appointmentNotificationService.js';
 import * as workingHoursService from '../services/workingHoursService.js';
 import * as serviceRecordService from '../services/serviceRecordService.js';
 import { CreateServiceRecordSchema, ServiceRecordDateSchema, SummaryPeriodSchema } from '../schemas/serviceRecord.js';
 import { UpdateWorkingHoursSchema } from '../schemas/workingHours.js';
+import {
+  ListCustomersQuerySchema,
+  SearchCustomersBodySchema,
+  UpdateCustomerBodySchema,
+} from '../schemas/customer.js';
+import * as customerService from '../services/customerService.js';
+import * as scheduleBoardService from '../services/scheduleBoardService.js';
+import * as promotionService from '../services/promotionService.js';
+import * as loyaltyService from '../services/loyaltyService.js';
 import { BadRequestError } from '../lib/errors.js';
 import { ValidationError } from '../lib/errors.js';
 import { normalizeEmail } from '../lib/email.js';
+import { prisma } from '../lib/prisma.js';
 
 /** Extracts barbershopId route param with validation */
 function paramBarbershopId(req: Request): string {
@@ -63,11 +96,65 @@ function paramEmployeeId(req: Request): string {
   return id;
 }
 
+function paramPromotionId(req: Request): string {
+  const id = req.params.promotionId;
+  if (!id) throw new BadRequestError('Promotion ID is required');
+  return id;
+}
+
+function parseLoyaltyLedgerListQuery(req: Request) {
+  const parsed = LoyaltyLedgerListQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid loyalty ledger query parameters',
+      parsed.error.flatten(),
+    );
+  }
+
+  return parsed.data;
+}
+
+function parsePromotionRedemptionListQuery(req: Request) {
+  const parsed = PromotionRedemptionListQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid promotion redemption query parameters',
+      parsed.error.flatten(),
+    );
+  }
+
+  return parsed.data;
+}
+
 /** Extracts serviceId route param with validation */
 function paramServiceId(req: Request): string {
   const id = req.params.serviceId;
   if (!id) throw new BadRequestError('Service ID is required');
   return id;
+}
+
+function paramNotificationId(req: Request): string {
+  const id = req.params.notificationId;
+  if (!id) throw new BadRequestError('Notification ID is required');
+  return id;
+}
+
+function paramLocalDate(req: Request): string {
+  const value = req.params.date;
+  if (!value) {
+    throw new BadRequestError('Date is required');
+  }
+
+  const parsed = ServiceRecordDateSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid date route parameter: Date must be in YYYY-MM-DD format (e.g. 2026-06-06)'
+    );
+  }
+
+  return parsed.data;
 }
 
 function parseSummaryQuery(
@@ -105,7 +192,7 @@ function parseSummaryQuery(
 
 function parseAvailabilityQuery(
   req: Request,
-): { serviceId: string; localDate: string } {
+) {
   const parsed = AppointmentAvailabilityQuerySchema.safeParse(req.query);
 
   if (!parsed.success) {
@@ -121,6 +208,32 @@ function parseAppointmentListQuery(req: Request) {
   if (!parsed.success) {
     throw new ValidationError(
       'Invalid appointment list query parameters',
+      parsed.error.flatten()
+    );
+  }
+
+  return parsed.data;
+}
+
+function parseDailyScheduleBoardQuery(req: Request) {
+  const parsed = DailyScheduleBoardQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid daily schedule board query parameters',
+      parsed.error.flatten()
+    );
+  }
+
+  return parsed.data;
+}
+
+function parseNotificationOperationsQuery(req: Request) {
+  const parsed = NotificationOperationsQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError(
+      'Invalid notification operations query parameters',
       parsed.error.flatten()
     );
   }
@@ -425,10 +538,299 @@ router.post(
   }
 );
 
+router.post(
+  '/:barbershopId/promotions/quote',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  validateBody(PromotionQuoteSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const customerPhone = typeof req.body.clientPhone === 'string' ? req.body.clientPhone.trim() : '';
+      const customerId = customerPhone
+        ? await promotionService.findCustomerIdByPhone(paramBarbershopId(req), customerPhone)
+        : null;
+      const service = await prisma.service.findFirstOrThrow({
+        where: {
+          id: req.body.serviceId,
+          barbershopId: paramBarbershopId(req),
+          isActive: true,
+          deletedAt: null,
+        },
+      });
+      const evaluation = await promotionService.evaluatePromotion(prisma, {
+        barbershopId: paramBarbershopId(req),
+        code: req.body.code,
+        serviceId: req.body.serviceId,
+        servicePriceCents: service.priceCents,
+        bookingChannel: 'STAFF',
+        customerId,
+        now: new Date(),
+      });
+      res.json({ success: true, data: evaluation });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/loyalty-program',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const program = await loyaltyService.getLoyaltyProgram(paramBarbershopId(req));
+      res.json({ success: true, data: program });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.put(
+  '/:barbershopId/loyalty-program',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(LoyaltyProgramUpdateSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const program = await loyaltyService.upsertLoyaltyProgram(
+        paramBarbershopId(req),
+        req.userId,
+        req.body,
+      );
+      res.json({ success: true, data: program });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/customers/:customerId/loyalty',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const summary = await loyaltyService.getCustomerLoyaltySummary({
+        barbershopId: paramBarbershopId(req),
+        customerId: req.params.customerId ?? '',
+      });
+      if (!summary) {
+        throw new BadRequestError('Customer not found');
+      }
+      res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/loyalty-ledger',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const query = parseLoyaltyLedgerListQuery(req);
+      const page = await loyaltyService.listLoyaltyLedger({
+        barbershopId: paramBarbershopId(req),
+        customerId: query.customerId,
+        page: query.page,
+        limit: query.limit,
+      });
+      res.json({ success: true, data: page });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:barbershopId/customers/:customerId/loyalty-adjustments',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(LoyaltyAdminAdjustmentSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const summary = await loyaltyService.createLoyaltyAdminAdjustment({
+        barbershopId: paramBarbershopId(req),
+        customerId: req.params.customerId ?? '',
+        userId: req.userId,
+        actorRole: req.userRole,
+        stampDelta: req.body.stampDelta,
+        reason: req.body.reason,
+      });
+      res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/promotions/summary',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const summary = await promotionService.getPromotionSummary(paramBarbershopId(req));
+      res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/promotions',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotions = await promotionService.listBarbershopPromotions(paramBarbershopId(req));
+      res.json({ success: true, data: promotions });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:barbershopId/promotions',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(PromotionCreateSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.createPromotion(
+        paramBarbershopId(req),
+        req.userId,
+        req.body,
+      );
+      res.status(201).json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/promotions/:promotionId',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.getPromotionDetail(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+      );
+      res.json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.patch(
+  '/:barbershopId/promotions/:promotionId',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(PromotionUpdateSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.updatePromotion(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+        req.userId,
+        req.body,
+      );
+      res.json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:barbershopId/promotions/:promotionId/activate',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.setPromotionActive(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+        req.userId,
+        true,
+      );
+      res.json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:barbershopId/promotions/:promotionId/deactivate',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const promotion = await promotionService.setPromotionActive(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+        req.userId,
+        false,
+      );
+      res.json({ success: true, data: promotion });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/:barbershopId/promotions/:promotionId/redemptions',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const page = await promotionService.listPromotionRedemptions(
+        paramBarbershopId(req),
+        paramPromotionId(req),
+        parsePromotionRedemptionListQuery(req),
+      );
+      res.json({ success: true, data: page });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 // ============================================
 // GET /api/v1/barbershops/:barbershopId/employees/:employeeId/appointments
 // List appointments for an employee (OWNER, BARBER scoped)
 // ============================================
+router.get(
+  '/:barbershopId/schedule/day',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await scheduleBoardService.getDailyScheduleBoard({
+        barbershopId: paramBarbershopId(req),
+        query: parseDailyScheduleBoardQuery(req),
+        userId: req.userId,
+        userRole: req.userRole,
+        authenticatedEmployeeId: req.employeeId,
+      });
+      res.json({ success: true, data: schedule });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 router.get(
   '/:barbershopId/employees/:employeeId/appointments',
   requireBarbershopAccess,
@@ -469,6 +871,403 @@ router.get(
       });
       res.json({ success: true, data: availability });
     } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/employees/:employeeId/schedule
+// Read one employee schedule (OWNER, BARBER self)
+// ============================================
+router.get(
+  '/:barbershopId/employees/:employeeId/schedule',
+  requireBarbershopAccess,
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await employeeScheduleService.getEmployeeSchedule({
+        barbershopId: paramBarbershopId(req),
+        employeeId: paramEmployeeId(req),
+        userId: req.userId,
+        userRole: req.userRole,
+        authenticatedEmployeeId: req.employeeId,
+      });
+      res.json({ success: true, data: schedule });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// PUT /api/v1/barbershops/:barbershopId/employees/:employeeId/schedule
+// Update employee schedule mode + recurring custom hours (OWNER only)
+// ============================================
+router.put(
+  '/:barbershopId/employees/:employeeId/schedule',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(UpdateEmployeeScheduleSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await employeeScheduleService.updateEmployeeSchedule({
+        barbershopId: paramBarbershopId(req),
+        employeeId: paramEmployeeId(req),
+        body: req.body,
+        ownerUserId: req.userId,
+      });
+      res.json({ success: true, data: schedule });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// PUT /api/v1/barbershops/:barbershopId/employees/:employeeId/schedule/exceptions/:date
+// Upsert one employee date exception (OWNER only)
+// ============================================
+router.put(
+  '/:barbershopId/employees/:employeeId/schedule/exceptions/:date',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  validateBody(UpsertEmployeeScheduleExceptionSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await employeeScheduleService.upsertEmployeeScheduleException({
+        barbershopId: paramBarbershopId(req),
+        employeeId: paramEmployeeId(req),
+        localDate: paramLocalDate(req),
+        body: req.body,
+        ownerUserId: req.userId,
+      });
+      res.json({ success: true, data: schedule });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// DELETE /api/v1/barbershops/:barbershopId/employees/:employeeId/schedule/exceptions/:date
+// Delete one employee date exception (OWNER only)
+// ============================================
+router.delete(
+  '/:barbershopId/employees/:employeeId/schedule/exceptions/:date',
+  requireBarbershopAccess,
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schedule = await employeeScheduleService.deleteEmployeeScheduleException({
+        barbershopId: paramBarbershopId(req),
+        employeeId: paramEmployeeId(req),
+        localDate: paramLocalDate(req),
+        ownerUserId: req.userId,
+      });
+      res.json({ success: true, data: schedule });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/notifications/summary
+// OWNER-only notification operations summary
+// ============================================
+router.get(
+  '/:barbershopId/notifications/summary',
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const summary =
+        await appointmentNotificationService.getBarbershopNotificationOperationsSummary({
+          barbershopId: paramBarbershopId(req),
+          ownerUserId: req.userId,
+        });
+      res.json({ success: true, data: summary });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/notifications
+// OWNER-only paginated notification operations list
+// ============================================
+router.get(
+  '/:barbershopId/notifications',
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const query = parseNotificationOperationsQuery(req);
+      const notifications =
+        await appointmentNotificationService.listBarbershopNotificationOperations({
+          barbershopId: paramBarbershopId(req),
+          ownerUserId: req.userId,
+          status: query.status,
+          type: query.type,
+          channel: query.channel,
+          dateFrom: query.dateFrom ? new Date(query.dateFrom) : undefined,
+          dateTo: query.dateTo ? new Date(query.dateTo) : undefined,
+          page: query.page,
+          limit: query.limit,
+          sort: query.sort,
+        });
+      res.json({ success: true, data: notifications });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/notifications/:notificationId
+// OWNER-only notification detail + attempt history
+// ============================================
+router.get(
+  '/:barbershopId/notifications/:notificationId',
+  requireRole('OWNER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const detail =
+        await appointmentNotificationService.getBarbershopNotificationOperationsDetail({
+          barbershopId: paramBarbershopId(req),
+          notificationId: paramNotificationId(req),
+          ownerUserId: req.userId,
+        });
+      res.json({ success: true, data: detail });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/notifications/:notificationId/retry
+// OWNER-only manual retry scheduling for FAILED notifications
+// ============================================
+router.post(
+  '/:barbershopId/notifications/:notificationId/retry',
+  requireRole('OWNER'),
+  validateBody(NotificationRetryBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const notification =
+        await appointmentNotificationService.retryFailedAppointmentNotification({
+          barbershopId: paramBarbershopId(req),
+          notificationId: paramNotificationId(req),
+          ownerUserId: req.userId,
+        });
+      res.json({ success: true, data: notification });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/customers/lookup
+// Repeat-customer insights (OWNER + BARBER scoped) used to surface
+// no-show history before a new appointment is committed.
+//
+// Body-only by design: customer phone numbers are PII and must not
+// appear in URLs, access logs, proxies, or referer headers. The
+// response never includes the submitted phone (the caller already
+// knows it; the server would be repeating PII for no reason).
+//
+// Tenant scoping is enforced inside the service so cross-tenant probes
+// return 404 (existence hidden) instead of 403, matching the
+// convention used by `getAppointment`.
+// ============================================
+router.post(
+  '/:barbershopId/customers/lookup',
+  requireRole('OWNER', 'BARBER'),
+  validateBody(CustomerLookupBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = req.body as { phone: string; limit?: number };
+      const insights = await appointmentService.lookupCustomerByPhone({
+        barbershopId: paramBarbershopId(req),
+        phone: body.phone,
+        limit: body.limit ?? 10,
+        userId: req.userId,
+        userRole: req.userRole,
+      });
+
+      res.json({ success: true, data: insights });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/customers
+// List customers in the barbershop with optional search.
+// Search is name-only here (no phone in URL). Phone search is
+// exposed via POST /customers/search to keep PII out of access logs.
+// ============================================
+router.get(
+  '/:barbershopId/customers',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = ListCustomersQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        throw new ValidationError(
+          'Invalid customer list query parameters',
+          parsed.error.flatten()
+        );
+      }
+      const { page, limit, sort } = parsed.data;
+      const result = await customerService.listCustomers({
+        barbershopId: paramBarbershopId(req),
+        sort,
+        limit,
+        offset: (page - 1) * limit,
+        user: { userId: req.userId, userRole: req.userRole },
+      });
+      res.json({
+        success: true,
+        data: {
+          items: result.items,
+          total: result.total,
+          page,
+          limit,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// POST /api/v1/barbershops/:barbershopId/customers/search
+// Body-only search. The query may contain a phone number, which is
+// PII and must not appear in URLs (proxies, referer headers, access
+// logs). Mirrors the no-show lookup endpoint's PII discipline.
+// ============================================
+router.post(
+  '/:barbershopId/customers/search',
+  requireRole('OWNER', 'BARBER'),
+  validateBody(SearchCustomersBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = req.body as {
+        query: string;
+        page: number;
+        limit: number;
+        sort: 'recent' | 'name' | 'no_shows';
+      };
+      const result = await customerService.listCustomers({
+        barbershopId: paramBarbershopId(req),
+        search: body.query,
+        sort: body.sort,
+        limit: body.limit,
+        offset: (body.page - 1) * body.limit,
+        user: { userId: req.userId, userRole: req.userRole },
+      });
+      res.json({
+        success: true,
+        data: {
+          items: result.items,
+          total: result.total,
+          page: body.page,
+          limit: body.limit,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// GET /api/v1/barbershops/:barbershopId/customers/:customerId
+// Full customer detail with counts, recent history, and upcoming
+// appointments. Cross-tenant probes return 404.
+// ============================================
+router.get(
+  '/:barbershopId/customers/:customerId',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const detail = await customerService.getCustomerDetail({
+        barbershopId: paramBarbershopId(req),
+        customerId: req.params.customerId ?? '',
+        user: { userId: req.userId, userRole: req.userRole },
+      });
+      if (!detail) {
+        // Hide existence on cross-tenant probes.
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Customer not found' },
+        });
+        return;
+      }
+      res.json({ success: true, data: detail });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ============================================
+// PATCH /api/v1/barbershops/:barbershopId/customers/:customerId
+// Update mutable customer fields. Phone replacement is not supported
+// (the phone is the identity key; changing it requires a merge
+// policy that is out of scope for this milestone).
+// ============================================
+router.patch(
+  '/:barbershopId/customers/:customerId',
+  requireRole('OWNER', 'BARBER'),
+  validateBody(UpdateCustomerBodySchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = req.body as {
+        name?: string | null;
+        email?: string | null;
+        internalNotes?: string | null;
+      };
+      const updated = await customerService.updateCustomer({
+        barbershopId: paramBarbershopId(req),
+        customerId: req.params.customerId ?? '',
+        name: body.name,
+        email: body.email,
+        internalNotes: body.internalNotes,
+        user: { userId: req.userId, userRole: req.userRole },
+      });
+      if (!updated) {
+        res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Customer not found' },
+        });
+        return;
+      }
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      // Surface the validation errors thrown by the service as 400
+      // with the standard error envelope.
+      if (error instanceof Error && /internalNotes exceeds/.test(error.message)) {
+        next(
+          new ValidationError(error.message, {
+            internalNotes: ['too long'],
+          })
+        );
+        return;
+      }
+      if (error instanceof Error && /name cannot be empty/.test(error.message)) {
+        next(
+          new ValidationError(error.message, {
+            name: ['cannot be empty'],
+          })
+        );
+        return;
+      }
       next(error);
     }
   }

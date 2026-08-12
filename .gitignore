@@ -12,6 +12,7 @@ build/
 .env.local
 .env.*.local
 apps/api/.env.qa.local
+apps/api/.env.physical-qa.local
 
 # IDE
 .idea/
@@ -26,11 +27,13 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+.qa-runtime/
 
 # Test
 coverage/
 apps/public-web/playwright-report/
 apps/public-web/test-results/
+apps/public-web/next-env.d.ts
 
 # Prisma
 apps/api/prisma/*.db

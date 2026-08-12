@@ -53,6 +53,8 @@ const fixtures: TestFixtures = {} as TestFixtures;
 beforeAll(async () => {
   // Clean existing data
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -232,6 +234,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   // Clean appointments between tests (keep users/shops/services/workingHours)
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employee.updateMany({
     where: {
@@ -249,6 +253,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -1316,6 +1322,10 @@ describe('Appointment List Query Correctness', () => {
         clientPhone: null,
         serviceName: input.service.name,
         servicePriceCents: input.service.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: input.service.priceCents,
         serviceDurationMinutes: input.service.durationMinutes,
         serviceCurrency: input.service.currency,
         startAt: input.startAt,
@@ -1346,7 +1356,10 @@ describe('Appointment List Query Correctness', () => {
       service: fixtures.serviceA1,
       startAt: localDateTimeToUtc(monday, '10:00'),
     });
-    const olderAppointment = await createAppointmentRecord({
+    // Different-day appointment: the OWNER filter for `date=monday`
+    // must exclude it. The row is created for its side-effect only;
+    // it is never read after this point.
+    await createAppointmentRecord({
       barbershopId: fixtures.shopA.id,
       employeeId: fixtures.employeeA1.employee.id,
       clientId: fixtures.clientA.id,
@@ -1566,6 +1579,10 @@ describe('Scoped Employee Appointment Listing', () => {
           clientPhone: null,
           serviceName: fixtures.serviceA1.name,
           servicePriceCents: fixtures.serviceA1.priceCents,
+
+          discountCents: 0,
+
+          finalPriceCents: fixtures.serviceA1.priceCents,
           serviceDurationMinutes: fixtures.serviceA1.durationMinutes,
           serviceCurrency: fixtures.serviceA1.currency,
           startAt: localDateTimeToUtc(monday, '10:00'),
@@ -1580,6 +1597,10 @@ describe('Scoped Employee Appointment Listing', () => {
           clientPhone: null,
           serviceName: fixtures.serviceA1.name,
           servicePriceCents: fixtures.serviceA1.priceCents,
+
+          discountCents: 0,
+
+          finalPriceCents: fixtures.serviceA1.priceCents,
           serviceDurationMinutes: fixtures.serviceA1.durationMinutes,
           serviceCurrency: fixtures.serviceA1.currency,
           startAt: localDateTimeToUtc(tuesday, '10:00'),

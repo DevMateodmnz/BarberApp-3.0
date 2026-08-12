@@ -112,7 +112,14 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
     ],
     clientName: 'Mateo',
     clientPhone: '+54 381 555 1234',
+    clientEmail: 'mateo@example.com',
     notes: 'Walk-in guest',
+    promotionCode: '',
+    promotionQuote: null,
+    promotionMessage: null,
+    isQuotingPromotion: false,
+    customerWarning: null,
+    customerLoyalty: null,
     fieldErrors: {},
     submissionErrorKey: null,
     summary: makeSummary(),
@@ -126,10 +133,32 @@ function renderView(overrides: Partial<Parameters<typeof AppointmentCreateScreen
     onRetryAvailability: vi.fn(),
     onClientNameChange: vi.fn(),
     onClientPhoneChange: vi.fn(),
+    onClientEmailChange: vi.fn(),
     onNotesChange: vi.fn(),
+    onPromotionCodeChange: vi.fn(),
+    onApplyPromotion: vi.fn(),
+    onApplyLoyaltyReward: vi.fn(),
+    onRemovePromotion: vi.fn(),
     onSubmit: vi.fn(),
     ...overrides,
   });
+}
+
+// Mirror the production pluralization rule for the warning copy so the
+// assertion is robust to i18next upgrades. The test bootstrap sets the
+// preference to English, so the resolved strings come from `en.ts`.
+function expectedWarningBody(
+  count: number,
+  date: string | null,
+): string {
+  if (date) {
+    return count === 1
+      ? `This number has 1 prior no-show. The last one was on ${date}.`
+      : `This number has ${count} prior no-shows. The last one was on ${date}.`;
+  }
+  return count === 1
+    ? 'This number has 1 prior no-show.'
+    : `This number has ${count} prior no-shows.`;
 }
 
 describe('AppointmentCreateScreenView', () => {
@@ -175,14 +204,17 @@ describe('AppointmentCreateScreenView', () => {
     expect(findByText(tree, 'No barber profile available')).toBeDefined();
   });
 
-  it('uses phone keyboard configuration and multiline notes input', () => {
+  it('uses phone/email keyboard configuration and multiline notes input', () => {
     const tree = renderView();
     const phoneField = findByTestId(tree, 'appointment-create-client-phone');
+    const emailField = findByTestId(tree, 'appointment-create-client-email');
     const notesField = findByTestId(tree, 'appointment-create-notes');
     const phoneInput = findAll(phoneField, (element) => getDisplayName(element) === 'TextInput')[0];
+    const emailInput = findAll(emailField, (element) => getDisplayName(element) === 'TextInput')[0];
     const notesInput = findAll(notesField, (element) => getDisplayName(element) === 'TextInput')[0];
 
     expect((phoneInput?.props as { keyboardType?: string } | undefined)?.keyboardType).toBe('phone-pad');
+    expect((emailInput?.props as { keyboardType?: string } | undefined)?.keyboardType).toBe('email-address');
     expect((notesInput?.props as { multiline?: boolean } | undefined)?.multiline).toBe(true);
   });
 
@@ -225,5 +257,148 @@ describe('AppointmentCreateScreenView', () => {
     expect(findByTestId(tree, 'appointment-create-submit-error')).toBeDefined();
     press(findByTestId(tree, 'appointment-create-retry-availability'));
     expect(onRetryAvailability).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AppointmentCreateScreenView customer history warning', () => {
+  it('hides the warning when no history exists (null customerWarning)', () => {
+    const tree = renderView({ customerWarning: null });
+    expect(() => findByTestId(tree, 'appointment-create-customer-warning')).toThrow();
+  });
+
+  it('does NOT warn when the customer only has completed or cancelled visits (noShowCount === 0)', () => {
+    // Even if a non-zero visitCount were returned, the warning contract
+    // is noShowCount > 0 only. We pass noShowCount: 0 explicitly.
+    const tree = renderView({
+      customerWarning: { noShowCount: 0, lastNoShowAt: null },
+    });
+    expect(() => findByTestId(tree, 'appointment-create-customer-warning')).toThrow();
+  });
+
+  it('warns (singular) when the customer has exactly one prior no-show with a date', () => {
+    const tree = renderView({
+      customerWarning: {
+        noShowCount: 1,
+        lastNoShowAt: '2026-05-04T14:00:00.000Z',
+      },
+    });
+    const banner = findByTestId(tree, 'appointment-create-customer-warning');
+    expect(banner).toBeDefined();
+    expect(
+      (banner.props as { accessibilityRole?: string }).accessibilityRole
+    ).toBe('alert');
+    expect(findByText(tree, 'History associated with the number')).toBeDefined();
+    // Singular form ("1 prior no-show") is rendered.
+    expect(findByText(tree, expectedWarningBody(1, 'May 4, 2026'))).toBeDefined();
+  });
+
+  it('warns (plural) when the customer has multiple prior no-shows', () => {
+    const tree = renderView({
+      customerWarning: {
+        noShowCount: 3,
+        lastNoShowAt: '2026-05-04T14:00:00.000Z',
+      },
+    });
+    const banner = findByTestId(tree, 'appointment-create-customer-warning');
+    expect(banner).toBeDefined();
+    expect(findByText(tree, expectedWarningBody(3, 'May 4, 2026'))).toBeDefined();
+  });
+
+  it('falls back to a generic body when no lastNoShowAt timestamp is available', () => {
+    const tree = renderView({
+      customerWarning: {
+        noShowCount: 2,
+        lastNoShowAt: null,
+      },
+    });
+    const banner = findByTestId(tree, 'appointment-create-customer-warning');
+    expect(banner).toBeDefined();
+    expect(findByText(tree, expectedWarningBody(2, null))).toBeDefined();
+  });
+});
+
+describe('AppointmentCreateScreenView promotion section', () => {
+  it('renders the promotion quote breakdown and fires apply/remove callbacks', () => {
+    const onApplyPromotion = vi.fn();
+    const onRemovePromotion = vi.fn();
+    const tree = renderView({
+      promotionCode: 'BIENVENIDA25',
+      promotionQuote: {
+        eligible: true,
+        servicePriceCents: 3200,
+        discountCents: 800,
+        finalPriceCents: 2400,
+        policyValueSnapshot: 2500,
+        promotion: {
+          id: 'promo-1',
+          name: 'Bienvenida 25%',
+          code: 'bienvenida 25',
+          codeNormalized: 'BIENVENIDA25',
+          discountType: 'PERCENTAGE',
+          fixedDiscountCents: null,
+          percentageBasisPoints: 2500,
+          maxRedemptionsPerCustomer: 1,
+        },
+      },
+      promotionMessage: 'Promotion applied: Bienvenida 25%',
+      onApplyPromotion,
+      onRemovePromotion,
+    });
+
+    expect(findByTestId(tree, 'appointment-create-promotion-section')).toBeDefined();
+    expect(findByTestId(tree, 'appointment-create-promotion-quote')).toBeDefined();
+    expect(findByText(tree, 'Promotion applied: Bienvenida 25%')).toBeDefined();
+
+    press(findByTestId(tree, 'appointment-create-apply-promotion'));
+    press(findByTestId(tree, 'appointment-create-remove-promotion'));
+
+    expect(onApplyPromotion).toHaveBeenCalledTimes(1);
+    expect(onRemovePromotion).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a promotion validation error without hiding the ordinary booking flow', () => {
+    const tree = renderView({
+      fieldErrors: {
+        promotionCode: 'promotionCodeInvalid',
+      },
+      promotionCode: '***',
+    });
+
+    expect(findByTestId(tree, 'appointment-create-promotion-code')).toBeDefined();
+    expect(findByText(tree, 'Use 3 to 32 characters: letters, numbers, hyphen, or underscore.')).toBeDefined();
+    expect(findByTestId(tree, 'appointment-create-summary-section')).toBeDefined();
+  });
+
+  it('renders customer loyalty progress and applies an available reward shortcut', () => {
+    const onApplyLoyaltyReward = vi.fn();
+    const tree = renderView({
+      customerLoyalty: {
+        programEnabled: true,
+        visitsRequired: 5,
+        currentStampCount: 4,
+        availableRewardCount: 1,
+        rewards: [
+          {
+            id: 'reward-1',
+            code: 'LOYALTY-ABC123',
+            status: 'AVAILABLE',
+            issuedAt: '2026-07-10T10:00:00.000Z',
+            expiresAt: '2026-07-31T10:00:00.000Z',
+            redeemedAt: null,
+            revokedAt: null,
+            promotionName: 'Free loyalty cut',
+          },
+        ],
+      },
+      onApplyLoyaltyReward,
+    });
+
+    expect(findByTestId(tree, 'appointment-create-customer-loyalty')).toBeDefined();
+    expect(findByText(tree, 'Loyalty reward available')).toBeDefined();
+    expect(findByText(tree, 'Stamps: 4 / 5')).toBeDefined();
+    expect(findByText(tree, 'Reward code: LOYALTY-ABC123')).toBeDefined();
+
+    press(findByTestId(tree, 'appointment-create-apply-loyalty-reward-1'));
+    expect(onApplyLoyaltyReward).toHaveBeenCalledWith('LOYALTY-ABC123');
   });
 });

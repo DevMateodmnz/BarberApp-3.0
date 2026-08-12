@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../src/lib/api.js';
 import {
   applyAppointmentCreationDateChange,
+  applyAppointmentCreationCustomerPrefill,
   applyAppointmentCreationEmployeeChange,
+  applyAppointmentCreationPromotionCodeChange,
   applyAppointmentCreationServiceChange,
   appointmentMatchesContext,
   beginAppointmentCreationAvailabilityRequest,
@@ -151,6 +153,7 @@ describe('appointment creation validation and payload building', () => {
       ...state,
       clientName: '   ',
       clientPhone: 'x'.repeat(51),
+      clientEmail: 'not-an-email',
       notes: 'y'.repeat(501),
       availability: makeAvailability(),
       availabilityStatus: 'success',
@@ -161,6 +164,7 @@ describe('appointment creation validation and payload building', () => {
     expect(result.fieldErrors.localDate).toBe('invalidDate');
     expect(result.fieldErrors.clientName).toBe('clientNameRequired');
     expect(result.fieldErrors.clientPhone).toBe('clientPhoneTooLong');
+    expect(result.fieldErrors.clientEmail).toBe('clientEmailInvalid');
     expect(result.fieldErrors.notes).toBe('notesTooLong');
     expect(result.fieldErrors.selectedSlot).toBe('staleSlot');
   });
@@ -174,6 +178,7 @@ describe('appointment creation validation and payload building', () => {
       ...state,
       clientName: '  Walk In  ',
       clientPhone: '   +54 381 555 1000   ',
+      clientEmail: '   walkin@example.com   ',
       notes: '  First visit  ',
       availability: makeAvailability(),
       availabilityStatus: 'success',
@@ -189,6 +194,7 @@ describe('appointment creation validation and payload building', () => {
         startAt: '2026-06-29T13:30:00.000Z',
         clientName: 'Walk In',
         clientPhone: '+54 381 555 1000',
+        clientEmail: 'walkin@example.com',
         notes: 'First visit',
       });
     }
@@ -201,6 +207,7 @@ describe('appointment creation validation and payload building', () => {
     state = {
       ...state,
       clientName: 'Guest',
+      clientEmail: 'guest@example.com',
       availability: makeAvailability(),
       availabilityStatus: 'success',
       selectedSlotStartAt: '2026-06-29T13:00:00.000Z',
@@ -219,13 +226,72 @@ describe('appointment creation validation and payload building', () => {
         serviceId: 'svc-1',
         startAt: '2026-06-29T13:00:00.000Z',
         clientName: 'Guest',
+        clientEmail: 'guest@example.com',
       });
       expect(result.effectiveEmployeeId).toBe('emp-barber');
     }
   });
+
+  it('normalizes an optional promotion code into the final booking payload', () => {
+    let state = createInitialAppointmentCreationState(OWNER_CONTEXT);
+    state = applyAppointmentCreationEmployeeChange(state, 'emp-1');
+    state = applyAppointmentCreationServiceChange(state, 'svc-1');
+    state = applyAppointmentCreationDateChange(state, '2026-06-29');
+    state = applyAppointmentCreationPromotionCodeChange(state, ' bienvenida 25 ');
+    state = {
+      ...state,
+      clientName: 'Promo Guest',
+      availability: makeAvailability(),
+      availabilityStatus: 'success',
+      selectedSlotStartAt: '2026-06-29T13:00:00.000Z',
+    };
+
+    const result = buildCreateStaffAppointmentPayload(state);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.payload).toEqual(expect.objectContaining({
+        promotionCode: 'BIENVENIDA25',
+      }));
+    }
+  });
+
+  it('flags malformed promotion codes without blocking empty-code bookings', () => {
+    let state = createInitialAppointmentCreationState(OWNER_CONTEXT);
+    state = applyAppointmentCreationEmployeeChange(state, 'emp-1');
+    state = applyAppointmentCreationServiceChange(state, 'svc-1');
+    state = applyAppointmentCreationDateChange(state, '2026-06-29');
+    state = {
+      ...state,
+      clientName: 'Walk In',
+      availability: makeAvailability(),
+      availabilityStatus: 'success',
+      selectedSlotStartAt: '2026-06-29T13:00:00.000Z',
+    };
+
+    expect(validateAppointmentCreationDraft(state).fieldErrors.promotionCode).toBeUndefined();
+
+    const invalidState = applyAppointmentCreationPromotionCodeChange(state, '***');
+    expect(validateAppointmentCreationDraft(invalidState).fieldErrors.promotionCode).toBe('promotionCodeInvalid');
+  });
 });
 
 describe('appointment creation dependency resets and context sync', () => {
+  it('prefills customer name, phone, and email from customer detail', () => {
+    const state = createInitialAppointmentCreationState(OWNER_CONTEXT);
+
+    const next = applyAppointmentCreationCustomerPrefill(state, {
+      customerId: 'cust-1',
+      clientName: 'Mateo',
+      clientPhone: '+54 381 555 9999',
+      clientEmail: 'mateo@example.com',
+    });
+
+    expect(next.customerId).toBe('cust-1');
+    expect(next.clientName).toBe('Mateo');
+    expect(next.clientPhone).toBe('+54 381 555 9999');
+    expect(next.clientEmail).toBe('mateo@example.com');
+  });
+
   it('clears service, availability, and selected slot when employee changes', () => {
     let state = createInitialAppointmentCreationState(OWNER_CONTEXT);
     state = {

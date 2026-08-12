@@ -4,12 +4,17 @@ interface ConfirmationPageProps {
   params: Promise<{
     slug: string;
   }>;
+  searchParams: Promise<{
+    ref?: string;
+  }>;
 }
 
 export default async function ConfirmationPage({
   params,
+  searchParams,
 }: ConfirmationPageProps) {
   const { slug } = await params;
+  const { ref } = await searchParams;
 
   return (
     <main
@@ -20,7 +25,7 @@ export default async function ConfirmationPage({
         placeItems: 'center',
       }}
     >
-      <PublicBookingConfirmationView slug={slug} />
+      <PublicBookingConfirmationView slug={slug} referenceFromQuery={ref} />
     </main>
   );
 }

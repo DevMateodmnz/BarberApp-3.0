@@ -164,6 +164,38 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="appointments-reschedule"
+          options={{
+            title: t('appointments.rescheduleAction'),
+            href: null,
+            tabBarAccessibilityLabel: t('appointments.rescheduleAction'),
+          }}
+        />
+        <Tabs.Screen
+          name="appointment-detail"
+          options={{
+            title: t('appointments.detailTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t('appointments.detailTitle'),
+          }}
+        />
+        <Tabs.Screen
+          name="customers"
+          options={{
+            title: t('customers.title'),
+            href: null,
+            tabBarAccessibilityLabel: t('customers.accessibility.openDirectory'),
+          }}
+        />
+        <Tabs.Screen
+          name="customer-detail"
+          options={{
+            title: t('customers.detailTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t('customers.accessibility.openCustomerDetail'),
+          }}
+        />
+        <Tabs.Screen
           name="record-service"
           options={buildPrimaryTabOptions('record-service', t)}
         />
@@ -173,6 +205,32 @@ export default function TabLayout() {
         <Tabs.Screen
           name="manage"
           options={buildPrimaryTabOptions('manage', t)}
+        />
+        <Tabs.Screen
+          name="notification-detail"
+          options={{
+            title: t('notificationsOperations.detailTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t('notificationsOperations.accessibility.openDetail'),
+          }}
+        />
+        <Tabs.Screen
+          name="payment-review-detail"
+          options={{
+            title: t('paymentsSettings.reviews.detailTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t('paymentsSettings.reviews.detailTitle'),
+          }}
+        />
+        <Tabs.Screen
+          name="qa-runtime"
+          options={{
+            title: t('runtime.physicalQa.panelTitle'),
+            href: null,
+            tabBarAccessibilityLabel: t(
+              'runtime.physicalQa.openAccessibility',
+            ),
+          }}
         />
         {MOBILE_SECONDARY_ROUTES.map((route) => ({ route, title: t(route.titleKey), a11y: t(route.accessibilityLabelKey) })).map(({ route, title, a11y }) => (
           <Tabs.Screen

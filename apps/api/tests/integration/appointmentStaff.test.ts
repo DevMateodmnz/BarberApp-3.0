@@ -87,6 +87,8 @@ async function resetShopAWorkingHours(): Promise<void> {
 
 beforeAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -246,6 +248,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.barbershopScheduleException.deleteMany();
   await prisma.employee.updateMany({
@@ -279,6 +283,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -513,6 +519,10 @@ describe('staff appointment creation', () => {
         status: 'CONFIRMED',
         endAt: isoAtLocal(monday, '11:00'),
         servicePriceCents: 1,
+
+        discountCents: 0,
+
+        finalPriceCents: 1,
       });
 
     expect(res.status).toBe(400);
@@ -674,6 +684,10 @@ describe('availability', () => {
         clientPhone: null,
         serviceName: fixtures.ownerService30.name,
         servicePriceCents: fixtures.ownerService30.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: fixtures.ownerService30.priceCents,
         serviceDurationMinutes: fixtures.ownerService30.durationMinutes,
         serviceCurrency: fixtures.ownerService30.currency,
         startAt: localDateTimeToUtc(monday, '09:30', TEST_BARBERSHOP_TIMEZONE),
@@ -730,6 +744,10 @@ describe('availability', () => {
         clientPhone: null,
         serviceName: fixtures.ownerService30.name,
         servicePriceCents: fixtures.ownerService30.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: fixtures.ownerService30.priceCents,
         serviceDurationMinutes: fixtures.ownerService30.durationMinutes,
         serviceCurrency: fixtures.ownerService30.currency,
         startAt: localDateTimeToUtc(monday, '09:00', TEST_BARBERSHOP_TIMEZONE),
@@ -836,6 +854,10 @@ describe('availability', () => {
         clientPhone: null,
         serviceName: fixtures.ownerService30.name,
         servicePriceCents: fixtures.ownerService30.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: fixtures.ownerService30.priceCents,
         serviceDurationMinutes: fixtures.ownerService30.durationMinutes,
         serviceCurrency: fixtures.ownerService30.currency,
         startAt: new Date(chosenSlot.startAt),

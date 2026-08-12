@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import request from 'supertest';
-import { createApp, createAppFromEnv } from '../../src/app.js';
+import { createAppFromEnv } from '../../src/app.js';
 import { readApiRuntimeConfig } from '../../src/config/runtime.js';
 import { errorHandler } from '../../src/middleware/errorHandler.js';
 import { CURRENT_PUBLIC_BOOKING_CONSENT_VERSION } from '../../src/lib/publicBookingConsent.js';
@@ -52,6 +52,8 @@ function createRateLimitedPublicApp() {
 
 beforeAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -274,11 +276,15 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
 });
 
 afterAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -356,6 +362,9 @@ describe('GET /api/v1/public/barbershops/:slug/services', () => {
         durationMinutes: 45,
         priceCents: 4500,
         currency: 'ARS',
+        depositRequired: false,
+        depositAmountCents: null,
+        remainingAmountCents: null,
       },
       {
         serviceId: fixtures.activeServiceB.id,
@@ -364,6 +373,9 @@ describe('GET /api/v1/public/barbershops/:slug/services', () => {
         durationMinutes: 30,
         priceCents: 3000,
         currency: 'ARS',
+        depositRequired: false,
+        depositAmountCents: null,
+        remainingAmountCents: null,
       },
     ]);
   });
@@ -478,6 +490,13 @@ describe('GET /api/v1/public/barbershops/:slug/booking-config', () => {
           minimumNoticeMinutes: 60,
           maximumBookingHorizonDays: 30,
           slotIntervalMinutes: 30,
+        },
+        depositPolicy: {
+          enabled: false,
+          mode: 'DISABLED',
+          holdDurationMinutes: 15,
+          currency: 'ARS',
+          publicTerms: null,
         },
       },
     });

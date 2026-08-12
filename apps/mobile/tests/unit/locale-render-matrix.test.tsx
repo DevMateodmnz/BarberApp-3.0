@@ -154,10 +154,12 @@ describe('locale render smoke matrix', () => {
       assertNoTranslationKeys(barberHomeTree);
 
       const manageTree = ManageContent({
-        isOwner: true,
+        role: 'OWNER',
+        onNotifications: () => undefined,
         onServices: () => undefined,
         onEmployees: () => undefined,
         onWorkingHours: () => undefined,
+        onOwnSchedule: () => undefined,
         onOpenLanguageSettings: () => undefined,
       });
       expect(findByTestId(manageTree, 'manage-services')).toBeDefined();

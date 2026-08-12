@@ -105,6 +105,12 @@ The `preview` profile uses `distribution: internal` so the result is meant for c
 
 ## Production build
 
+### Android identity gate
+
+The repository and locally available EAS metadata do not currently contain a canonical Android package/application ID, `versionCode`, linked EAS project ID, or production icon/splash asset contract. Do **not** invent these values. Before the first signed Android production build, the product owner must choose the permanent reverse-DNS application ID, confirm the Expo/EAS project and store ownership, provide approved production assets, and establish initial version/signing credentials. Only then may `app.json` be updated and signed production QA begin.
+
+The earlier Expo Go physical QA remains useful functional evidence, but it is not signed production-binary evidence and should not be repeated wholesale. Run a focused signed-build regression after the identity/signing gate is closed.
+
 Required production values:
 
 - `EXPO_PUBLIC_APP_ENV=production` (set by `apps/mobile/eas.json`)

@@ -106,6 +106,8 @@ async function seedDefaultWorkingHours(barbershopId: string, saturdayClose = '14
 
 beforeAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -375,6 +377,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.barbershopScheduleException.deleteMany();
   await prisma.service.updateMany({
@@ -402,6 +406,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -758,6 +764,10 @@ describe('public availability domain behavior', () => {
         clientName: 'Blocking Guest',
         serviceName: 'Availability Cut',
         servicePriceCents: 3000,
+
+        discountCents: 0,
+
+        finalPriceCents: 3000,
         serviceDurationMinutes: 30,
         serviceCurrency: 'ARS',
         startAt: localDateTimeToUtc(monday, '09:30', fixtures.publishedShop.timezone),
@@ -775,6 +785,10 @@ describe('public availability domain behavior', () => {
         clientName: 'Cancelled Guest',
         serviceName: 'Availability Cut',
         servicePriceCents: 3000,
+
+        discountCents: 0,
+
+        finalPriceCents: 3000,
         serviceDurationMinutes: 30,
         serviceCurrency: 'ARS',
         startAt: localDateTimeToUtc(monday, '10:00', fixtures.publishedShop.timezone),

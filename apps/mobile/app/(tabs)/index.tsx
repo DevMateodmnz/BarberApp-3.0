@@ -385,6 +385,7 @@ export default function HomeScreen() {
         canRecordService={canRecordService}
         onRecordService={() => router.push('/(tabs)/record-service')}
         onAppointments={() => router.push('/(tabs)/appointments')}
+        onCustomers={() => router.push('/(tabs)/customers')}
         onPrevDate={() => setSelectedDate((prev) => addDaysToDateString(prev, -1))}
         onNextDate={() => setSelectedDate((prev) => addDaysToDateString(prev, 1))}
         onToday={() => {

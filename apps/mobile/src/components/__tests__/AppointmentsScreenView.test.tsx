@@ -85,13 +85,15 @@ function makeEmployeeFilters(overrides: Partial<EmployeeFilterOption>[] = []): E
 function makeActions(overrides: Partial<AppointmentActionViewModel>[] = []): AppointmentActionViewModel[] {
   const base: AppointmentActionViewModel[] = [
     {
-      status: 'CONFIRMED',
+      id: 'CONFIRMED',
+      variant: 'secondary',
       label: 'Confirm',
       testID: 'appointment-action-appt-1-CONFIRMED',
       onPress: vi.fn(),
     },
     {
-      status: 'CANCELLED',
+      id: 'CANCELLED',
+      variant: 'danger',
       label: 'Cancel',
       testID: 'appointment-action-appt-1-CANCELLED',
       onPress: vi.fn(),
@@ -255,6 +257,19 @@ describe('AppointmentsScreenView', () => {
     expect(findByText(card, 'Pending')).toBeDefined();
     expect(findByText(card, 'Barber: Carlos')).toBeDefined();
     expect(findByText(card, 'Arrives after work.')).toBeDefined();
+  });
+
+  it('renders notification summary labels when reminders exist', () => {
+    const tree = renderView({
+      appointmentRows: makeAppointments([
+        {
+          notificationLabels: ['Confirmation sent', 'Reminder scheduled'],
+        },
+      ]),
+    });
+
+    expect(findByText(tree, 'Confirmation sent')).toBeDefined();
+    expect(findByText(tree, 'Reminder scheduled')).toBeDefined();
   });
 
   it('renders barber context without owner filter controls', () => {

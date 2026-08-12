@@ -7,12 +7,14 @@ import { useTranslation } from 'react-i18next';
 import { ManageContent } from '@/components/ManageContent.js';
 import { AppCard, EmptyState, Screen } from '@/components/ui/index.js';
 import { useContextStore } from '@/lib/store.js';
+import { usePhysicalQaRuntime } from '@/components/PhysicalQaRuntimeOverlay.js';
 import { tokens } from '@/theme/index.js';
 
 export default function ManageScreen() {
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const { t } = useTranslation();
+  const physicalQaRuntime = usePhysicalQaRuntime();
 
   const getTokenRef = useRef(getToken);
   useEffect(() => {
@@ -71,11 +73,17 @@ export default function ManageScreen() {
   return (
     <Screen scrollable testID="manage-screen">
       <ManageContent
-        isOwner={context.role === 'OWNER'}
+        role={context.role}
+        onPayments={() => router.push('/(tabs)/payments')}
+        onNotifications={() => router.push('/(tabs)/notifications')}
+        onPromotions={() => router.push('/(tabs)/promotions')}
         onServices={() => router.push('/(tabs)/services')}
         onEmployees={() => router.push('/(tabs)/employees')}
         onWorkingHours={() => router.push('/(tabs)/working-hours')}
+        onOwnSchedule={() => router.push('/(tabs)/employee-schedule')}
         onOpenLanguageSettings={() => router.push('/language')}
+        showPhysicalQaRuntime={physicalQaRuntime.enabled}
+        onOpenPhysicalQaRuntime={() => router.push('/(tabs)/qa-runtime')}
       />
     </Screen>
   );

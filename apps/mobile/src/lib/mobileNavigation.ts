@@ -1,12 +1,15 @@
 import type { UserRole } from '@/lib/types.js';
 
 export type MobilePrimaryDestinationId = 'home' | 'appointments' | 'record' | 'manage';
-export type MobileSecondaryRouteId = 'services' | 'employees' | 'workingHours';
+export type MobileSecondaryRouteId = 'services' | 'employees' | 'workingHours' | 'notifications' | 'promotions';
 export type TabRouteName =
   | 'index'
   | 'appointments'
   | 'record-service'
   | 'manage'
+  | 'notifications'
+  | 'notification-detail'
+  | 'promotions'
   | 'services'
   | 'employees'
   | 'working-hours';
@@ -31,8 +34,8 @@ export interface MobilePrimaryDestination {
 
 export interface MobileSecondaryRoute {
   id: MobileSecondaryRouteId;
-  tabRouteName: Extract<TabRouteName, 'services' | 'employees' | 'working-hours'>;
-  route: '/(tabs)/services' | '/(tabs)/employees' | '/(tabs)/working-hours';
+  tabRouteName: Extract<TabRouteName, 'services' | 'employees' | 'working-hours' | 'notifications' | 'promotions'>;
+  route: '/(tabs)/services' | '/(tabs)/employees' | '/(tabs)/working-hours' | '/(tabs)/notifications' | '/(tabs)/promotions';
   titleKey: string;
   accessibilityLabelKey: string;
   allowedRoles: readonly UserRole[];
@@ -93,6 +96,22 @@ export const MOBILE_PRIMARY_DESTINATIONS: readonly MobilePrimaryDestination[] = 
 
 export const MOBILE_SECONDARY_ROUTES: readonly MobileSecondaryRoute[] = [
   {
+    id: 'notifications',
+    tabRouteName: 'notifications',
+    route: '/(tabs)/notifications',
+    titleKey: 'navigation.notifications',
+    accessibilityLabelKey: 'navigation.accessibility.notifications',
+    allowedRoles: ['OWNER'],
+  },
+  {
+    id: 'promotions',
+    tabRouteName: 'promotions',
+    route: '/(tabs)/promotions',
+    titleKey: 'navigation.promotions',
+    accessibilityLabelKey: 'navigation.accessibility.promotions',
+    allowedRoles: ['OWNER'],
+  },
+  {
     id: 'services',
     tabRouteName: 'services',
     route: '/(tabs)/services',
@@ -150,6 +169,10 @@ export function getPrimaryDestinationByRouteName(
 export function canAccessTabRoute(routeName: TabRouteName, role: UserRole | null | undefined): boolean {
   if (routeName === 'index') {
     return role !== null && role !== undefined;
+  }
+
+  if (routeName === 'notification-detail') {
+    return role === 'OWNER';
   }
 
   const primaryDestination = MOBILE_PRIMARY_DESTINATIONS.find(

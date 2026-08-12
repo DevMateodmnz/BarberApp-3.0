@@ -105,6 +105,8 @@ function bookAppointment(
 
 beforeAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -374,6 +376,8 @@ describe('PUT /api/v1/barbershops/:barbershopId/working-hours', () => {
     expect(outsideRes.body.error.message).toContain('before opening hours');
 
     // Clean up appointments and restore hours
+    await prisma.appointmentNotification.deleteMany();
+
     await prisma.appointment.deleteMany();
     await resetWorkingHours(fixtures.shopA.id);
   });

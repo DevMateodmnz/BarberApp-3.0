@@ -40,6 +40,9 @@ export interface EmployeeRowViewModel {
   manageServicesLabel: string;
   manageServicesTestID: string;
   onManageServices: () => void;
+  manageScheduleLabel: string;
+  manageScheduleTestID: string;
+  onManageSchedule: () => void;
   assignmentsExpanded: boolean;
   isAssignmentsLoading: boolean;
   assignedServices: EmployeeServiceActionViewModel[];
@@ -468,6 +471,13 @@ export function EmployeesScreenView({
                         variant="ghost"
                         size="sm"
                         onPress={employee.onManageServices}
+                      />
+                      <AppButton
+                        testID={employee.manageScheduleTestID}
+                        title={employee.manageScheduleLabel}
+                        variant="ghost"
+                        size="sm"
+                        onPress={employee.onManageSchedule}
                       />
                     </ActionRow>
 

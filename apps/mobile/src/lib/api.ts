@@ -9,6 +9,7 @@ import axios, { type InternalAxiosRequestConfig } from 'axios';
 import {
   getInvalidApiUrlFallback,
   getMobilePublicRuntimeResult,
+  type MobilePhysicalQaRuntime,
 } from '@/config/publicRuntime.js';
 
 /**
@@ -73,8 +74,20 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     throw mobilePublicRuntimeResult.error;
   }
 
-  return config;
+  const physicalQa = mobilePublicRuntimeResult.value.physicalQa;
+  return applyPhysicalQaHeaders(config, physicalQa);
 });
+
+export function applyPhysicalQaHeaders(
+  config: InternalAxiosRequestConfig,
+  physicalQa?: MobilePhysicalQaRuntime,
+): InternalAxiosRequestConfig {
+  if (!physicalQa) return config;
+  config.headers['X-BarberApp-QA-Client'] = 'mobile';
+  config.headers['X-BarberApp-QA-Head'] = physicalQa.repositoryHead;
+  config.headers['X-BarberApp-QA-Runtime'] = physicalQa.runtimeId;
+  return config;
+}
 
 /**
  * Normalises an Axios rejection (or any thrown error) into a project ApiError.

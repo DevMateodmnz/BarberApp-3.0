@@ -11,10 +11,18 @@ import {
   PublicAvailabilityQuerySchema,
   PublicBarberQuerySchema,
 } from '../schemas/publicCatalog.js';
-import { PublicCreateAppointmentSchema } from '../schemas/publicBooking.js';
 import {
+  PublicCancelBookingSchema,
+  PublicCreateAppointmentSchema,
+  PublicPromotionQuoteSchema,
+} from '../schemas/publicBooking.js';
+import {
+  cancelPublicBookingByReference,
   createPublicBookingBySlug,
+  getPublicBookingConfirmationByReference,
+  quotePublicPromotionBySlug,
 } from '../services/publicBookingService.js';
+import { loadPublicBookingPaymentStateByReference } from '../services/payments/bookingPaymentService.js';
 import {
   getPublicBarbershopBySlug,
   getPublicBookingConfigBySlug,
@@ -118,7 +126,7 @@ export function createPublicCatalogRouter(
     catalogReadRateLimit,
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const services = await listPublicServicesBySlug(paramSlug(req));
+        const services = await listPublicServicesBySlug(paramSlug(req), config.payments);
         res.json({ success: true, data: services });
       } catch (error) {
         next(error);
@@ -148,7 +156,7 @@ export function createPublicCatalogRouter(
     catalogReadRateLimit,
     async (req: Request, res: Response, next: NextFunction) => {
       try {
-        const configDto = await getPublicBookingConfigBySlug(paramSlug(req));
+        const configDto = await getPublicBookingConfigBySlug(paramSlug(req), config.payments);
         res.json({ success: true, data: configDto });
       } catch (error) {
         next(error);
@@ -176,6 +184,25 @@ export function createPublicCatalogRouter(
   );
 
   router.post(
+    '/barbershops/:slug/promotions/quote',
+    bookingWriteRateLimit,
+    validateBody(PublicPromotionQuoteSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const quote = await quotePublicPromotionBySlug({
+          slug: paramSlug(req),
+          serviceId: req.body.serviceId,
+          code: req.body.code,
+          clientPhone: req.body.clientPhone,
+        });
+        res.json({ success: true, data: quote });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.post(
     '/barbershops/:slug/appointments',
     bookingWriteRateLimit,
     validateBody(PublicCreateAppointmentSchema),
@@ -185,11 +212,75 @@ export function createPublicCatalogRouter(
           slug: paramSlug(req),
           idempotencyKey: requireIdempotencyKey(req),
           body: req.body,
+          paymentRuntime: config.payments,
         });
 
         res
           .status(result.replayed ? 200 : 201)
           .json({ success: true, data: result.confirmation });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.get(
+    '/barbershops/:slug/appointments/:reference',
+    catalogReadRateLimit,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const confirmation = await getPublicBookingConfirmationByReference({
+          slug: paramSlug(req),
+          publicReference: req.params.reference ?? '',
+        });
+        res.json({ success: true, data: confirmation });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.post(
+    '/barbershops/:slug/appointments/:reference/cancel',
+    bookingWriteRateLimit,
+    validateBody(PublicCancelBookingSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const reference = req.params.reference ?? '';
+        const reason = (req.body as { reason?: string | null } | undefined)?.reason;
+        const result = await cancelPublicBookingByReference({
+          slug: paramSlug(req),
+          publicReference: reference,
+          reason,
+        });
+        res.json({ success: true, data: result.appointment });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  router.get(
+    '/barbershops/:slug/bookings/:reference/payment',
+    catalogReadRateLimit,
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const payment = await loadPublicBookingPaymentStateByReference({
+          slug: paramSlug(req),
+          publicReference: req.params.reference ?? '',
+        });
+        res.json({
+          success: true,
+          data: {
+            appointmentStatus: payment.appointmentStatus,
+            paymentStatus: payment.paymentStatus,
+            amount: payment.amountCents,
+            currency: payment.currency,
+            expiresAt: payment.expiresAt,
+            canRetry: payment.canRetry,
+            canCancel: payment.canCancel,
+          },
+        });
       } catch (error) {
         next(error);
       }

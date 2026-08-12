@@ -5,7 +5,9 @@
  * - POST   /api/v1/appointments          CLIENT (book appointment)
  * - GET    /api/v1/appointments          OWNER, CLIENT
  * - GET    /api/v1/appointments/:id      ALL (tenant-scoped)
- * - PUT    /api/v1/appointments/:id      OWNER, BARBER (reschedule)
+ * - GET    /api/v1/appointments/:id/changes OWNER, BARBER (change history)
+ * - PATCH  /api/v1/appointments/:id/reschedule OWNER, BARBER (reschedule)
+ * - PUT    /api/v1/appointments/:id      OWNER, BARBER (legacy update flow)
  * - PUT    /api/v1/appointments/:id/status  OWNER, BARBER (status transition)
  * - DELETE /api/v1/appointments/:id      CLIENT, OWNER (cancel)
  */
@@ -16,8 +18,10 @@ import { validateBody } from '../middleware/validate.js';
 import {
   CreateAppointmentSchema,
   UpdateAppointmentSchema,
+  RescheduleAppointmentSchema,
   AppointmentStatusSchema,
   AppointmentListQuerySchema,
+  CancelAppointmentBodySchema,
 } from '../schemas/appointment.js';
 import * as appointmentService from '../services/appointmentService.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
@@ -105,6 +109,64 @@ router.get(
   }
 );
 
+router.get(
+  '/:id/notifications',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const appointment = await appointmentService.getAppointment(
+        paramId(req),
+        req.userId,
+        req.userRole
+      );
+      const notifications =
+        await appointmentService.listAppointmentNotifications(
+          appointment.id,
+          appointment.barbershopId
+        );
+      res.json({ success: true, data: notifications });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
+  '/:id/changes',
+  requireRole('OWNER', 'BARBER'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const changes = await appointmentService.listAppointmentChanges(
+        paramId(req),
+        req.userId,
+        req.userRole
+      );
+      res.json({ success: true, data: changes });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.patch(
+  '/:id/reschedule',
+  requireRole('OWNER', 'BARBER'),
+  validateBody(RescheduleAppointmentSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const appointment = await appointmentService.rescheduleAppointment(
+        paramId(req),
+        req.body,
+        req.userId,
+        req.userRole
+      );
+      res.json({ success: true, data: appointment });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // ============================================
 // PUT /api/v1/appointments/:id - Update appointment (OWNER, BARBER)
 // ============================================
@@ -156,12 +218,15 @@ router.put(
 router.delete(
   '/:id',
   requireRole('CLIENT', 'OWNER'),
+  validateBody(CancelAppointmentBodySchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const reason = (req.body as { reason?: string | null } | undefined)?.reason;
       const appointment = await appointmentService.cancelAppointment(
         paramId(req),
         req.userId,
-        req.userRole
+        req.userRole,
+        { reason }
       );
       res.json({ success: true, data: appointment });
     } catch (error) {

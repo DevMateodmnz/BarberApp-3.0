@@ -72,6 +72,10 @@ describe('DB Double-Booking Constraint', () => {
       clientPhone: null,
       serviceName: 'Test Service',
       servicePriceCents: 2500,
+
+      discountCents: 0,
+
+      finalPriceCents: 2500,
       serviceDurationMinutes: 30,
       serviceCurrency: 'ARS',
       startAt,
@@ -102,7 +106,7 @@ describe('DB Double-Booking Constraint', () => {
     } catch (err) {
       expect(err).toBeInstanceOf(Prisma.PrismaClientUnknownRequestError);
       expect((err as Error).message).toContain('no_double_booking');
-      expect((err as any).code).toBeUndefined(); // Unknown errors have no code
+      expect((err as unknown as { code?: string }).code).toBeUndefined(); // Unknown errors have no code
     }
   });
 

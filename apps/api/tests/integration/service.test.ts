@@ -8,7 +8,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { prisma } from '../../src/lib/prisma.js';
 import { createAppFromEnv } from '../../src/app.js';
-import type { User, Barbershop, Employee, Service } from '@prisma/client';
+import type { User, Barbershop, Service } from '@prisma/client';
 import { getNextLocalWeekdayTime } from '../helpers/timezone.js';
 
 const app = createAppFromEnv();
@@ -43,6 +43,8 @@ function getFutureServiceBookingTime(timeStr = '10:00') {
 
 beforeAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -110,6 +112,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.employeeInvitation.deleteMany();
@@ -119,6 +123,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.photo.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -506,7 +512,7 @@ describe('GET /api/v1/barbershops/:barbershopId/services', () => {
   });
 
   it('includeInactive=true returns active and inactive services', async () => {
-    const active = await createServiceInDb(fixtures.shopA.id, { name: 'Active' });
+    await createServiceInDb(fixtures.shopA.id, { name: 'Active' });
     const inactive = await createServiceInDb(fixtures.shopA.id, { name: 'Inactive' });
     await prisma.service.update({ where: { id: inactive.id }, data: { isActive: false } });
 
@@ -753,6 +759,8 @@ describe('DELETE /api/v1/barbershops/:barbershopId/services/:serviceId', () => {
   let svcA: Service;
 
   beforeEach(async () => {
+    await prisma.appointmentNotification.deleteMany();
+
     await prisma.appointment.deleteMany();
     await prisma.employeeService.deleteMany();
     await prisma.employeeInvitation.deleteMany();

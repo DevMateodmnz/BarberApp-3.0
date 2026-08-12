@@ -5,10 +5,15 @@ import { localizeUnknownError } from '@/i18n/errors.js';
 import { ApiError, api, type ApiResponse, type GetToken } from './api.js';
 import type {
   Appointment,
+  AppointmentChange,
   AppointmentAvailability,
+  AppointmentNotificationSummary,
   AppointmentStatus,
   CreateStaffAppointmentInput,
+  DailyScheduleBoard,
   FetchAppointmentAvailabilityInput,
+  LoyaltyCustomerSummary,
+  RescheduleAppointmentInput,
 } from './types.js';
 
 export interface AppointmentListQuery {
@@ -91,6 +96,24 @@ export async function fetchEmployeeAppointments(
   );
 }
 
+export async function fetchAppointment(
+  getToken: GetToken,
+  appointmentId: string,
+): Promise<Appointment> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<Appointment>>(
+    `/appointments/${appointmentId}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    },
+  );
+
+  return ensureSuccess(
+    response,
+    localizeUnknownError('Failed to fetch appointment'),
+  );
+}
+
 /**
  * Transitions an appointment to a new status.
  *
@@ -122,16 +145,23 @@ export async function transitionAppointmentStatus(
  * Cancels (deletes) an appointment.
  *
  * DELETE /appointments/:appointmentId
- * Response returns Appointment WITHOUT nested includes — refetch after call.
+ * Body (optional): { reason?: string }
+ * Response returns the full Appointment with lifecycle fields populated
+ * (cancelledAt, cancelledByRole, cancelReason).
  */
 export async function cancelAppointment(
   getToken: GetToken,
   appointmentId: string,
+  options: { reason?: string | null } = {},
 ): Promise<Appointment> {
   const token = await getToken();
+  const trimmedReason = options.reason?.trim();
   const response = await api.delete<ApiResponse<Appointment>>(
     `/appointments/${appointmentId}`,
-    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      data: trimmedReason ? { reason: trimmedReason } : {},
+    },
   );
 
   const { data } = response;
@@ -140,6 +170,64 @@ export async function cancelAppointment(
   }
 
   return data.data;
+}
+
+/**
+ * Customer insight summary returned by the backend lookup endpoint.
+ * The mobile UI uses this to surface no-show history before staff
+ * confirm a new appointment.
+ *
+ * Note: the backend intentionally does NOT echo the submitted phone
+ * in the response (caller already has it; repeating would put PII
+ * in API logs that capture response bodies).
+ */
+export interface CustomerInsights {
+  customerId: string | null;
+  visitCount: number;
+  noShowCount: number;
+  cancelledCount: number;
+  completedCount: number;
+  lastVisitAt: string | null;
+  lastNoShowAt: string | null;
+  loyalty: Pick<
+    LoyaltyCustomerSummary,
+    'programEnabled' | 'visitsRequired' | 'currentStampCount' | 'availableRewardCount' | 'rewards'
+  > | null;
+  recentAppointments: Array<{
+    id: string;
+    startAt: string;
+    endAt: string;
+    status: AppointmentStatus;
+    serviceName: string;
+    employeeName: string | null;
+  }>;
+}
+
+/**
+ * Fetches repeat-customer history for a normalized E.164 phone.
+ *
+ * POST /barbershops/:barbershopId/customers/lookup
+ * Body: { phone: E164 }
+ *
+ * Body-only by design: customer phone numbers are PII and must not
+ * appear in URLs, access logs, proxies, or referer headers.
+ *
+ * Returns a zeroed-out shape (visitCount: 0, etc.) when the phone has
+ * no history in the tenant, so the UI does not need a special branch.
+ */
+export async function lookupCustomerByPhone(
+  getToken: GetToken,
+  barbershopId: string,
+  phone: string,
+): Promise<CustomerInsights> {
+  const token = await getToken();
+  const response = await api.post<ApiResponse<CustomerInsights>>(
+    `/barbershops/${barbershopId}/customers/lookup`,
+    { phone },
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, localizeUnknownError('Failed to fetch customer insights'));
 }
 
 export async function fetchAppointmentAvailability(
@@ -155,11 +243,85 @@ export async function fetchAppointmentAvailability(
       params: {
         serviceId: input.serviceId,
         localDate: input.localDate,
+        ...(input.excludeAppointmentId
+          ? { excludeAppointmentId: input.excludeAppointmentId }
+          : {}),
       },
     },
   );
 
   return ensureSuccess(response, 'Failed to fetch appointment availability');
+}
+
+export async function rescheduleAppointment(
+  getToken: GetToken,
+  appointmentId: string,
+  input: RescheduleAppointmentInput,
+): Promise<Appointment> {
+  const token = await getToken();
+  const payload: RescheduleAppointmentInput = {
+    startAt: input.startAt,
+    ...(input.employeeId ? { employeeId: input.employeeId } : {}),
+    ...(input.serviceId ? { serviceId: input.serviceId } : {}),
+    ...(trimOptionalText(input.reason) ? { reason: trimOptionalText(input.reason) } : {}),
+  };
+
+  const response = await api.patch<ApiResponse<Appointment>>(
+    `/appointments/${appointmentId}/reschedule`,
+    payload,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, 'Failed to reschedule appointment');
+}
+
+export async function fetchAppointmentChanges(
+  getToken: GetToken,
+  appointmentId: string,
+): Promise<AppointmentChange[]> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<AppointmentChange[]>>(
+    `/appointments/${appointmentId}/changes`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, 'Failed to fetch appointment changes');
+}
+
+export async function fetchAppointmentNotifications(
+  getToken: GetToken,
+  appointmentId: string,
+): Promise<AppointmentNotificationSummary[]> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<AppointmentNotificationSummary[]>>(
+    `/appointments/${appointmentId}/notifications`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
+  );
+
+  return ensureSuccess(response, 'Failed to fetch appointment notifications');
+}
+
+export async function fetchDailyScheduleBoard(
+  getToken: GetToken,
+  barbershopId: string,
+  query: { date: string; employeeId?: string | null },
+): Promise<DailyScheduleBoard> {
+  const token = await getToken();
+  const response = await api.get<ApiResponse<DailyScheduleBoard>>(
+    `/barbershops/${barbershopId}/schedule/day`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      params: {
+        date: query.date,
+        ...(query.employeeId ? { employeeId: query.employeeId } : {}),
+      },
+    },
+  );
+
+  return ensureSuccess(
+    response,
+    localizeUnknownError('Failed to fetch daily schedule board'),
+  );
 }
 
 export async function createStaffAppointment(
@@ -172,10 +334,17 @@ export async function createStaffAppointment(
     serviceId: input.serviceId,
     startAt: input.startAt,
     clientName: input.clientName.trim(),
+    ...(input.customerId ? { customerId: input.customerId } : {}),
     ...(trimOptionalText(input.clientPhone)
       ? { clientPhone: trimOptionalText(input.clientPhone) }
       : {}),
+    ...(trimOptionalText(input.clientEmail)
+      ? { clientEmail: trimOptionalText(input.clientEmail) }
+      : {}),
     ...(trimOptionalText(input.notes) ? { notes: trimOptionalText(input.notes) } : {}),
+    ...(trimOptionalText(input.promotionCode)
+      ? { promotionCode: trimOptionalText(input.promotionCode)?.toUpperCase().replace(/\s+/gu, '') }
+      : {}),
     ...(input.employeeId ? { employeeId: input.employeeId } : {}),
   };
 

@@ -5,6 +5,7 @@ import {
   normalizePublicBookingNotes,
 } from './publicBookingInput.js';
 import { normalizePublicBookingPhone } from './publicBookingPhone.js';
+import { normalizeEmail } from './email.js';
 
 export const PUBLIC_BOOKING_CREATE_OPERATION = 'public-booking-create';
 
@@ -17,6 +18,8 @@ export interface PublicBookingFingerprintInput {
   startAt: string;
   clientName: string;
   clientPhone: string;
+  clientEmail?: string | null;
+  promotionCode?: string | null;
   notes?: string | null;
   consentVersion: string;
 }
@@ -59,6 +62,8 @@ export function fingerprintPublicBookingRequest(
     startAt: normalizeUtcInstant(input.startAt),
     clientName: normalizePublicBookingClientName(input.clientName),
     clientPhone: normalizePublicBookingPhone(input.clientPhone),
+    clientEmail: input.clientEmail?.trim() ? normalizeEmail(input.clientEmail) : null,
+    promotionCode: input.promotionCode?.trim().toUpperCase().replace(/\s+/gu, '') || null,
     notes: normalizePublicBookingNotes(input.notes),
     consentVersion: input.consentVersion.trim(),
   };

@@ -29,11 +29,130 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum DepositPolicyMode {
+  DISABLED
+  FIXED
+  PERCENTAGE
+}
+
+enum PaymentProvider {
+  MERCADO_PAGO
+}
+
+enum PaymentConnectionStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  REFRESH_REQUIRED
+  REVOKED
+  ERROR
+}
+
+enum BookingPaymentPurpose {
+  DEPOSIT
+}
+
+enum BookingPaymentStatus {
+  CREATING
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+  REVIEW_REQUIRED
+  ERROR
+}
+
+enum PaymentReviewStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum PaymentReviewReason {
+  APPROVED_AFTER_HOLD_EXPIRY
+  APPROVED_PAYMENT_ON_CANCELLED_APPOINTMENT
+  AMOUNT_MISMATCH
+  CURRENCY_MISMATCH
+  SELLER_MISMATCH
+  EXTERNAL_REFERENCE_MISMATCH
+  PREFERENCE_MISMATCH
+  DUPLICATE_PROVIDER_PAYMENT
+  PROVIDER_RECONCILIATION_ERROR
+  OTHER
+}
+
+enum PaymentReviewResolution {
+  REFUNDED_EXTERNALLY
+  NO_REFUND_REQUIRED
+  CUSTOMER_CREDIT_GRANTED
+  PAYMENT_ACCEPTED_MANUALLY
+  DUPLICATE_RESOLVED
+  OTHER
+}
+
+enum PaymentReviewActionType {
+  OPENED
+  MARKED_IN_PROGRESS
+  NOTE_ADDED
+  RESOLVED
+  REOPENED
+}
+
+enum PaymentWebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  REJECTED
+  ERROR
+}
+
 enum PaymentMethod {
   CASH
   CARD
   TRANSFER
   OTHER
+}
+
+enum PromotionDiscountType {
+  FIXED
+  PERCENTAGE
+}
+
+enum PromotionServiceScope {
+  ALL
+  SELECTED
+}
+
+enum PromotionRedemptionStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
+}
+
+enum PromotionRedemptionReleaseReason {
+  HOLD_EXPIRED
+  PAYMENT_REJECTED
+  PAYMENT_CANCELLED
+  PUBLIC_CANCELLED
+  PREFERENCE_CREATION_FAILED
+}
+
+enum LoyaltyLedgerEventType {
+  STAMP_EARNED
+  REWARD_ISSUED
+  REWARD_REDEEMED
+  REWARD_EXPIRED
+  REWARD_REVOKED
+  ADMIN_ADJUSTMENT
+}
+
+enum LoyaltyRewardStatus {
+  AVAILABLE
+  REDEEMED
+  EXPIRED
+  REVOKED
 }
 
 enum EmployeeInvitationStatus {
@@ -42,6 +161,55 @@ enum EmployeeInvitationStatus {
   REVOKED
   EXPIRED
   DELIVERY_FAILED
+}
+
+enum EmployeeScheduleMode {
+  INHERIT_BARBERSHOP
+  CUSTOM
+}
+
+enum EmployeeScheduleExceptionType {
+  FULL_DAY_OFF
+  CUSTOM_HOURS
+}
+
+// Where a cancellation originated. Decoupled from UserRole because
+// anonymous public bookings and automated (system) jobs have no
+// UserRole identity. A row that was cancelled has at least one of
+// (cancelledByRole, cancellationSource) populated, never both null.
+enum AppointmentCancellationSource {
+  STAFF
+  AUTHENTICATED_CLIENT
+  PUBLIC_BOOKING
+  SYSTEM
+}
+
+enum AppointmentNotificationType {
+  BOOKING_CONFIRMATION
+  REMINDER_24H
+  APPOINTMENT_RESCHEDULED
+}
+
+enum AppointmentChangeType {
+  RESCHEDULED
+}
+
+enum AppointmentNotificationChannel {
+  EMAIL
+}
+
+enum AppointmentNotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum NotificationAttemptOutcome {
+  SENT
+  TEMPORARY_FAILURE
+  PERMANENT_FAILURE
 }
 
 // ============================================
@@ -61,13 +229,24 @@ model User {
   deletedAt   DateTime? @map("deleted_at")
 
   // Relations
-  ownedBarbershops    Barbershop[]         @relation("BarbershopOwner")
-  employees           Employee[]
-  clientAppointments  Appointment[]        @relation("AppointmentClient")
-  uploadedPhotos      Photo[]              @relation("PhotoUploader")
-  clientPhotos        Photo[]              @relation("PhotoClient")
-  sentInvitations     EmployeeInvitation[] @relation("EmployeeInvitationInvitedBy")
-  acceptedInvitations EmployeeInvitation[] @relation("EmployeeInvitationUser")
+  ownedBarbershops                      Barbershop[]                 @relation("BarbershopOwner")
+  employees                             Employee[]
+  clientAppointments                    Appointment[]                @relation("AppointmentClient")
+  appointmentChanges                    AppointmentChange[]          @relation("AppointmentChangeActor")
+  uploadedPhotos                        Photo[]                      @relation("PhotoUploader")
+  clientPhotos                          Photo[]                      @relation("PhotoClient")
+  sentInvitations                       EmployeeInvitation[]         @relation("EmployeeInvitationInvitedBy")
+  acceptedInvitations                   EmployeeInvitation[]         @relation("EmployeeInvitationUser")
+  manualRetriedAppointmentNotifications AppointmentNotification[]    @relation("AppointmentNotificationLastManualRetryBy")
+  PaymentOAuthState                     PaymentOAuthState[]
+  assignedPaymentReviews                BookingPaymentReview[]       @relation("BookingPaymentReviewAssignedTo")
+  resolvedPaymentReviews                BookingPaymentReview[]       @relation("BookingPaymentReviewResolvedBy")
+  paymentReviewActions                  BookingPaymentReviewAction[] @relation("BookingPaymentReviewActionActor")
+  createdPromotions                     Promotion[]                  @relation("PromotionCreatedBy")
+  updatedPromotions                     Promotion[]                  @relation("PromotionUpdatedBy")
+  createdLoyaltyPrograms                BarbershopLoyaltyProgram[]   @relation("LoyaltyProgramCreatedBy")
+  updatedLoyaltyPrograms                BarbershopLoyaltyProgram[]   @relation("LoyaltyProgramUpdatedBy")
+  loyaltyLedgerEvents                   LoyaltyLedgerEvent[]         @relation("LoyaltyLedgerActor")
 
   @@map("users")
 }
@@ -92,15 +271,36 @@ model Barbershop {
   deletedAt  DateTime? @map("deleted_at")
 
   // Relations
-  owner                           User                          @relation("BarbershopOwner", fields: [ownerId], references: [id])
+  owner                           User                             @relation("BarbershopOwner", fields: [ownerId], references: [id])
   employees                       Employee[]
   services                        Service[]
   appointments                    Appointment[]
+  customers                       Customer[]
   workingHours                    WorkingHours[]
   scheduleExceptions              BarbershopScheduleException[]
+  employeeWorkingIntervals        EmployeeWorkingInterval[]
+  employeeScheduleExceptions      EmployeeScheduleException[]
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
+  appointmentNotifications        AppointmentNotification[]
+  appointmentNotificationAttempts AppointmentNotificationAttempt[]
+  appointmentChanges              AppointmentChange[]
   serviceRecords                  ServiceRecord[]
   employeeInvitations             EmployeeInvitation[]
+  depositPolicy                   BarbershopDepositPolicy?
+  paymentConnections              BarbershopPaymentConnection[]
+  paymentWebhookEvents            PaymentWebhookEvent[]
+  bookingPayments                 BookingPayment[]
+  PaymentOAuthState               PaymentOAuthState[]
+  paymentReviews                  BookingPaymentReview[]
+  paymentReviewActions            BookingPaymentReviewAction[]
+  promotions                      Promotion[]
+  promotionServices               PromotionService[]
+  promotionRedemptions            PromotionRedemption[]
+  promotionCustomerUsages         PromotionCustomerUsage[]
+  loyaltyProgram                  BarbershopLoyaltyProgram?
+  loyaltySummaries                CustomerLoyaltySummary[]
+  loyaltyRewards                  LoyaltyReward[]
+  loyaltyLedgerEvents             LoyaltyLedgerEvent[]
 
   // Indexes
   @@index([ownerId])
@@ -115,29 +315,96 @@ model Barbershop {
 /// Employee model - represents a barber/employee working at a barbershop
 /// Links a User to a Barbershop
 model Employee {
-  id           String    @id @default(cuid())
-  barbershopId String    @map("barbershop_id")
-  userId       String    @map("user_id")
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  deletedAt    DateTime? @map("deleted_at")
+  id           String               @id @default(cuid())
+  barbershopId String               @map("barbershop_id")
+  userId       String               @map("user_id")
+  isActive     Boolean              @default(true)
+  scheduleMode EmployeeScheduleMode @default(INHERIT_BARBERSHOP) @map("schedule_mode")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  deletedAt    DateTime?            @map("deleted_at")
 
   // Relations
-  barbershop          Barbershop           @relation(fields: [barbershopId], references: [id])
-  user                User                 @relation(fields: [userId], references: [id])
+  barbershop          Barbershop                  @relation(fields: [barbershopId], references: [id])
+  user                User                        @relation(fields: [userId], references: [id])
   employeeServices    EmployeeService[]
   appointments        Appointment[]
   serviceRecords      ServiceRecord[]
-  acceptedInvitations EmployeeInvitation[] @relation("EmployeeInvitationEmployee")
+  workingIntervals    EmployeeWorkingInterval[]
+  scheduleExceptions  EmployeeScheduleException[]
+  acceptedInvitations EmployeeInvitation[]        @relation("EmployeeInvitationEmployee")
 
   // Constraint: one employee record per user per barbershop
   @@unique([barbershopId, userId])
+  @@unique([id, barbershopId])
   // Indexes
   @@index([barbershopId])
   @@index([userId])
   @@index([barbershopId, isActive])
   @@map("employees")
+}
+
+// ============================================
+// EMPLOYEE SCHEDULE
+// ============================================
+
+/// EmployeeWorkingInterval model — one recurring custom interval per employee/day.
+/// Current product scope supports at most one interval per weekday for custom employee schedules.
+model EmployeeWorkingInterval {
+  id           String   @id @default(cuid())
+  barbershopId String   @map("barbershop_id")
+  employeeId   String   @map("employee_id")
+  dayOfWeek    Int      @map("day_of_week")
+  openTime     String   @map("open_time")
+  closeTime    String   @map("close_time")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  employee   Employee   @relation(fields: [employeeId, barbershopId], references: [id, barbershopId], onDelete: Cascade)
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, dayOfWeek])
+  @@index([employeeId])
+  @@index([barbershopId, dayOfWeek])
+  @@map("employee_working_intervals")
+}
+
+/// EmployeeScheduleException model — employee-specific local-date override.
+model EmployeeScheduleException {
+  id           String                        @id @default(cuid())
+  barbershopId String                        @map("barbershop_id")
+  employeeId   String                        @map("employee_id")
+  localDate    String                        @map("local_date")
+  type         EmployeeScheduleExceptionType
+  reason       String?                       @db.VarChar(500)
+  createdAt    DateTime                      @default(now()) @map("created_at")
+  updatedAt    DateTime                      @updatedAt @map("updated_at")
+
+  employee   Employee                            @relation(fields: [employeeId, barbershopId], references: [id, barbershopId], onDelete: Cascade)
+  barbershop Barbershop                          @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  intervals  EmployeeScheduleExceptionInterval[]
+
+  @@unique([employeeId, localDate])
+  @@index([employeeId, localDate])
+  @@index([barbershopId, localDate])
+  @@map("employee_schedule_exceptions")
+}
+
+/// EmployeeScheduleExceptionInterval model — ordered custom intervals for one employee exception date.
+model EmployeeScheduleExceptionInterval {
+  id                  String   @id @default(cuid())
+  scheduleExceptionId String   @map("schedule_exception_id")
+  openTime            String   @map("open_time")
+  closeTime           String   @map("close_time")
+  position            Int
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  scheduleException EmployeeScheduleException @relation(fields: [scheduleExceptionId], references: [id], onDelete: Cascade, map: "employee_schedule_exception_intervals_schedule_exception_id_fke")
+
+  @@unique([scheduleExceptionId, position], map: "employee_schedule_exception_intervals_schedule_exception_id_pos")
+  @@index([scheduleExceptionId], map: "employee_schedule_exception_intervals_schedule_exception_id_idx")
+  @@map("employee_schedule_exception_intervals")
 }
 
 // ============================================
@@ -198,12 +465,14 @@ model Service {
   deletedAt       DateTime? @map("deleted_at")
 
   // Relations
-  barbershop       Barbershop        @relation(fields: [barbershopId], references: [id])
-  employeeServices EmployeeService[]
-  appointments     Appointment[]
-  serviceRecords   ServiceRecord[]
+  barbershop        Barbershop         @relation(fields: [barbershopId], references: [id])
+  employeeServices  EmployeeService[]
+  appointments      Appointment[]
+  serviceRecords    ServiceRecord[]
+  promotionServices PromotionService[]
 
   // Indexes
+  @@unique([id, barbershopId])
   @@index([barbershopId])
   @@index([barbershopId, isActive])
   @@map("services")
@@ -237,44 +506,564 @@ model EmployeeService {
 
 /// Appointment model - represents a booked appointment
 model Appointment {
-  id                      String            @id @default(cuid())
-  barbershopId            String            @map("barbershop_id")
-  employeeId              String            @map("employee_id")
-  clientId                String?           @map("client_id")
-  serviceId               String            @map("service_id")
-  clientName              String            @map("client_name")
-  clientPhone             String?           @map("client_phone")
-  publicReference         String?           @unique @map("public_reference")
-  publicConsentAcceptedAt DateTime?         @map("public_consent_accepted_at")
-  publicConsentVersion    String?           @map("public_consent_version")
-  serviceName             String            @map("service_name")
-  servicePriceCents       Int               @map("service_price_cents")
-  serviceDurationMinutes  Int               @map("service_duration_minutes")
-  serviceCurrency         String            @map("service_currency")
-  startAt                 DateTime          @map("start_at")
-  endAt                   DateTime          @map("end_at")
-  status                  AppointmentStatus @default(PENDING)
+  id                      String                         @id @default(cuid())
+  barbershopId            String                         @map("barbershop_id")
+  employeeId              String                         @map("employee_id")
+  clientId                String?                        @map("client_id")
+  serviceId               String                         @map("service_id")
+  clientName              String                         @map("client_name")
+  clientPhone             String?                        @map("client_phone")
+  clientEmail             String?                        @map("client_email")
+  customerId              String?                        @map("customer_id")
+  publicReference         String?                        @unique @map("public_reference")
+  publicConsentAcceptedAt DateTime?                      @map("public_consent_accepted_at")
+  publicConsentVersion    String?                        @map("public_consent_version")
+  serviceName             String                         @map("service_name")
+  servicePriceCents       Int                            @map("service_price_cents")
+  discountCents           Int                            @default(0) @map("discount_cents")
+  finalPriceCents         Int                            @default(0) @map("final_price_cents")
+  serviceDurationMinutes  Int                            @map("service_duration_minutes")
+  serviceCurrency         String                         @map("service_currency")
+  startAt                 DateTime                       @map("start_at")
+  endAt                   DateTime                       @map("end_at")
+  status                  AppointmentStatus              @default(PENDING)
+  paymentHoldExpiresAt    DateTime?                      @map("payment_hold_expires_at")
+  paymentConfirmedAt      DateTime?                      @map("payment_confirmed_at")
   notes                   String?
-  createdAt               DateTime          @default(now()) @map("created_at")
-  updatedAt               DateTime          @updatedAt @map("updated_at")
-  deletedAt               DateTime?         @map("deleted_at")
+  // Lifecycle tracking — Phase 1 no-show prevention foundation.
+  // All fields are nullable so existing rows remain valid and the migration
+  // is purely additive. Timestamps are stamped in the barbershop's UTC instant
+  // by the service layer; cancelledByRole records the role of the actor.
+  startedAt               DateTime?                      @map("started_at")
+  confirmedAt             DateTime?                      @map("confirmed_at")
+  completedAt             DateTime?                      @map("completed_at")
+  cancelledAt             DateTime?                      @map("cancelled_at")
+  noShowAt                DateTime?                      @map("no_show_at")
+  cancelledByRole         UserRole?                      @map("cancelled_by_role")
+  cancellationSource      AppointmentCancellationSource? @map("cancellation_source")
+  cancelReason            String?                        @map("cancel_reason") @db.VarChar(500)
+  // Normalized E.164 client phone, populated by the service for new
+  // bookings. Legacy rows remain NULL; the customer lookup endpoint
+  // only matches when the normalized value is present.
+  clientPhoneNormalized   String?                        @map("client_phone_normalized") @db.VarChar(20)
+  createdAt               DateTime                       @default(now()) @map("created_at")
+  updatedAt               DateTime                       @updatedAt @map("updated_at")
+  deletedAt               DateTime?                      @map("deleted_at")
 
   // Relations
   barbershop                      Barbershop                 @relation(fields: [barbershopId], references: [id])
   employee                        Employee                   @relation(fields: [employeeId], references: [id])
   client                          User?                      @relation("AppointmentClient", fields: [clientId], references: [id])
+  customer                        Customer?                  @relation("AppointmentCustomer", fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
   service                         Service                    @relation(fields: [serviceId], references: [id])
   publicBookingIdempotencyRecords PublicBookingIdempotency[]
+  notifications                   AppointmentNotification[]
+  changes                         AppointmentChange[]
   serviceRecords                  ServiceRecord[]
+  bookingPayments                 BookingPayment[]
+  promotionRedemption             PromotionRedemption?
+  loyaltyLedgerEvents             LoyaltyLedgerEvent[]
+  redeemedLoyaltyRewards          LoyaltyReward[]            @relation("LoyaltyRewardRedemptionAppointment")
+  sourceIssuedLoyaltyRewards      LoyaltyReward[]            @relation("LoyaltyRewardSourceAppointment")
 
+  @@unique([id, barbershopId])
   // Indexes for common queries
   @@index([barbershopId])
   @@index([employeeId])
   @@index([clientId])
+  @@index([customerId])
+  @@index([customerId, barbershopId])
   @@index([startAt])
   @@index([barbershopId, employeeId, startAt])
   @@index([employeeId, startAt, status])
+  @@index([barbershopId, clientPhoneNormalized])
+  @@index([paymentHoldExpiresAt])
   @@map("appointments")
+}
+
+model BarbershopDepositPolicy {
+  id                    String            @id @default(cuid())
+  barbershopId          String            @unique @map("barbershop_id")
+  mode                  DepositPolicyMode @default(DISABLED)
+  fixedAmountCents      Int?              @map("fixed_amount_cents")
+  percentageBasisPoints Int?              @map("percentage_basis_points")
+  holdDurationMinutes   Int               @default(15) @map("hold_duration_minutes")
+  currency              String            @default("ARS")
+  publicTerms           String?           @map("public_terms") @db.VarChar(1000)
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@map("barbershop_deposit_policies")
+}
+
+model BarbershopPaymentConnection {
+  id                     String                  @id @default(cuid())
+  barbershopId           String                  @map("barbershop_id")
+  provider               PaymentProvider
+  status                 PaymentConnectionStatus @default(DISCONNECTED)
+  providerSellerId       String?                 @map("provider_seller_id")
+  providerPublicKey      String?                 @map("provider_public_key")
+  accessTokenCiphertext  String?                 @map("access_token_ciphertext") @db.Text
+  refreshTokenCiphertext String?                 @map("refresh_token_ciphertext") @db.Text
+  tokenExpiresAt         DateTime?               @map("token_expires_at")
+  scopes                 String?                 @db.VarChar(1000)
+  connectedAt            DateTime?               @map("connected_at")
+  lastRefreshedAt        DateTime?               @map("last_refreshed_at")
+  revokedAt              DateTime?               @map("revoked_at")
+  lastErrorCode          String?                 @map("last_error_code") @db.VarChar(120)
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
+
+  barbershop      Barbershop            @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  oauthStates     PaymentOAuthState[]
+  bookingPayments BookingPayment[]
+  webhookEvents   PaymentWebhookEvent[]
+
+  @@unique([barbershopId, provider])
+  @@index([barbershopId, status])
+  @@map("barbershop_payment_connections")
+}
+
+model PaymentOAuthState {
+  id                     String          @id @default(cuid())
+  barbershopId           String          @map("barbershop_id")
+  initiatedByUserId      String          @map("initiated_by_user_id")
+  provider               PaymentProvider
+  stateHash              String          @unique @map("state_hash")
+  pkceVerifierCiphertext String          @map("pkce_verifier_ciphertext") @db.Text
+  redirectTarget         String?         @map("redirect_target") @db.VarChar(500)
+  expiresAt              DateTime        @map("expires_at")
+  consumedAt             DateTime?       @map("consumed_at")
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @updatedAt @map("updated_at")
+
+  barbershop      Barbershop                   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  initiatedByUser User                         @relation(fields: [initiatedByUserId], references: [id], onDelete: Cascade)
+  connection      BarbershopPaymentConnection? @relation(fields: [barbershopId, provider], references: [barbershopId, provider], onDelete: Cascade)
+
+  @@index([barbershopId, provider, expiresAt])
+  @@map("payment_oauth_states")
+}
+
+model BookingPayment {
+  id                    String                @id @default(cuid())
+  barbershopId          String                @map("barbershop_id")
+  appointmentId         String                @map("appointment_id")
+  paymentConnectionId   String?               @map("payment_connection_id")
+  provider              PaymentProvider
+  purpose               BookingPaymentPurpose
+  status                BookingPaymentStatus  @default(CREATING)
+  amountCents           Int                   @map("amount_cents")
+  currency              String
+  policyModeSnapshot    DepositPolicyMode     @map("policy_mode_snapshot")
+  policyValueSnapshot   Int                   @map("policy_value_snapshot")
+  externalReference     String                @unique @map("external_reference")
+  providerPreferenceId  String?               @map("provider_preference_id")
+  providerPaymentId     String?               @unique @map("provider_payment_id")
+  checkoutUrlCiphertext String?               @map("checkout_url_ciphertext") @db.Text
+  expiresAt             DateTime              @map("expires_at")
+  approvedAt            DateTime?             @map("approved_at")
+  rejectedAt            DateTime?             @map("rejected_at")
+  cancelledAt           DateTime?             @map("cancelled_at")
+  expiredAt             DateTime?             @map("expired_at")
+  reviewRequiredAt      DateTime?             @map("review_required_at")
+  reviewReasonCode      String?               @map("review_reason_code") @db.VarChar(120)
+  providerStatus        String?               @map("provider_status") @db.VarChar(120)
+  providerStatusDetail  String?               @map("provider_status_detail") @db.VarChar(255)
+  lastErrorCode         String?               @map("last_error_code") @db.VarChar(120)
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  appointment       Appointment                  @relation(fields: [appointmentId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  barbershop        Barbershop                   @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  paymentConnection BarbershopPaymentConnection? @relation(fields: [paymentConnectionId], references: [id], onDelete: SetNull)
+  webhookEvents     PaymentWebhookEvent[]
+  reviews           BookingPaymentReview[]
+
+  @@index([status, expiresAt])
+  @@index([barbershopId, createdAt])
+  @@index([appointmentId, status])
+  @@map("booking_payments")
+}
+
+model Promotion {
+  id                        String                @id @default(cuid())
+  barbershopId              String                @map("barbershop_id")
+  name                      String
+  code                      String
+  codeNormalized            String                @map("code_normalized")
+  discountType              PromotionDiscountType @map("discount_type")
+  fixedDiscountCents        Int?                  @map("fixed_discount_cents")
+  percentageBasisPoints     Int?                  @map("percentage_basis_points")
+  startsAt                  DateTime              @map("starts_at")
+  endsAt                    DateTime              @map("ends_at")
+  isActive                  Boolean               @default(true) @map("is_active")
+  appliesToPublicBookings   Boolean               @default(true) @map("applies_to_public_bookings")
+  appliesToStaffBookings    Boolean               @default(true) @map("applies_to_staff_bookings")
+  maxActiveRedemptions      Int?                  @map("max_active_redemptions")
+  maxRedemptionsPerCustomer Int?                  @map("max_redemptions_per_customer")
+  activeRedemptionCount     Int                   @default(0) @map("active_redemption_count")
+  minimumPriceCents         Int?                  @map("minimum_price_cents")
+  serviceScope              PromotionServiceScope @default(ALL) @map("service_scope")
+  createdByUserId           String                @map("created_by_user_id")
+  updatedByUserId           String?               @map("updated_by_user_id")
+  createdAt                 DateTime              @default(now()) @map("created_at")
+  updatedAt                 DateTime              @updatedAt @map("updated_at")
+  deletedAt                 DateTime?             @map("deleted_at")
+
+  barbershop             Barbershop                @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  createdByUser          User                      @relation("PromotionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedByUser          User?                     @relation("PromotionUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  services               PromotionService[]
+  redemptions            PromotionRedemption[]
+  customerUsages         PromotionCustomerUsage[]
+  loyaltyProgramTemplate BarbershopLoyaltyProgram? @relation("LoyaltyRewardPromotionTemplate")
+  loyaltyReward          LoyaltyReward?
+
+  @@unique([barbershopId, codeNormalized])
+  @@unique([id, barbershopId])
+  @@index([barbershopId, isActive, startsAt, endsAt])
+  @@map("promotions")
+}
+
+model PromotionService {
+  promotionId  String   @map("promotion_id")
+  serviceId    String   @map("service_id")
+  barbershopId String   @map("barbershop_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  promotion  Promotion  @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  service    Service    @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+
+  @@id([promotionId, serviceId])
+  @@index([serviceId])
+  @@index([barbershopId])
+  @@map("promotion_services")
+}
+
+model PromotionCustomerUsage {
+  id                    String   @id @default(cuid())
+  barbershopId          String   @map("barbershop_id")
+  promotionId           String   @map("promotion_id")
+  customerId            String   @map("customer_id")
+  activeRedemptionCount Int      @default(0) @map("active_redemption_count")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  promotion  Promotion  @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  customer   Customer   @relation(fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+
+  @@unique([promotionId, customerId])
+  @@index([barbershopId, promotionId])
+  @@map("promotion_customer_usages")
+}
+
+model PromotionRedemption {
+  id                    String                            @id @default(cuid())
+  barbershopId          String                            @map("barbershop_id")
+  promotionId           String                            @map("promotion_id")
+  appointmentId         String                            @map("appointment_id")
+  customerId            String?                           @map("customer_id")
+  status                PromotionRedemptionStatus
+  codeSnapshot          String                            @map("code_snapshot")
+  promotionNameSnapshot String                            @map("promotion_name_snapshot")
+  discountTypeSnapshot  PromotionDiscountType             @map("discount_type_snapshot")
+  policyValueSnapshot   Int                               @map("policy_value_snapshot")
+  servicePriceCents     Int                               @map("service_price_cents")
+  discountCents         Int                               @map("discount_cents")
+  finalPriceCents       Int                               @map("final_price_cents")
+  reservedAt            DateTime                          @map("reserved_at")
+  consumedAt            DateTime?                         @map("consumed_at")
+  releasedAt            DateTime?                         @map("released_at")
+  releaseReason         PromotionRedemptionReleaseReason? @map("release_reason")
+  createdAt             DateTime                          @default(now()) @map("created_at")
+  updatedAt             DateTime                          @updatedAt @map("updated_at")
+
+  barbershop  Barbershop  @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  promotion   Promotion   @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict)
+  customer    Customer?   @relation(fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+
+  @@unique([appointmentId])
+  @@index([promotionId, status, createdAt])
+  @@index([customerId, promotionId, status])
+  @@index([barbershopId, status, createdAt])
+  @@map("promotion_redemptions")
+}
+
+model BarbershopLoyaltyProgram {
+  id                 String   @id @default(cuid())
+  barbershopId       String   @unique @map("barbershop_id")
+  isEnabled          Boolean  @default(false) @map("is_enabled")
+  visitsRequired     Int      @default(5) @map("visits_required")
+  rewardPromotionId  String?  @unique @map("reward_promotion_id")
+  rewardValidityDays Int?     @map("reward_validity_days")
+  createdByUserId    String   @map("created_by_user_id")
+  updatedByUserId    String?  @map("updated_by_user_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  barbershop      Barbershop           @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  rewardPromotion Promotion?           @relation("LoyaltyRewardPromotionTemplate", fields: [rewardPromotionId], references: [id], onDelete: SetNull)
+  createdByUser   User                 @relation("LoyaltyProgramCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedByUser   User?                @relation("LoyaltyProgramUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  rewards         LoyaltyReward[]
+  ledgerEvents    LoyaltyLedgerEvent[]
+
+  @@index([barbershopId, isEnabled])
+  @@map("barbershop_loyalty_programs")
+}
+
+model CustomerLoyaltySummary {
+  id                     String    @id @default(cuid())
+  barbershopId           String    @map("barbershop_id")
+  customerId             String    @map("customer_id")
+  currentStampCount      Int       @default(0) @map("current_stamp_count")
+  lifetimeEligibleVisits Int       @default(0) @map("lifetime_eligible_visits")
+  availableRewardCount   Int       @default(0) @map("available_reward_count")
+  lastEarnedAt           DateTime? @map("last_earned_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  customer   Customer   @relation(fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Cascade)
+
+  @@unique([customerId])
+  @@unique([customerId, barbershopId])
+  @@index([barbershopId, updatedAt])
+  @@map("customer_loyalty_summaries")
+}
+
+model LoyaltyReward {
+  id                      String              @id @default(cuid())
+  barbershopId            String              @map("barbershop_id")
+  customerId              String              @map("customer_id")
+  loyaltyProgramId        String              @map("loyalty_program_id")
+  promotionId             String              @unique @map("promotion_id")
+  sourceAppointmentId     String?             @map("source_appointment_id")
+  issuedAt                DateTime            @default(now()) @map("issued_at")
+  expiresAt               DateTime?           @map("expires_at")
+  redeemedAt              DateTime?           @map("redeemed_at")
+  revokedAt               DateTime?           @map("revoked_at")
+  redemptionAppointmentId String?             @unique @map("redemption_appointment_id")
+  status                  LoyaltyRewardStatus @default(AVAILABLE)
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+
+  barbershop            Barbershop               @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  customer              Customer                 @relation(fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  loyaltyProgram        BarbershopLoyaltyProgram @relation(fields: [loyaltyProgramId], references: [id], onDelete: Restrict)
+  promotion             Promotion                @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  sourceAppointment     Appointment?             @relation("LoyaltyRewardSourceAppointment", fields: [sourceAppointmentId], references: [id], onDelete: SetNull)
+  redemptionAppointment Appointment?             @relation("LoyaltyRewardRedemptionAppointment", fields: [redemptionAppointmentId], references: [id], onDelete: SetNull)
+  ledgerEvents          LoyaltyLedgerEvent[]
+
+  @@index([barbershopId, customerId, status, issuedAt])
+  @@index([loyaltyProgramId, status, issuedAt])
+  @@map("loyalty_rewards")
+}
+
+model LoyaltyLedgerEvent {
+  id                  String                 @id @default(cuid())
+  barbershopId        String                 @map("barbershop_id")
+  customerId          String                 @map("customer_id")
+  loyaltyProgramId    String?                @map("loyalty_program_id")
+  loyaltyRewardId     String?                @map("loyalty_reward_id")
+  sourceAppointmentId String?                @map("source_appointment_id")
+  actorUserId         String?                @map("actor_user_id")
+  actorRole           UserRole?              @map("actor_role")
+  eventType           LoyaltyLedgerEventType @map("event_type")
+  stampDelta          Int                    @default(0) @map("stamp_delta")
+  rewardDelta         Int                    @default(0) @map("reward_delta")
+  reason              String?                @db.VarChar(500)
+  metadata            Json?
+  createdAt           DateTime               @default(now()) @map("created_at")
+
+  barbershop        Barbershop                @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  customer          Customer                  @relation(fields: [customerId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  loyaltyProgram    BarbershopLoyaltyProgram? @relation(fields: [loyaltyProgramId], references: [id], onDelete: SetNull)
+  loyaltyReward     LoyaltyReward?            @relation(fields: [loyaltyRewardId], references: [id], onDelete: SetNull)
+  sourceAppointment Appointment?              @relation(fields: [sourceAppointmentId], references: [id], onDelete: SetNull)
+  actorUser         User?                     @relation("LoyaltyLedgerActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceAppointmentId, eventType])
+  @@index([barbershopId, createdAt])
+  @@index([customerId, createdAt])
+  @@index([loyaltyProgramId, createdAt])
+  @@map("loyalty_ledger_events")
+}
+
+model PaymentWebhookEvent {
+  id                  String                    @id @default(cuid())
+  barbershopId        String?                   @map("barbershop_id")
+  paymentConnectionId String?                   @map("payment_connection_id")
+  bookingPaymentId    String?                   @map("booking_payment_id")
+  provider            PaymentProvider
+  status              PaymentWebhookEventStatus @default(RECEIVED)
+  eventTopic          String?                   @map("event_topic") @db.VarChar(120)
+  eventAction         String?                   @map("event_action") @db.VarChar(120)
+  dataId              String                    @map("data_id")
+  externalReference   String?                   @map("external_reference") @db.VarChar(120)
+  requestId           String?                   @map("request_id") @db.VarChar(120)
+  signatureTs         String?                   @map("signature_ts") @db.VarChar(120)
+  rawBodySha256       String                    @map("raw_body_sha256") @db.VarChar(64)
+  attemptCount        Int                       @default(1) @map("attempt_count")
+  processedAt         DateTime?                 @map("processed_at")
+  lastErrorCode       String?                   @map("last_error_code") @db.VarChar(120)
+  createdAt           DateTime                  @default(now()) @map("created_at")
+  updatedAt           DateTime                  @updatedAt @map("updated_at")
+
+  barbershop        Barbershop?                  @relation(fields: [barbershopId], references: [id], onDelete: SetNull)
+  paymentConnection BarbershopPaymentConnection? @relation(fields: [paymentConnectionId], references: [id], onDelete: SetNull)
+  bookingPayment    BookingPayment?              @relation(fields: [bookingPaymentId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, dataId, externalReference], map: "payment_webhook_event_provider_data_reference_key")
+  @@index([status, createdAt])
+  @@map("payment_webhook_events")
+}
+
+model BookingPaymentReview {
+  id               String                   @id @default(cuid())
+  barbershopId     String                   @map("barbershop_id")
+  bookingPaymentId String                   @map("booking_payment_id")
+  reason           PaymentReviewReason
+  status           PaymentReviewStatus      @default(OPEN)
+  resolution       PaymentReviewResolution?
+  openedAt         DateTime                 @default(now()) @map("opened_at")
+  startedAt        DateTime?                @map("started_at")
+  resolvedAt       DateTime?                @map("resolved_at")
+  assignedToUserId String?                  @map("assigned_to_user_id")
+  resolvedByUserId String?                  @map("resolved_by_user_id")
+  latestNote       String?                  @map("latest_note") @db.VarChar(1000)
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+
+  barbershop     Barbershop                   @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  bookingPayment BookingPayment               @relation(fields: [bookingPaymentId], references: [id], onDelete: Restrict)
+  assignedToUser User?                        @relation("BookingPaymentReviewAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  resolvedByUser User?                        @relation("BookingPaymentReviewResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  actions        BookingPaymentReviewAction[]
+
+  @@unique([bookingPaymentId, reason])
+  @@index([barbershopId, status, openedAt])
+  @@map("booking_payment_reviews")
+}
+
+model BookingPaymentReviewAction {
+  id           String                   @id @default(cuid())
+  barbershopId String                   @map("barbershop_id")
+  reviewId     String                   @map("review_id")
+  action       PaymentReviewActionType
+  actorUserId  String?                  @map("actor_user_id")
+  actorRole    UserRole?                @map("actor_role")
+  note         String?                  @db.VarChar(1000)
+  resolution   PaymentReviewResolution?
+  createdAt    DateTime                 @default(now()) @map("created_at")
+
+  barbershop Barbershop           @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  review     BookingPaymentReview @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  actorUser  User?                @relation("BookingPaymentReviewActionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([reviewId, createdAt])
+  @@index([barbershopId, createdAt])
+  @@map("booking_payment_review_actions")
+}
+
+model AppointmentNotification {
+  id                      String                         @id @default(cuid())
+  barbershopId            String                         @map("barbershop_id")
+  appointmentId           String                         @map("appointment_id")
+  type                    AppointmentNotificationType
+  channel                 AppointmentNotificationChannel
+  status                  AppointmentNotificationStatus  @default(PENDING)
+  recipientEmail          String                         @map("recipient_email")
+  scheduledFor            DateTime                       @map("scheduled_for")
+  nextAttemptAt           DateTime                       @map("next_attempt_at")
+  attempts                Int                            @default(0)
+  manualRetryCount        Int                            @default(0) @map("manual_retry_count")
+  lastManualRetryAt       DateTime?                      @map("last_manual_retry_at")
+  lastManualRetryByUserId String?                        @map("last_manual_retry_by_user_id")
+  lockToken               String?                        @map("lock_token")
+  lockedAt                DateTime?                      @map("locked_at")
+  lastError               String?                        @map("last_error") @db.VarChar(1000)
+  sentAt                  DateTime?                      @map("sent_at")
+  cancelledAt             DateTime?                      @map("cancelled_at")
+  providerMessageId       String?                        @map("provider_message_id")
+  idempotencyKey          String                         @unique @map("idempotency_key")
+  payload                 Json
+  createdAt               DateTime                       @default(now()) @map("created_at")
+  updatedAt               DateTime                       @updatedAt @map("updated_at")
+
+  appointment           Appointment                      @relation(fields: [appointmentId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  barbershop            Barbershop                       @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  lastManualRetryByUser User?                            @relation("AppointmentNotificationLastManualRetryBy", fields: [lastManualRetryByUserId], references: [id], onDelete: SetNull)
+  deliveryAttempts      AppointmentNotificationAttempt[]
+
+  @@unique([id, barbershopId])
+  @@index([status, nextAttemptAt])
+  @@index([appointmentId, status])
+  @@index([barbershopId, createdAt])
+  @@map("appointment_notifications")
+}
+
+model AppointmentChange {
+  id                   String                @id @default(cuid())
+  barbershopId         String                @map("barbershop_id")
+  appointmentId        String                @map("appointment_id")
+  type                 AppointmentChangeType
+  changedByUserId      String                @map("changed_by_user_id")
+  changedByRole        UserRole              @map("changed_by_role")
+  previousEmployeeId   String                @map("previous_employee_id")
+  previousEmployeeName String                @map("previous_employee_name")
+  previousServiceId    String                @map("previous_service_id")
+  previousServiceName  String                @map("previous_service_name")
+  previousStartAt      DateTime              @map("previous_start_at")
+  previousEndAt        DateTime              @map("previous_end_at")
+  newEmployeeId        String                @map("new_employee_id")
+  newEmployeeName      String                @map("new_employee_name")
+  newServiceId         String                @map("new_service_id")
+  newServiceName       String                @map("new_service_name")
+  newStartAt           DateTime              @map("new_start_at")
+  newEndAt             DateTime              @map("new_end_at")
+  reason               String?               @db.VarChar(500)
+  createdAt            DateTime              @default(now()) @map("created_at")
+
+  appointment   Appointment @relation(fields: [appointmentId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  barbershop    Barbershop  @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  changedByUser User        @relation("AppointmentChangeActor", fields: [changedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([appointmentId, createdAt])
+  @@index([barbershopId, createdAt])
+  @@index([changedByUserId])
+  @@map("appointment_changes")
+}
+
+model AppointmentNotificationAttempt {
+  id                        String                     @id @default(cuid())
+  barbershopId              String                     @map("barbershop_id")
+  appointmentNotificationId String                     @map("appointment_notification_id")
+  attemptNumber             Int                        @map("attempt_number")
+  outcome                   NotificationAttemptOutcome
+  attemptedAt               DateTime                   @default(now()) @map("attempted_at")
+  completedAt               DateTime?                  @map("completed_at")
+  workerTokenHash           String?                    @map("worker_token_hash")
+  providerMessageIdHash     String?                    @map("provider_message_id_hash")
+  errorCode                 String?                    @map("error_code")
+  sanitizedError            String?                    @map("sanitized_error") @db.VarChar(1000)
+  durationMs                Int?                       @map("duration_ms")
+  createdAt                 DateTime                   @default(now()) @map("created_at")
+
+  notification AppointmentNotification @relation(fields: [appointmentNotificationId, barbershopId], references: [id, barbershopId], onDelete: Restrict, map: "appointment_notification_attempts_appointment_notification_id_b")
+  barbershop   Barbershop              @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+
+  @@unique([appointmentNotificationId, attemptNumber], map: "appt_notif_attempts_notif_attempt_num_key")
+  @@index([appointmentNotificationId, attemptedAt], map: "appt_notif_attempts_notif_attempted_idx")
+  @@index([barbershopId, attemptedAt], map: "appt_notif_attempts_shop_attempted_idx")
+  @@map("appointment_notification_attempts")
 }
 
 model PublicBookingIdempotency {
@@ -291,7 +1080,7 @@ model PublicBookingIdempotency {
   barbershop  Barbershop   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
-  @@unique([barbershopId, operation, idempotencyKey])
+  @@unique([barbershopId, operation, idempotencyKey], map: "public_booking_idempotency_barbershop_id_operation_idempotency_")
   @@index([barbershopId])
   @@index([appointmentId])
   @@index([expiresAt])
@@ -395,10 +1184,10 @@ model BarbershopScheduleExceptionInterval {
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   // Relations
-  scheduleException BarbershopScheduleException @relation(fields: [scheduleExceptionId], references: [id], onDelete: Cascade)
+  scheduleException BarbershopScheduleException @relation(fields: [scheduleExceptionId], references: [id], onDelete: Cascade, map: "barbershop_schedule_exception_intervals_schedule_exception_id_f")
 
-  @@unique([scheduleExceptionId, position])
-  @@index([scheduleExceptionId])
+  @@unique([scheduleExceptionId, position], map: "barbershop_schedule_exception_intervals_schedule_exception_id_p")
+  @@index([scheduleExceptionId], map: "barbershop_schedule_exception_intervals_schedule_exception_id_i")
   @@map("barbershop_schedule_exception_intervals")
 }
 
@@ -423,4 +1212,47 @@ model Photo {
   @@index([clientId])
   @@index([uploadedById])
   @@map("photos")
+}
+
+// ============================================
+// CUSTOMER
+// ============================================
+
+/// Customer model - first-class barbershop customer identity.
+///
+/// Identity key is (barbershopId, phoneNormalized). Customers are NOT
+/// global: a phone number may be linked to different customers in
+/// different barbershops, but never to two different customers in the
+/// same barbershop. Existing appointments retain their snapshot
+/// fields (clientName, clientPhone, clientPhoneNormalized) for
+/// historical truth; the current directory identity is in this row.
+model Customer {
+  id              String    @id @default(cuid())
+  barbershopId    String    @map("barbershop_id")
+  name            String
+  phone           String
+  phoneNormalized String    @map("phone_normalized")
+  email           String?
+  internalNotes   String?   @map("internal_notes") @db.VarChar(2000)
+  firstSeenAt     DateTime  @map("first_seen_at")
+  lastSeenAt      DateTime  @map("last_seen_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  // Relations
+  barbershop              Barbershop               @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  appointments            Appointment[]            @relation("AppointmentCustomer")
+  promotionRedemptions    PromotionRedemption[]
+  promotionCustomerUsages PromotionCustomerUsage[]
+  loyaltySummary          CustomerLoyaltySummary?
+  loyaltyRewards          LoyaltyReward[]
+  loyaltyLedgerEvents     LoyaltyLedgerEvent[]
+
+  // Indexes
+  @@unique([id, barbershopId])
+  @@unique([barbershopId, phoneNormalized])
+  @@index([barbershopId, name])
+  @@index([barbershopId, lastSeenAt])
+  @@map("customers")
 }

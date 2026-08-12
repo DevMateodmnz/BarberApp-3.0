@@ -1,11 +1,15 @@
 import 'server-only';
 import { getPublicWebRuntime } from '@/lib/config/publicRuntime';
+import { sanitizePublicApiPath } from '@/lib/api/sanitizePath';
 import type {
   ApiEnvelope,
   PublicAvailability,
   PublicBarber,
   PublicBookingConfig,
   PublicBookingConfirmation,
+  PublicPaymentStatus,
+  PublicCancelBookingPayload,
+  PublicCancelBookingResult,
   PublicCreateAppointmentPayload,
   PublicService,
   PublicShop,
@@ -52,6 +56,7 @@ function logPublicApiFailure(
   console.error('[public-web][public-api]', {
     category,
     ...context,
+    path: sanitizePublicApiPath(context.path),
   });
 }
 
@@ -220,5 +225,29 @@ export async function createPublicAppointment(input: {
       },
       body: JSON.stringify(input.payload),
     }
+  );
+}
+
+export async function cancelPublicAppointment(input: {
+  slug: string;
+  publicReference: string;
+  payload: PublicCancelBookingPayload;
+}) {
+  return fetchPublicApi<PublicCancelBookingResult>(
+    `/public/barbershops/${encodeURIComponent(input.slug)}/appointments/${encodeURIComponent(input.publicReference)}/cancel`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input.payload),
+    }
+  );
+}
+
+export async function getPublicPaymentStatus(input: {
+  slug: string;
+  publicReference: string;
+}) {
+  return fetchPublicApi<PublicPaymentStatus>(
+    `/public/barbershops/${encodeURIComponent(input.slug)}/bookings/${encodeURIComponent(input.publicReference)}/payment`
   );
 }

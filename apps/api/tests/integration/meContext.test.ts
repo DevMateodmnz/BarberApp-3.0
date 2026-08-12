@@ -42,6 +42,8 @@ const fixtures: TestFixtures = {} as TestFixtures;
 beforeAll(async () => {
   // Clean all related tables in order
   await prisma.serviceRecord.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -144,6 +146,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.serviceRecord.deleteMany();
+  await prisma.appointmentNotification.deleteMany();
+
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -257,6 +261,7 @@ describe('GET /api/v1/me/context', () => {
     expect(keys).toEqual([
       'barbershopId',
       'barbershopName',
+      'barbershopTimezone',
       'employeeId',
       'employeeName',
       'role',

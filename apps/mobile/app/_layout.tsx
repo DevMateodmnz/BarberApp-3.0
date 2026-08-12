@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { getMobilePublicRuntimeResult } from '@/config/publicRuntime.js';
 import { LocalizationProvider } from '@/i18n/index.js';
 import { AppCard, Screen } from '@/components/ui/index.js';
+import { PhysicalQaRuntimeProvider } from '@/components/PhysicalQaRuntimeOverlay.js';
 import { tokens } from '@/theme/index.js';
 
 const mobilePublicRuntimeResult = getMobilePublicRuntimeResult();
@@ -68,27 +69,29 @@ function RootLayoutContent() {
 
   return (
     <ClerkProvider publishableKey={mobilePublicRuntimeResult.value.clerkPublishableKey}>
-      <View style={styles.appShell}>
-        <StatusBar style="light" backgroundColor={tokens.colors.background} />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: {
-              backgroundColor: tokens.colors.background,
-            },
-          }}
-        >
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="language"
-            options={{
-              presentation: 'modal',
+      <PhysicalQaRuntimeProvider>
+        <View style={styles.appShell}>
+          <StatusBar style="light" backgroundColor={tokens.colors.background} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: {
+                backgroundColor: tokens.colors.background,
+              },
             }}
-          />
-        </Stack>
-      </View>
+          >
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="language"
+              options={{
+                presentation: 'modal',
+              }}
+            />
+          </Stack>
+        </View>
+      </PhysicalQaRuntimeProvider>
     </ClerkProvider>
   );
 }

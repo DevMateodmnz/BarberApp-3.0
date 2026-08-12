@@ -25,8 +25,17 @@ export interface EmployeeFilterOption {
   onPress: () => void;
 }
 
+export interface AppointmentModeOption {
+  id: 'list' | 'agenda';
+  label: string;
+  selected: boolean;
+  testID: string;
+  onPress: () => void;
+}
+
 export interface AppointmentActionViewModel {
-  status: AppointmentStatus;
+  id: string;
+  variant: 'secondary' | 'danger';
   label: string;
   testID: string;
   onPress: () => void;
@@ -39,6 +48,7 @@ export interface AppointmentRowViewModel {
   clientLabel: string;
   serviceLabel: string;
   employeeLabel?: string | null;
+  notificationLabels?: string[];
   notes?: string | null;
   actions: AppointmentActionViewModel[];
 }
@@ -53,6 +63,7 @@ export interface AppointmentsScreenViewProps {
   showCreateAction: boolean;
   selectedDate: string;
   isTodaySelected: boolean;
+  modeOptions?: AppointmentModeOption[];
   employeeFilters: EmployeeFilterOption[];
   appointmentRows: AppointmentRowViewModel[];
   onCreateAppointment: () => void;
@@ -72,6 +83,7 @@ export function AppointmentsScreenView({
   showCreateAction,
   selectedDate,
   isTodaySelected,
+  modeOptions = [],
   employeeFilters,
   appointmentRows,
   onCreateAppointment,
@@ -161,6 +173,23 @@ export function AppointmentsScreenView({
               onPress={onCreateAppointment}
             />
           ) : null}
+
+          <AppCard testID="appointments-mode-switch" variant="outlined">
+            <SectionHeader title={t('appointments.modeTitle')} />
+            <View style={styles.filterWrap}>
+              {modeOptions.map((option) => (
+                <AppButton
+                  key={option.id}
+                  testID={option.testID}
+                  title={option.label}
+                  variant={option.selected ? 'primary' : 'ghost'}
+                  size="sm"
+                  onPress={option.onPress}
+                  style={styles.filterButton}
+                />
+              ))}
+            </View>
+          </AppCard>
 
           <AppCard testID="appointments-date-controls" variant="outlined" style={styles.dateCard}>
             <Text style={styles.dateEyebrow}>{t('common.labels.selectedDate')}</Text>
@@ -269,11 +298,16 @@ export function AppointmentsScreenView({
                       trailing={<StatusBadge status={appointment.status} />}
                     />
 
-                    {(appointment.employeeLabel || appointment.notes) && (
+                    {(appointment.employeeLabel || appointment.notificationLabels?.length || appointment.notes) && (
                       <View style={styles.metaBlock}>
                         {appointment.employeeLabel && (
                           <Text style={styles.metaText}>{appointment.employeeLabel}</Text>
                         )}
+                        {appointment.notificationLabels?.map((label) => (
+                          <Text key={label} style={styles.metaText}>
+                            {label}
+                          </Text>
+                        ))}
                         {appointment.notes && (
                           <Text style={styles.notesText}>{appointment.notes}</Text>
                         )}
@@ -288,10 +322,10 @@ export function AppointmentsScreenView({
                       >
                         {appointment.actions.map((action) => (
                           <AppButton
-                            key={action.status}
+                            key={action.id}
                             testID={action.testID}
                             title={action.label}
-                            variant={action.status === 'CANCELLED' ? 'danger' : 'secondary'}
+                            variant={action.variant}
                             size="sm"
                             onPress={action.onPress}
                           />

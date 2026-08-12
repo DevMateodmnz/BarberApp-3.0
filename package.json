@@ -17,6 +17,17 @@
     "validate": "npm run typecheck && npm run lint && npm run test",
     "qa:public-booking": "node scripts/qaPublicBooking.mjs && npm run qa:public-booking:production",
     "qa:public-booking:production": "node scripts/qaPublicBookingProduction.mjs",
+    "qa:verify": "npm run qa:verify --workspace @barberapp/api",
+    "qa:physical:configure": "node scripts/physical-qa.mjs configure",
+    "qa:physical:start": "node scripts/physical-qa.mjs start",
+    "qa:physical:status": "node scripts/physical-qa.mjs status",
+    "qa:physical:device": "node scripts/physical-qa.mjs device",
+    "qa:physical:ready": "node scripts/physical-qa.mjs ready",
+    "qa:physical:arm": "node scripts/physical-qa.mjs arm",
+    "qa:physical:stop": "node scripts/physical-qa.mjs stop",
+    "qa:physical:snapshot": "node scripts/physical-qa.mjs snapshot",
+    "qa:physical:evidence": "node scripts/physical-qa.mjs evidence",
+    "qa:physical:test": "node --test scripts/physical-qa/*.test.mjs",
     "dev": "npm run dev --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "build": "npm run build --workspaces --if-present"
@@ -25,6 +36,7 @@
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.57.0",
+    "qrcode-terminal": "^0.11.0",
     "typescript": "^5.4.0"
   },
   "overrides": {

@@ -49,12 +49,14 @@ interface AppointmentsState {
   /**
    * Cancels an appointment and refetches the full list.
    *
-   * Note: The cancel endpoint returns an Appointment WITHOUT nested includes,
-   * so we refetch the list instead of relying on the response.
+   * The optional `reason` is forwarded to the API and recorded on the
+   * row as `cancelReason` for analytics. Empty/whitespace reasons are
+   * stored as NULL by the API.
    */
   cancelAppointment: (
     getToken: () => Promise<string | null>,
     appointmentId: string,
+    options?: { reason?: string | null },
   ) => Promise<void>;
 
   /**
@@ -63,6 +65,8 @@ interface AppointmentsState {
    * stale list after navigating back.
    */
   recordCreatedAppointment: (appointment: Appointment) => void;
+  recordUpdatedAppointment: (appointment: Appointment) => void;
+  reloadLastAppointments: (getToken: () => Promise<string | null>) => Promise<void>;
 
   /** Resets appointments state to initial values. */
   clearAppointments: () => void;
@@ -119,20 +123,36 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
   },
 
   transitionStatus: async (getToken, appointmentId, newStatus) => {
-    await transitionAppointmentStatus(getToken, appointmentId, newStatus);
-    // Refetch the full list after status change
-    if (_lastContext && _lastSelectedDate) {
-      const { loadAppointments } = get();
-      await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+    set({ appointmentsError: null });
+
+    try {
+      await transitionAppointmentStatus(getToken, appointmentId, newStatus);
+      // Refetch the full list after status change
+      if (_lastContext && _lastSelectedDate) {
+        const { loadAppointments } = get();
+        await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
+      set({ appointmentsError: message });
+      throw err;
     }
   },
 
-  cancelAppointment: async (getToken, appointmentId) => {
-    await cancelAppointmentApi(getToken, appointmentId);
-    // Refetch the full list — cancel endpoint doesn't return nested includes
-    if (_lastContext && _lastSelectedDate) {
-      const { loadAppointments } = get();
-      await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+  cancelAppointment: async (getToken, appointmentId, options) => {
+    set({ appointmentsError: null });
+
+    try {
+      await cancelAppointmentApi(getToken, appointmentId, options);
+      // Refetch the full list — cancel endpoint doesn't return nested includes
+      if (_lastContext && _lastSelectedDate) {
+        const { loadAppointments } = get();
+        await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : localizeUnknownError('Unknown error');
+      set({ appointmentsError: message });
+      throw err;
     }
   },
 
@@ -148,6 +168,27 @@ export const useAppointmentsStore = create<AppointmentsState>((set, get) => ({
       appointments: upsertAppointmentById(state.appointments, appointment),
       appointmentsError: null,
     }));
+  },
+
+  recordUpdatedAppointment: (appointment) => {
+    if (
+      _lastContext &&
+      !appointmentMatchesContext(appointment, _lastContext)
+    ) {
+      return;
+    }
+
+    set((state) => ({
+      appointments: upsertAppointmentById(state.appointments, appointment),
+      appointmentsError: null,
+    }));
+  },
+
+  reloadLastAppointments: async (getToken) => {
+    if (_lastContext && _lastSelectedDate) {
+      const { loadAppointments } = get();
+      await loadAppointments(getToken, _lastContext, _lastSelectedDate);
+    }
   },
 
   clearAppointments: () => {

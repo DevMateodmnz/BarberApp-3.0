@@ -9,7 +9,8 @@ import {
   tryLocalDateTimeToUtc,
 } from './dateUtils.js';
 import { timeToMinutes } from './businessHours.js';
-import { resolveEffectiveScheduleForDate } from './effectiveSchedule.js';
+import { resolveEmployeeEffectiveScheduleForDate } from './employeeEffectiveSchedule.js';
+import { buildBlockingAppointmentWhereInput } from './appointmentBlocking.js';
 
 type AvailabilityDatabase = Pick<PrismaClient, 'appointment'>;
 
@@ -31,6 +32,7 @@ export interface BuildAvailabilitySlotsInput {
   now?: Date;
   minimumNoticeMinutes?: number;
   maximumBookingHorizonDays?: number;
+  excludeAppointmentId?: string;
 }
 
 function candidateSlotsOverlap(
@@ -91,12 +93,12 @@ export async function buildAvailabilitySlots(
     timezone,
     serviceDurationMinutes,
     slotIntervalMinutes,
-    blockingStatuses,
   } = input;
 
   const now = input.now ?? new Date();
-  const effectiveSchedule = await resolveEffectiveScheduleForDate({
+  const effectiveSchedule = await resolveEmployeeEffectiveScheduleForDate({
     barbershopId,
+    employeeId,
     localDate,
   });
 
@@ -117,8 +119,11 @@ export async function buildAvailabilitySlots(
 
   const blockingAppointments = await db.appointment.findMany({
     where: {
+      id: input.excludeAppointmentId
+        ? { not: input.excludeAppointmentId }
+        : undefined,
       employeeId,
-      status: { in: blockingStatuses },
+      ...buildBlockingAppointmentWhereInput(now),
       startAt: { lt: nextDayStart },
       endAt: { gt: dayStart },
     },

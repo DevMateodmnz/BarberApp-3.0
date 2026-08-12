@@ -58,6 +58,10 @@ describe('Public booking persistence foundations', () => {
         publicConsentVersion: 'public-booking-v1',
         serviceName: service.name,
         servicePriceCents: service.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: service.priceCents,
         serviceDurationMinutes: service.durationMinutes,
         serviceCurrency: service.currency,
         startAt: new Date('2026-07-22T14:00:00.000Z'),
@@ -83,6 +87,10 @@ describe('Public booking persistence foundations', () => {
           publicConsentVersion: 'public-booking-v1',
           serviceName: service.name,
           servicePriceCents: service.priceCents,
+
+          discountCents: 0,
+
+          finalPriceCents: service.priceCents,
           serviceDurationMinutes: service.durationMinutes,
           serviceCurrency: service.currency,
           startAt: new Date('2026-07-22T15:00:00.000Z'),

@@ -1,4 +1,8 @@
 import type { CorsOptions } from 'cors';
+import {
+  readPaymentRuntimeConfig,
+  type PaymentRuntimeConfig,
+} from '../lib/payments/runtime.js';
 
 export type NodeEnv = 'development' | 'test' | 'production';
 
@@ -13,12 +17,23 @@ export interface CorsPolicy {
   allowedOrigins: string[];
 }
 
+export interface PhysicalQaRuntimeConfig {
+  runtimeId: string;
+  fingerprint: string;
+  repositoryHead: string;
+  apiStartedAt: string;
+  mobileEventsPath: string;
+}
+
 export interface ApiRuntimeConfig {
   nodeEnv: NodeEnv;
   port: number;
+  physicalQaRequestTracing: boolean;
+  physicalQa?: PhysicalQaRuntimeConfig;
   databaseUrl?: string;
   clerkSecretKey?: string;
   clerkWebhookSecret?: string;
+  payments: PaymentRuntimeConfig;
   corsPolicy: CorsPolicy;
   rateLimit: RateLimitConfig;
 }
@@ -149,6 +164,80 @@ function readPositiveInteger(
   return parsed;
 }
 
+function readPhysicalQaRuntimeConfig(
+  env: NodeJS.ProcessEnv,
+  nodeEnv: NodeEnv,
+): PhysicalQaRuntimeConfig | undefined {
+  const enabled =
+    nodeEnv === 'development'
+    && readBoolean(env, 'PHYSICAL_QA_MODE', false);
+
+  if (!enabled) {
+    return undefined;
+  }
+
+  const runtimeId = readOptionalNonEmpty(env, 'BARBERAPP_QA_RUNTIME_ID');
+  const fingerprint = readOptionalNonEmpty(
+    env,
+    'BARBERAPP_QA_RUNTIME_FINGERPRINT',
+  );
+  const repositoryHead = readOptionalNonEmpty(
+    env,
+    'BARBERAPP_QA_RUNTIME_HEAD',
+  );
+  const apiStartedAt = readOptionalNonEmpty(
+    env,
+    'BARBERAPP_QA_RUNTIME_STARTED_AT',
+  );
+  const mobileEventsPath = readOptionalNonEmpty(
+    env,
+    'BARBERAPP_QA_MOBILE_EVENTS_PATH',
+  );
+
+  if (!runtimeId || !/^[a-f0-9]{32}$/u.test(runtimeId)) {
+    throw new Error(
+      'BARBERAPP_QA_RUNTIME_ID must be a 32-character lowercase hexadecimal value',
+    );
+  }
+  if (!fingerprint || !/^[A-F0-9]{8}$/u.test(fingerprint)) {
+    throw new Error(
+      'BARBERAPP_QA_RUNTIME_FINGERPRINT must be 8 uppercase hexadecimal characters',
+    );
+  }
+  if (fingerprint !== runtimeId.slice(0, 8).toUpperCase()) {
+    throw new Error(
+      'BARBERAPP_QA_RUNTIME_FINGERPRINT must match the runtime ID prefix',
+    );
+  }
+  if (!repositoryHead || !/^[a-f0-9]{40}$/u.test(repositoryHead)) {
+    throw new Error(
+      'BARBERAPP_QA_RUNTIME_HEAD must be a full 40-character Git commit hash',
+    );
+  }
+  if (
+    !apiStartedAt
+    || !Number.isFinite(Date.parse(apiStartedAt))
+    || new Date(apiStartedAt).toISOString() !== apiStartedAt
+  ) {
+    throw new Error(
+      'BARBERAPP_QA_RUNTIME_STARTED_AT must be an ISO-8601 timestamp',
+    );
+  }
+  if (!mobileEventsPath || !mobileEventsPath.startsWith('/')) {
+    throw new Error(
+      'BARBERAPP_QA_MOBILE_EVENTS_PATH must be an absolute local path',
+    );
+  }
+
+  return {
+    runtimeId,
+    fingerprint,
+    repositoryHead,
+    apiStartedAt,
+    mobileEventsPath,
+  };
+}
+
 function parseConfiguredOrigin(value: string, source: string): string {
   let url: URL;
 
@@ -272,7 +361,13 @@ export function createCorsOptions(policy: CorsPolicy): CorsOptions {
       'Authorization',
       'Content-Type',
       'Idempotency-Key',
+      'X-BarberApp-QA-Client',
+      'X-BarberApp-QA-Head',
+      'X-BarberApp-QA-Runtime',
+      'X-BarberApp-QA-Session',
+      'X-Request-Id',
     ],
+    exposedHeaders: ['X-Request-Id'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     optionsSuccessStatus: 204,
@@ -290,6 +385,10 @@ export function readApiRuntimeConfig(
   return {
     nodeEnv,
     port: readPort(env),
+    physicalQaRequestTracing:
+      nodeEnv === 'development'
+      && readBoolean(env, 'PHYSICAL_QA_REQUEST_TRACE', false),
+    physicalQa: readPhysicalQaRuntimeConfig(env, nodeEnv),
     databaseUrl: readRequiredInProduction(env, nodeEnv, 'DATABASE_URL'),
     clerkSecretKey: readRequiredInProduction(
       env,
@@ -301,6 +400,7 @@ export function readApiRuntimeConfig(
       nodeEnv,
       'CLERK_WEBHOOK_SECRET'
     ),
+    payments: readPaymentRuntimeConfig(env),
     corsPolicy: createCorsPolicy(
       readOptionalNonEmpty(env, 'CORS_ALLOWED_ORIGINS')
     ),

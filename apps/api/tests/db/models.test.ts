@@ -302,7 +302,7 @@ describe('WorkingHours Default Setup', () => {
   });
 
   it('new barbershop can immediately accept appointments (within hours)', async () => {
-    const { barbershop, owner } = await createTestBarbershop();
+    const { barbershop } = await createTestBarbershop();
     const client = await createTestUser({ role: UserRole.CLIENT });
     const { employee } = await createTestEmployee({
       barbershopId: barbershop.id,
@@ -333,6 +333,10 @@ describe('WorkingHours Default Setup', () => {
         clientPhone: null,
         serviceName: service.name,
         servicePriceCents: service.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: service.priceCents,
         serviceDurationMinutes: service.durationMinutes,
         serviceCurrency: service.currency,
         startAt: monday,
@@ -595,6 +599,10 @@ describe('Appointment Model', () => {
         clientPhone: null,
         serviceName: service.name,
         servicePriceCents: service.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: service.priceCents,
         serviceDurationMinutes: service.durationMinutes,
         serviceCurrency: service.currency,
         startAt,
@@ -645,6 +653,10 @@ describe('Appointment Model', () => {
           clientPhone: null,
           serviceName: service.name,
           servicePriceCents: service.priceCents,
+
+          discountCents: 0,
+
+          finalPriceCents: service.priceCents,
           serviceDurationMinutes: service.durationMinutes,
           serviceCurrency: service.currency,
           startAt,
@@ -673,6 +685,10 @@ describe('Appointment Model', () => {
         clientPhone: null,
         serviceName: service.name,
         servicePriceCents: service.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: service.priceCents,
         serviceDurationMinutes: service.durationMinutes,
         serviceCurrency: service.currency,
         startAt,
@@ -701,6 +717,10 @@ describe('Appointment Model', () => {
         clientPhone: null,
         serviceName: service.name,
         servicePriceCents: service.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: service.priceCents,
         serviceDurationMinutes: service.durationMinutes,
         serviceCurrency: service.currency,
         startAt,
@@ -727,6 +747,10 @@ describe('Appointment Model', () => {
         clientPhone: '+54 381 555-1234',
         serviceName: service.name,
         servicePriceCents: service.priceCents,
+
+        discountCents: 0,
+
+        finalPriceCents: service.priceCents,
         serviceDurationMinutes: service.durationMinutes,
         serviceCurrency: service.currency,
         startAt,
