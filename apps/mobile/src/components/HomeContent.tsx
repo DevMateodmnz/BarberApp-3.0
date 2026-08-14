@@ -59,6 +59,7 @@ export interface HomeContentProps {
   canRecordService: boolean;
   onRecordService: () => void;
   onAppointments: () => void;
+  onCommissions?: () => void;
   onCustomers: () => void;
   onPrevDate: () => void;
   onNextDate: () => void;
@@ -89,6 +90,7 @@ export function HomeContent({
   canRecordService,
   onRecordService,
   onAppointments,
+  onCommissions = () => undefined,
   onCustomers,
   onPrevDate,
   onNextDate,
@@ -210,6 +212,18 @@ export function HomeContent({
                       iconName="calendar-outline"
                       accessibilityLabel={t('home.dailyActionsAccessibility.appointments')}
                       onPress={onAppointments}
+                      style={styles.tileGridItem}
+                    />
+                  ) : null}
+
+                  {showAppointmentsAction ? (
+                    <NavigationTile
+                      testID="home-daily-action-commissions"
+                      title={role === 'BARBER' ? t('commissions.myTitle') : t('commissions.title')}
+                      description={t('commissions.homeDescription')}
+                      iconName="cash-outline"
+                      accessibilityLabel={t('navigation.accessibility.commissions')}
+                      onPress={onCommissions}
                       style={styles.tileGridItem}
                     />
                   ) : null}

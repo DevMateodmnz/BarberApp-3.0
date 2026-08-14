@@ -54,6 +54,9 @@ describe('mobileNavigation', () => {
     expect(canAccessTabRoute('employees', 'BARBER')).toBe(false);
     expect(canAccessTabRoute('working-hours', 'BARBER')).toBe(false);
     expect(canAccessTabRoute('manage', null)).toBe(false);
+    expect(canAccessTabRoute('commissions', 'OWNER')).toBe(true);
+    expect(canAccessTabRoute('commissions', 'BARBER')).toBe(true);
+    expect(canAccessTabRoute('commissions', 'CLIENT')).toBe(false);
   });
 
   it('keeps stable route identifiers across all locales while labels change through translations', async () => {

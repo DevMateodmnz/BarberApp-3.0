@@ -36,8 +36,9 @@ durable foundations, not because they are next on the list.
 5. **Employee-specific availability and time off**
 6. **Deposits and Mercado Pago** — implemented in the current milestone
 7. **Promotions and loyalty**
-8. **Platform administration and scalable tenant onboarding**
-9. **Marketplace, search, and reviews** — only after multiple real
+8. **Barber commissions and liquidations** — implemented as a payment-provider-independent ledger
+9. **Platform administration and scalable tenant onboarding**
+10. **Marketplace, search, and reviews** — only after multiple real
    businesses exist
 
 We do **not** jump to payments, marketplace, or platform-admin
@@ -55,8 +56,9 @@ reliability story is real.
 | Business search | Out of scope until multiple real shops exist | Marketplace search | We will not build a marketplace or reviews layer until at least 3–5 real businesses are active |
 | Promotions | Out of scope until CRM is real | Promotions and discount codes | Defer until reminders + deposits + loyalty are real |
 | Premium subscription | Out of scope | Premium tier for shops | We will not add a paid tier for shops until the baseline product is operationally excellent |
-| Mercado Pago | Tenant-scoped deposit holds, Checkout Pro, signed webhook reconciliation, and mobile/public visibility are now implemented | Mercado Pago deposits and full payments | Keep each seller isolated, confirm only from authoritative provider state, and defer refunds/commissions until a later financial-operations phase |
-| Platform commissions | Out of scope; one-business-per-OWNER is the current unit | Commission and transfer model | We will not introduce a commission model until we have multi-tenant operations we can charge for |
+| Mercado Pago | Tenant-scoped deposit holds, Checkout Pro, signed webhook reconciliation, and mobile/public visibility are now implemented | Mercado Pago deposits and full payments | Keep each seller isolated, confirm only from authoritative provider state, and defer refunds/automatic payouts until a later financial-operations phase |
+| Barber commissions | Durable completion-time accrual snapshots, OWNER liquidation workflow, and BARBER self-service are implemented | Barber earnings and settlement workflows | Keep exact shop-owned history independent of payment provider; never recalculate past work from a current rate |
+| Platform fees/commissions | Out of scope; one-business-per-OWNER is the current unit | Platform commission and transfer model | Barber earnings are separate; we will not charge a platform fee until multi-tenant operations justify it |
 | Platform admin | Out of scope | Platform administrator dashboard | Defer |
 | Reliability and lifecycle tracking | Strong: DB-level double-booking constraint + transition state machine + idempotency | Less explicit lifecycle visibility per the reference's public surface | This is our differentiator. We record every transition, every cancel, every no-show, and we surface it to staff before they commit a new booking |
 
@@ -219,15 +221,14 @@ Deposits are commercially useful only when the slot being held is actually valid
    shop-wide hours.
 6. **Deposit policy and Mercado Pago reservation holds** — implemented.
 7. **Payment hardening and financial review operations** — implemented.
-8. **Promotions and loyalty** — next recommended milestone now that the money-exception loop is closed.
+8. **Promotions and loyalty** — implemented.
    Payment now creates a bounded pending reservation only after the
    slot passes canonical employee-availability checks, and confirmation
    comes only from authoritative provider state.
-7. **Promotions and loyalty** — next only after observing real deposit
-   behavior and no-show impact.
-8. **Platform administration** — when multi-tenant operations
+9. **Barber commissions and liquidations** — implemented with prospective exact accruals, role-isolated reporting, and immutable paid history.
+10. **Platform administration** — when multi-tenant operations
    become a real product problem, not a theoretical one.
-9. **Marketplace, search, and reviews** — only after multiple
+11. **Marketplace, search, and reviews** — only after multiple
    real businesses exist.
 
 ## Notification architecture

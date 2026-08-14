@@ -112,6 +112,7 @@ export const zhHans = {
     appointments: '预约',
     notifications: '通知',
     promotions: 'Promotions',
+    commissions: 'Commissions',
     manage: '管理',
     languageSettings: '语言',
     tabs: {
@@ -127,11 +128,20 @@ export const zhHans = {
       manageTab: '打开管理标签',
       notifications: '打开通知运营',
       promotions: 'Open promotion management',
+      commissions: 'Open commissions',
       services: '打开服务管理',
       employees: '打开员工管理',
       workingHours: '打开营业时间管理',
       languageSettings: '打开语言设置',
     },
+  },
+  commissions: {
+    title: 'Commissions', myTitle: 'My commissions', subtitle: 'Earnings, commissions, and settlements with an auditable history.', homeDescription: 'Review earnings and settlements for the period.',
+    blockedTitle: 'Commissions unavailable', blockedMessage: 'This section is available to OWNER and BARBER users assigned to a shop.', barberTitle: 'Barber', periodTitle: 'Monthly period', settingsTitle: 'Commission settings', defaultRate: 'Default percentage (%)', overrideRate: 'Specific percentage (%)', inherit: 'Use default percentage', workTitle: 'Commission-producing work', emptyTitle: 'No commissions', emptyMessage: 'There is no completed commission work in this period.', unsettled: 'Unsettled',
+    metrics: { gross: 'Gross revenue', accrued: 'Accrued commission', unsettled: 'Unsettled', paid: 'Paid' },
+    errors: { load: 'Could not load commissions.', save: 'Could not save commission settings.', rate: 'Enter a percentage from 0 to 100.', preview: 'Could not preview the settlement.', create: 'Could not create the settlement.', pay: 'Could not mark the settlement paid.', void: 'Could not void the settlement.' },
+    messages: { saved: 'Settings saved.', created: 'Settlement created.', paid: 'Settlement marked paid.', voided: 'Settlement voided; its entries are eligible again.' },
+    liquidations: { createTitle: 'Create settlement', previewAction: 'Preview', createAction: 'Create settlement', preview: '{{count}} entries · {{amount}}', confirmTitle: 'Confirm settlement', confirmMessage: '{{count}} entries totaling {{amount}} will be included. The server calculates the total.', historyTitle: 'Settlement history', empty: 'There are no settlements yet.', details: 'View details', hideDetails: 'Hide details', pay: 'Mark paid', payConfirm: 'This makes the settlement immutable paid history.', void: 'Void', voidConfirm: 'The entries will become unsettled again.', voidReason: 'Voided from the mobile application.' },
   },
   runtime: {
     configurationErrorTitle: '移动端配置错误',

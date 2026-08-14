@@ -170,9 +170,20 @@ describe('HomeContent', () => {
     expect(findByTestId(tree, 'home-daily-action-record')).toBeDefined();
     expect(findByTestId(tree, 'home-daily-action-appointments')).toBeDefined();
     expect(findByTestId(tree, 'home-daily-action-customers')).toBeDefined();
+    expect(findByTestId(tree, 'home-daily-action-commissions')).toBeDefined();
     expect(queryByTestId(tree, 'home-services-card')).toBeNull();
     expect(queryByTestId(tree, 'home-employees-card')).toBeNull();
     expect(queryByTestId(tree, 'home-working-hours-card')).toBeNull();
+  });
+
+  it('routes OWNER and BARBER users to commissions from Home', () => {
+    const onCommissions = vi.fn();
+    const ownerTree = renderHomeContent({ onCommissions });
+    press(findByTestId(ownerTree, 'home-daily-action-commissions'));
+    expect(onCommissions).toHaveBeenCalledTimes(1);
+
+    const barberTree = renderHomeContent({ context: BARBER_CONTEXT, summary: BARBER_SUMMARY, onCommissions });
+    expect(findByText(barberTree, 'My commissions')).toBeDefined();
   });
 
   it('hides the record daily action when record service is not allowed', () => {

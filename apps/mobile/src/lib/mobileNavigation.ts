@@ -12,7 +12,8 @@ export type TabRouteName =
   | 'promotions'
   | 'services'
   | 'employees'
-  | 'working-hours';
+  | 'working-hours'
+  | 'commissions';
 
 export type TranslationResolver = (key: string, options?: Record<string, unknown>) => string;
 
@@ -173,6 +174,10 @@ export function canAccessTabRoute(routeName: TabRouteName, role: UserRole | null
 
   if (routeName === 'notification-detail') {
     return role === 'OWNER';
+  }
+
+  if (routeName === 'commissions') {
+    return role === 'OWNER' || role === 'BARBER';
   }
 
   const primaryDestination = MOBILE_PRIMARY_DESTINATIONS.find(

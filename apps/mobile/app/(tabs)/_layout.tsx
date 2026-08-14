@@ -199,6 +199,14 @@ export default function TabLayout() {
           name="record-service"
           options={buildPrimaryTabOptions('record-service', t)}
         />
+        <Tabs.Screen
+          name="commissions"
+          options={{
+            title: t('navigation.commissions'),
+            href: null,
+            tabBarAccessibilityLabel: t('navigation.accessibility.commissions'),
+          }}
+        />
       </Tabs.Protected>
 
       <Tabs.Protected guard={ownerOnlyRole}>

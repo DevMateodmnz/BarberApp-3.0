@@ -14,6 +14,88 @@ export type UserRole = 'OWNER' | 'BARBER' | 'CLIENT';
 export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
 export type RevenueSummaryPeriod = 'today' | 'week' | 'month' | 'year';
 
+export interface CommissionEmployeeSetting {
+  employeeId: string;
+  name: string;
+  isActive: boolean;
+  overridePercentageBasisPoints: number | null;
+  effectivePercentageBasisPoints: number;
+}
+
+export interface CommissionSettings {
+  defaultPercentageBasisPoints: number;
+  employees: CommissionEmployeeSetting[];
+}
+
+export interface CommissionEntryItem {
+  id: string;
+  grossAmountCents: number;
+  percentageBasisPoints: number;
+  commissionAmountCents: number;
+  currency: string;
+  earnedAt: string;
+  liquidationId: string | null;
+  appointment: {
+    id: string;
+    startAt: string;
+    clientName: string;
+    serviceName: string;
+    status: string;
+  };
+  liquidation: { id: string; status: CommissionLiquidationStatus; paidAt: string | null } | null;
+}
+
+export interface CommissionOverview {
+  employeeId: string;
+  timezone: string;
+  dateFrom: string;
+  dateTo: string;
+  summary: {
+    grossAmountCents: number;
+    commissionAmountCents: number;
+    unsettledAmountCents: number;
+    openLiquidationAmountCents: number;
+    paidAmountCents: number;
+  };
+  items: CommissionEntryItem[];
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+}
+
+export type CommissionLiquidationStatus = 'OPEN' | 'PAID' | 'VOIDED';
+
+export interface CommissionLiquidation {
+  id: string;
+  employeeId: string;
+  status: CommissionLiquidationStatus;
+  periodStart: string;
+  periodEnd: string;
+  grossAmountCents: number;
+  commissionAmountCents: number;
+  currency: string;
+  entryCount: number;
+  paidAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdAt: string;
+  entries?: CommissionEntryItem[];
+}
+
+export interface CommissionLiquidationPreview {
+  employeeId: string;
+  timezone: string;
+  dateFrom: string;
+  dateTo: string;
+  entryCount: number;
+  grossAmountCents: number;
+  commissionAmountCents: number;
+  currency: string;
+  items: CommissionEntryItem[];
+  truncated: boolean;
+}
+
 /**
  * Current user context — returned by GET /api/v1/me/context.
  *

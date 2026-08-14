@@ -117,6 +117,7 @@ export const es = {
     appointments: 'Turnos',
     notifications: 'Notificaciones',
     promotions: 'Promociones',
+    commissions: 'Comisiones',
     manage: 'Gestionar',
     languageSettings: 'Idioma',
     tabs: {
@@ -132,11 +133,20 @@ export const es = {
       manageTab: 'Abrir la pestaña Gestionar',
       notifications: 'Abrir la operación de notificaciones',
       promotions: 'Abrir la gestión de promociones',
+      commissions: 'Abrir comisiones',
       services: 'Abrir la gestión de servicios',
       employees: 'Abrir la gestión de empleados',
       workingHours: 'Abrir la gestión de horarios',
       languageSettings: 'Abrir la configuración de idioma',
     },
+  },
+  commissions: {
+    title: 'Comisiones', myTitle: 'Mis comisiones', subtitle: 'Ingresos, comisiones y liquidaciones con historial auditable.', homeDescription: 'Revisa lo generado y las liquidaciones del período.',
+    blockedTitle: 'Comisiones no disponibles', blockedMessage: 'Esta sección está disponible para OWNER y BARBER con una barbería asignada.', barberTitle: 'Barbero', periodTitle: 'Período mensual', settingsTitle: 'Configuración de comisión', defaultRate: 'Porcentaje predeterminado (%)', overrideRate: 'Porcentaje específico (%)', inherit: 'Usar porcentaje predeterminado', workTitle: 'Trabajo que genera comisión', emptyTitle: 'Sin comisiones', emptyMessage: 'No hay trabajo completado con comisión en este período.', unsettled: 'Sin liquidar',
+    metrics: { gross: 'Ingresos brutos', accrued: 'Comisión acumulada', unsettled: 'Sin liquidar', paid: 'Pagado' },
+    errors: { load: 'No pudimos cargar las comisiones.', save: 'No pudimos guardar la configuración.', rate: 'Ingresa un porcentaje entre 0 y 100.', preview: 'No pudimos preparar la liquidación.', create: 'No pudimos crear la liquidación.', pay: 'No pudimos marcar la liquidación como pagada.', void: 'No pudimos anular la liquidación.' },
+    messages: { saved: 'Configuración guardada.', created: 'Liquidación creada.', paid: 'Liquidación marcada como pagada.', voided: 'Liquidación anulada; sus entradas volvieron a quedar disponibles.' },
+    liquidations: { createTitle: 'Crear liquidación', previewAction: 'Previsualizar', createAction: 'Crear liquidación', preview: '{{count}} entradas · {{amount}}', confirmTitle: 'Confirmar liquidación', confirmMessage: 'Se incluirán {{count}} entradas por {{amount}}. El total se calcula en el servidor.', historyTitle: 'Historial de liquidaciones', empty: 'Todavía no hay liquidaciones.', details: 'Ver detalle', hideDetails: 'Ocultar detalle', pay: 'Marcar pagada', payConfirm: 'Esta acción deja la liquidación como historial pagado e inmutable.', void: 'Anular', voidConfirm: 'Las entradas volverán a quedar sin liquidar.', voidReason: 'Anulada desde la aplicación móvil.' },
   },
   runtime: {
     configurationErrorTitle: 'Error de configuración móvil',
