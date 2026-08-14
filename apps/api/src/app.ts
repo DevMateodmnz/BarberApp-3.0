@@ -14,6 +14,7 @@ import onboardingRoutes from './routes/onboarding.js';
 import paymentsRoutes from './routes/payments.js';
 import { createPublicCatalogRouter } from './routes/publicCatalog.js';
 import { createPhysicalQaRouter } from './routes/physicalQa.js';
+import commissionRoutes from './routes/commissions.js';
 import webhookRoutes from './routes/webhooks.js';
 
 export function createApp(config: ApiRuntimeConfig): express.Express {
@@ -52,6 +53,7 @@ export function createApp(config: ApiRuntimeConfig): express.Express {
   app.use('/api/v1', paymentsRoutes);
   app.use('/api/v1/appointments', appointmentRateLimit, appointmentRoutes);
   app.use('/api/v1/barbershops', barbershopRoutes);
+  app.use('/api/v1/barbershops', commissionRoutes);
   app.use('/api/v1/me', meRoutes);
   app.use('/api/v1/onboarding', onboardingRoutes);
   app.use(errorHandler);

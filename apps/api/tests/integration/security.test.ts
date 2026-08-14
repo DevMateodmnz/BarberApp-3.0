@@ -55,6 +55,8 @@ beforeAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.appointmentNotification.deleteMany();
 
+  await prisma.commissionEntry.deleteMany();
+  await prisma.commissionLiquidation.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -236,6 +238,8 @@ beforeEach(async () => {
   // Clean appointments between tests (keep users/shops/services/workingHours)
   await prisma.appointmentNotification.deleteMany();
 
+  await prisma.commissionEntry.deleteMany();
+  await prisma.commissionLiquidation.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employee.updateMany({
     where: {
@@ -255,6 +259,8 @@ afterAll(async () => {
   await prisma.photo.deleteMany();
   await prisma.appointmentNotification.deleteMany();
 
+  await prisma.commissionEntry.deleteMany();
+  await prisma.commissionLiquidation.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();

@@ -212,6 +212,17 @@ enum NotificationAttemptOutcome {
   PERMANENT_FAILURE
 }
 
+enum CommissionEntryType {
+  ACCRUAL
+  REVERSAL
+}
+
+enum CommissionLiquidationStatus {
+  OPEN
+  PAID
+  VOIDED
+}
+
 // ============================================
 // USER
 // ============================================
@@ -247,6 +258,9 @@ model User {
   createdLoyaltyPrograms                BarbershopLoyaltyProgram[]   @relation("LoyaltyProgramCreatedBy")
   updatedLoyaltyPrograms                BarbershopLoyaltyProgram[]   @relation("LoyaltyProgramUpdatedBy")
   loyaltyLedgerEvents                   LoyaltyLedgerEvent[]         @relation("LoyaltyLedgerActor")
+  createdCommissionLiquidations         CommissionLiquidation[]      @relation("CommissionLiquidationCreatedBy")
+  paidCommissionLiquidations            CommissionLiquidation[]      @relation("CommissionLiquidationPaidBy")
+  voidedCommissionLiquidations          CommissionLiquidation[]      @relation("CommissionLiquidationVoidedBy")
 
   @@map("users")
 }
@@ -258,17 +272,18 @@ model User {
 /// Barbershop model - represents a barbershop business
 /// Each barbershop has exactly one owner
 model Barbershop {
-  id         String    @id @default(cuid())
-  ownerId    String    @map("owner_id")
-  name       String
-  address    String?
-  phone      String?
-  publicSlug String?   @unique @map("public_slug")
-  timezone   String    @default("America/Argentina/Tucuman")
-  isActive   Boolean   @default(true)
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
-  deletedAt  DateTime? @map("deleted_at")
+  id                           String    @id @default(cuid())
+  ownerId                      String    @map("owner_id")
+  name                         String
+  address                      String?
+  phone                        String?
+  publicSlug                   String?   @unique @map("public_slug")
+  timezone                     String    @default("America/Argentina/Tucuman")
+  isActive                     Boolean   @default(true)
+  createdAt                    DateTime  @default(now()) @map("created_at")
+  updatedAt                    DateTime  @updatedAt @map("updated_at")
+  deletedAt                    DateTime? @map("deleted_at")
+  defaultCommissionBasisPoints Int       @default(0) @map("default_commission_basis_points")
 
   // Relations
   owner                           User                             @relation("BarbershopOwner", fields: [ownerId], references: [id])
@@ -301,6 +316,9 @@ model Barbershop {
   loyaltySummaries                CustomerLoyaltySummary[]
   loyaltyRewards                  LoyaltyReward[]
   loyaltyLedgerEvents             LoyaltyLedgerEvent[]
+  commissionPolicies              EmployeeCommissionPolicy[]
+  commissionEntries               CommissionEntry[]
+  commissionLiquidations          CommissionLiquidation[]
 
   // Indexes
   @@index([ownerId])
@@ -325,14 +343,17 @@ model Employee {
   deletedAt    DateTime?            @map("deleted_at")
 
   // Relations
-  barbershop          Barbershop                  @relation(fields: [barbershopId], references: [id])
-  user                User                        @relation(fields: [userId], references: [id])
-  employeeServices    EmployeeService[]
-  appointments        Appointment[]
-  serviceRecords      ServiceRecord[]
-  workingIntervals    EmployeeWorkingInterval[]
-  scheduleExceptions  EmployeeScheduleException[]
-  acceptedInvitations EmployeeInvitation[]        @relation("EmployeeInvitationEmployee")
+  barbershop             Barbershop                  @relation(fields: [barbershopId], references: [id])
+  user                   User                        @relation(fields: [userId], references: [id])
+  employeeServices       EmployeeService[]
+  appointments           Appointment[]
+  serviceRecords         ServiceRecord[]
+  workingIntervals       EmployeeWorkingInterval[]
+  scheduleExceptions     EmployeeScheduleException[]
+  acceptedInvitations    EmployeeInvitation[]        @relation("EmployeeInvitationEmployee")
+  commissionPolicy       EmployeeCommissionPolicy?
+  commissionEntries      CommissionEntry[]
+  commissionLiquidations CommissionLiquidation[]
 
   // Constraint: one employee record per user per barbershop
   @@unique([barbershopId, userId])
@@ -565,6 +586,7 @@ model Appointment {
   loyaltyLedgerEvents             LoyaltyLedgerEvent[]
   redeemedLoyaltyRewards          LoyaltyReward[]            @relation("LoyaltyRewardRedemptionAppointment")
   sourceIssuedLoyaltyRewards      LoyaltyReward[]            @relation("LoyaltyRewardSourceAppointment")
+  commissionEntries               CommissionEntry[]
 
   @@unique([id, barbershopId])
   // Indexes for common queries
@@ -579,6 +601,87 @@ model Appointment {
   @@index([barbershopId, clientPhoneNormalized])
   @@index([paymentHoldExpiresAt])
   @@map("appointments")
+}
+
+model EmployeeCommissionPolicy {
+  id                    String   @id @default(cuid())
+  barbershopId          String   @map("barbershop_id")
+  employeeId            String   @unique @map("employee_id")
+  percentageBasisPoints Int      @map("percentage_basis_points")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  employee   Employee   @relation(fields: [employeeId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+
+  @@unique([employeeId, barbershopId])
+  @@index([barbershopId])
+  @@map("employee_commission_policies")
+}
+
+model CommissionEntry {
+  id                    String              @id @default(cuid())
+  barbershopId          String              @map("barbershop_id")
+  employeeId            String              @map("employee_id")
+  appointmentId         String              @map("appointment_id")
+  type                  CommissionEntryType @default(ACCRUAL)
+  grossAmountCents      Int                 @map("gross_amount_cents")
+  percentageBasisPoints Int                 @map("percentage_basis_points")
+  commissionAmountCents Int                 @map("commission_amount_cents")
+  currency              String
+  earnedAt              DateTime            @map("earned_at")
+  liquidationId         String?             @map("liquidation_id")
+  reversalOfId          String?             @unique @map("reversal_of_id")
+  reason                String?             @db.VarChar(500)
+  createdAt             DateTime            @default(now()) @map("created_at")
+
+  barbershop  Barbershop             @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  employee    Employee               @relation(fields: [employeeId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  appointment Appointment            @relation(fields: [appointmentId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  liquidation CommissionLiquidation? @relation(fields: [liquidationId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  reversalOf  CommissionEntry?       @relation("CommissionEntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversal    CommissionEntry?       @relation("CommissionEntryReversal")
+
+  @@index([appointmentId])
+  @@index([barbershopId, employeeId, earnedAt])
+  @@index([barbershopId, employeeId, liquidationId, earnedAt])
+  @@index([liquidationId])
+  @@map("commission_entries")
+}
+
+model CommissionLiquidation {
+  id                    String                      @id @default(cuid())
+  barbershopId          String                      @map("barbershop_id")
+  employeeId            String                      @map("employee_id")
+  status                CommissionLiquidationStatus @default(OPEN)
+  periodStart           DateTime                    @map("period_start")
+  periodEnd             DateTime                    @map("period_end")
+  grossAmountCents      Int                         @map("gross_amount_cents")
+  commissionAmountCents Int                         @map("commission_amount_cents")
+  currency              String
+  entryCount            Int                         @map("entry_count")
+  idempotencyKey        String                      @map("idempotency_key") @db.VarChar(100)
+  createdByUserId       String                      @map("created_by_user_id")
+  paidByUserId          String?                     @map("paid_by_user_id")
+  paidAt                DateTime?                   @map("paid_at")
+  voidedByUserId        String?                     @map("voided_by_user_id")
+  voidedAt              DateTime?                   @map("voided_at")
+  voidReason            String?                     @map("void_reason") @db.VarChar(500)
+  createdAt             DateTime                    @default(now()) @map("created_at")
+  updatedAt             DateTime                    @updatedAt @map("updated_at")
+
+  barbershop Barbershop        @relation(fields: [barbershopId], references: [id], onDelete: Restrict)
+  employee   Employee          @relation(fields: [employeeId, barbershopId], references: [id, barbershopId], onDelete: Restrict)
+  createdBy  User              @relation("CommissionLiquidationCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  paidBy     User?             @relation("CommissionLiquidationPaidBy", fields: [paidByUserId], references: [id], onDelete: Restrict)
+  voidedBy   User?             @relation("CommissionLiquidationVoidedBy", fields: [voidedByUserId], references: [id], onDelete: Restrict)
+  entries    CommissionEntry[]
+
+  @@unique([barbershopId, idempotencyKey])
+  @@unique([id, barbershopId])
+  @@index([barbershopId, employeeId, createdAt])
+  @@index([barbershopId, status, createdAt])
+  @@map("commission_liquidations")
 }
 
 model BarbershopDepositPolicy {

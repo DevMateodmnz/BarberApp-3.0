@@ -67,6 +67,8 @@ beforeAll(async () => {
   await prisma.promotionCustomerUsage.deleteMany();
   await prisma.promotionService.deleteMany();
   await prisma.promotion.deleteMany();
+  await prisma.commissionEntry.deleteMany();
+  await prisma.commissionLiquidation.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.employeeService.deleteMany();
@@ -186,6 +188,8 @@ beforeEach(async () => {
   await prisma.promotionCustomerUsage.deleteMany();
   await prisma.promotionService.deleteMany({ where: { promotionId: { not: fixtures.templatePromotion.id } } });
   await prisma.promotion.deleteMany({ where: { id: { not: fixtures.templatePromotion.id } } });
+  await prisma.commissionEntry.deleteMany();
+  await prisma.commissionLiquidation.deleteMany();
   await prisma.appointment.deleteMany();
 });
 
@@ -200,6 +204,8 @@ afterAll(async () => {
   await prisma.promotionCustomerUsage.deleteMany();
   await prisma.promotionService.deleteMany();
   await prisma.promotion.deleteMany();
+  await prisma.commissionEntry.deleteMany();
+  await prisma.commissionLiquidation.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.employeeService.deleteMany();

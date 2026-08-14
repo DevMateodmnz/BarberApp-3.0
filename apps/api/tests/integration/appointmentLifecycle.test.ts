@@ -74,6 +74,8 @@ beforeAll(async () => {
   await prisma.publicBookingIdempotency.deleteMany();
   await prisma.appointmentNotification.deleteMany();
 
+  await prisma.commissionEntry.deleteMany();
+  await prisma.commissionLiquidation.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();
@@ -152,6 +154,8 @@ beforeEach(async () => {
   await prisma.publicBookingIdempotency.deleteMany();
   await prisma.appointmentNotification.deleteMany();
 
+  await prisma.commissionEntry.deleteMany();
+  await prisma.commissionLiquidation.deleteMany();
   await prisma.appointment.deleteMany();
 });
 
@@ -159,6 +163,8 @@ afterAll(async () => {
   await prisma.publicBookingIdempotency.deleteMany();
   await prisma.appointmentNotification.deleteMany();
 
+  await prisma.commissionEntry.deleteMany();
+  await prisma.commissionLiquidation.deleteMany();
   await prisma.appointment.deleteMany();
   await prisma.employeeService.deleteMany();
   await prisma.workingHours.deleteMany();

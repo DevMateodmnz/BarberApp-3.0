@@ -62,6 +62,7 @@ import {
   PAID_APPOINTMENT_REPRICE_NOT_SUPPORTED_CODE,
 } from './promotionService.js';
 import { getCustomerLoyaltySummary, processCompletedAppointmentLoyalty } from './loyaltyService.js';
+import { accrueCommissionForCompletedAppointment } from './commissionService.js';
 import type {
   AppointmentStatus,
   PrismaClient,
@@ -1657,6 +1658,7 @@ export async function transitionAppointmentStatus(
       });
 
       if (newStatus === 'COMPLETED') {
+        await accrueCommissionForCompletedAppointment(tx, appointment, now);
         await processCompletedAppointmentLoyalty(tx, {
           appointmentId,
           barbershopId: appointment.barbershopId,
